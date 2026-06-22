@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maritime Document Expiry Alert</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f4f8;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #003366 0%, #0055a5 100%);
+            color: #ffffff;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 1px;
+        }
+        .header .anchor-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        .content {
+            padding: 30px;
+            color: #333333;
+        }
+        .alert-box {
+            background-color: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .alert-box h2 {
+            margin: 0 0 10px 0;
+            color: #856404;
+            font-size: 18px;
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        .detail-value {
+            color: #212529;
+        }
+        .days-remaining {
+            font-size: 28px;
+            font-weight: bold;
+            color: #dc3545;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #6c757d;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #0055a5;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-weight: 600;
+        }
+        .btn:hover {
+            background-color: #003366;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="anchor-icon">⚓</div>
+            <h1>Maritime Crew Document Alert</h1>
+        </div>
+        <div class="content">
+            <div class="alert-box">
+                <h2>Document Expiring Soon</h2>
+                <p>A crew document is approaching its expiry date and requires your attention.</p>
+            </div>
+
+            <div class="detail-row">
+                <span class="detail-label">Crew Member</span>
+                <span class="detail-value">{{ crew_member_name }}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Document Type</span>
+                <span class="detail-value">{{ document_type }}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Document Number</span>
+                <span class="detail-value">{{ document_number }}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Expiry Date</span>
+                <span class="detail-value">{{ expiry_date }}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Days Remaining</span>
+                <span class="detail-value days-remaining">{{ days_remaining }}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Alert Threshold</span>
+                <span class="detail-value">{{ threshold_value }} days</span>
+            </div>
+
+            <div style="text-align: center;">
+                <a href="{{ dashboard_link }}" class="btn">View in Dashboard</a>
+            </div>
+        </div>
+        <div class="footer">
+            <p>Maritime Crew Document Expiry Monitoring System</p>
+            <p>This is an automated alert. Please do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>

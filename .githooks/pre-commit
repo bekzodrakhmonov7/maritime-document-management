@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block commits that stage files matching .gitignore
+# (defense in depth — git itself ignores them, but this catches
+# `git add -f <file>` and explicit path arguments). Also explicitly
+# blocks any .env file (non-example) to prevent secret leaks.
+
+set -euo pipefail
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+bad=()
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    *.env.example) ;;
+    *.env|*.env.local|*.env.*.local)
+      bad+=("$f: .env files must not be committed (use .env.example as a template)")
+      continue
+      ;;
+  esac
+  if git check-ignore --no-index -q -- "$f"; then
+    bad+=("$f: matches .gitignore")
+  fi
+done <<< "$staged"
+
+if [ ${#bad[@]} -gt 0 ]; then
+  echo "pre-commit: refusing commit — these files should not be tracked:" >&2
+  printf '  - %s\n' "${bad[@]}" >&2
+  echo >&2
+  echo "If a file was added by mistake, unstage it:" >&2
+  echo "  git rm --cached <file>" >&2
+  echo "If .gitignore is wrong, adjust it instead of bypassing the hook." >&2
+  exit 1
+fi

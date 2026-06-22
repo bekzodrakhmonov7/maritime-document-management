@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy-50: #f0f4f8;
+  --color-navy-100: #d9e2ec;
+  --color-navy-200: #bcccdc;
+  --color-navy-300: #9fb3c8;
+  --color-navy-400: #829ab1;
+  --color-navy-500: #627d98;
+  --color-navy-600: #486581;
+  --color-navy-700: #334e68;
+  --color-navy-800: #243b53;
+  --color-navy-900: #102a43;
+  --color-navy-950: #061523;
+
+  --color-status-valid: #059669;
+  --color-status-valid-bg: #d1fae5;
+  --color-status-expiring: #d97706;
+  --color-status-expiring-bg: #fef3c7;
+  --color-status-expired: #dc2626;
+  --color-status-expired-bg: #fee2e2;
+
+  --color-status-pending: #6b7280;
+  --color-status-pending-bg: #e5e7eb;
+  --color-status-verified: #2563eb;
+  --color-status-verified-bg: #dbeafe;
+  --color-status-rejected: #ea580c;
+  --color-status-rejected-bg: #ffedd5;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+body {
+  background-color: var(--color-navy-950);
+  color: var(--color-navy-50);
+  font-family: var(--font-sans);
+}
