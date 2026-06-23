@@ -34,7 +34,7 @@ async def missing_mandatory_documents(
               FROM public.document d
               WHERE d.seafarer_id = s.seafarer_id
                 AND d.doc_type_id = dt.doc_type_id
-                AND d.status = 'verified'
+                AND d.status IN ('verified', 'valid')
           )
         ORDER BY v.vessel_name, s.last_name, s.first_name, dt.type_name
         """
@@ -69,6 +69,7 @@ async def fleet_compliance_summary(conn: asyncpg.Connection) -> FleetSummary:
             ORDER BY mr.seafarer_id, mr.doc_type_id,
                 CASE COALESCE(d.status, '')
                     WHEN 'verified' THEN 1
+                    WHEN 'valid' THEN 1
                     WHEN 'expiring_soon' THEN 2
                     WHEN 'expired' THEN 3
                     ELSE 4
@@ -84,10 +85,10 @@ async def fleet_compliance_summary(conn: asyncpg.Connection) -> FleetSummary:
             v.vessel_name,
             COALESCE(vsc.seafarer_count, 0) AS total_seafarers,
             COALESCE(vsc.seafarer_count, 0) * $1 AS total_documents,
-            COUNT(*) FILTER (WHERE ds.status = 'verified') AS valid_count,
+            COUNT(*) FILTER (WHERE ds.status IN ('verified', 'valid')) AS valid_count,
             COUNT(*) FILTER (WHERE ds.status = 'expiring_soon') AS expiring_soon_count,
             COUNT(*) FILTER (WHERE ds.status = 'expired') AS expired_count,
-            COUNT(*) FILTER (WHERE ds.doc_type_id IS NOT NULL AND (ds.status IS NULL OR ds.status NOT IN ('verified', 'expiring_soon', 'expired'))) AS missing_count
+            COUNT(*) FILTER (WHERE ds.doc_type_id IS NOT NULL AND (ds.status IS NULL OR ds.status NOT IN ('verified', 'valid', 'expiring_soon', 'expired'))) AS missing_count
         FROM public.vessel v
         LEFT JOIN vessel_seafarer_counts vsc ON vsc.vessel_id = v.vessel_id
         LEFT JOIN doc_status ds ON ds.vessel_id = v.vessel_id

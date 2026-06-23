@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,6 +10,7 @@
             background-color: #f0f4f8;
             margin: 0;
             padding: 0;
+            color: #333333;
         }
         .container {
             max-width: 600px;
@@ -36,41 +37,76 @@
         }
         .content {
             padding: 30px;
-            color: #333333;
         }
+
+        /* Alert box — severity-tinted */
         .alert-box {
+            padding: 16px 18px;
+            margin-bottom: 24px;
+            border-radius: 6px;
+            border-left: 5px solid;
+        }
+        .alert-box.severity-early {
             background-color: #fff3cd;
-            border-left: 5px solid #ffc107;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 4px;
+            border-left-color: #ffc107;
+        }
+        .alert-box.severity-mid {
+            background-color: #ffe4d6;
+            border-left-color: #fd7e14;
+        }
+        .alert-box.severity-critical {
+            background-color: #f8d7da;
+            border-left-color: #dc3545;
         }
         .alert-box h2 {
-            margin: 0 0 10px 0;
-            color: #856404;
-            font-size: 18px;
+            margin: 0 0 6px 0;
+            font-size: 17px;
         }
-        .detail-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
+        .alert-box.severity-early h2 { color: #856404; }
+        .alert-box.severity-mid h2 { color: #b04a00; }
+        .alert-box.severity-critical h2 { color: #721c24; }
+        .alert-box p {
+            margin: 0;
+            font-size: 14px;
+        }
+        .alert-box.severity-early p { color: #856404; }
+        .alert-box.severity-mid p { color: #8a3a00; }
+        .alert-box.severity-critical p { color: #58151c; }
+
+        /* Detail table — email-client-safe two-column layout */
+        .details {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 24px;
+        }
+        .details td {
+            padding: 10px 12px;
             border-bottom: 1px solid #e9ecef;
+            font-size: 14px;
+            vertical-align: top;
         }
-        .detail-row:last-child {
+        .details tr:last-child td {
             border-bottom: none;
         }
         .detail-label {
             font-weight: 600;
             color: #495057;
+            width: 40%;
         }
         .detail-value {
             color: #212529;
+            text-align: right;
         }
+
+        /* Days-remaining — size moderated, color by severity */
         .days-remaining {
-            font-size: 28px;
-            font-weight: bold;
-            color: #dc3545;
+            font-size: 18px;
+            font-weight: 700;
         }
+        .severity-early.days-remaining { color: #f59e0b; }
+        .severity-mid.days-remaining { color: #fd7e14; }
+        .severity-critical.days-remaining { color: #dc3545; }
+
         .footer {
             background-color: #f8f9fa;
             padding: 20px;
@@ -85,7 +121,7 @@
             color: #ffffff;
             text-decoration: none;
             border-radius: 4px;
-            margin-top: 20px;
+            margin-top: 8px;
             font-weight: 600;
         }
         .btn:hover {
@@ -100,35 +136,37 @@
             <h1>Maritime Crew Document Alert</h1>
         </div>
         <div class="content">
-            <div class="alert-box">
+            <div class="alert-box severity-{{ severity }}">
                 <h2>Document Expiring Soon</h2>
                 <p>A crew document is approaching its expiry date and requires your attention.</p>
             </div>
 
-            <div class="detail-row">
-                <span class="detail-label">Crew Member</span>
-                <span class="detail-value">{{ crew_member_name }}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Document Type</span>
-                <span class="detail-value">{{ document_type }}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Document Number</span>
-                <span class="detail-value">{{ document_number }}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Expiry Date</span>
-                <span class="detail-value">{{ expiry_date }}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Days Remaining</span>
-                <span class="detail-value days-remaining">{{ days_remaining }}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Alert Threshold</span>
-                <span class="detail-value">{{ threshold_value }} days</span>
-            </div>
+            <table class="details" role="presentation" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                    <td class="detail-label">Crew Member</td>
+                    <td class="detail-value">{{ crew_member_name }}</td>
+                </tr>
+                <tr>
+                    <td class="detail-label">Document Type</td>
+                    <td class="detail-value">{{ document_type }}</td>
+                </tr>
+                <tr>
+                    <td class="detail-label">Document Number</td>
+                    <td class="detail-value">{{ document_number }}</td>
+                </tr>
+                <tr>
+                    <td class="detail-label">Expiry Date</td>
+                    <td class="detail-value">{{ expiry_date }}</td>
+                </tr>
+                <tr>
+                    <td class="detail-label">Days Remaining</td>
+                    <td class="detail-value days-remaining severity-{{ severity }}">{{ days_remaining }}</td>
+                </tr>
+                <tr>
+                    <td class="detail-label">Alert Threshold</td>
+                    <td class="detail-value">{{ threshold_value }} days</td>
+                </tr>
+            </table>
 
             <div style="text-align: center;">
                 <a href="{{ dashboard_link }}" class="btn">View in Dashboard</a>

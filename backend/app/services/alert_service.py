@@ -12,6 +12,18 @@ async def get_threshold_config(conn: asyncpg.Connection) -> dict:
     return dict(row)
 
 
+async def get_admin_recipients(conn: asyncpg.Connection) -> list[str]:
+    rows = await conn.fetch(
+        """
+        SELECT au.email
+        FROM public.users pu
+        JOIN auth.users au ON au.id = pu.id
+        WHERE pu.role = 'administrator'
+        """
+    )
+    return [r["email"] for r in rows if r["email"]]
+
+
 async def generate_alerts(conn: asyncpg.Connection, thresholds: dict | None = None, today: date | None = None) -> int:
     if thresholds is None:
         thresholds = await get_threshold_config(conn)
@@ -31,7 +43,7 @@ async def generate_alerts(conn: asyncpg.Connection, thresholds: dict | None = No
             """
             SELECT d.document_id, d.expiry_date
             FROM public.document d
-            WHERE d.status IN ('verified', 'expiring_soon')
+            WHERE d.status IN ('verified', 'valid', 'expiring_soon')
               AND d.expiry_date > $1
               AND d.expiry_date <= $2
               AND NOT EXISTS (

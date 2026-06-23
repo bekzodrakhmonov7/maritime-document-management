@@ -7,9 +7,8 @@ logger = logging.getLogger(__name__)
 
 import asyncpg
 
-from app.config import settings
 from app.db import create_pool
-from app.services.alert_service import generate_alerts, get_threshold_config, list_active_alerts
+from app.services.alert_service import generate_alerts, get_admin_recipients, get_threshold_config, list_active_alerts
 from app.services.expiry_service import scan_and_transition
 from app.services.notification_service import send_expiry_alert_email
 
@@ -34,17 +33,26 @@ async def _run_scan(today: date, conn: asyncpg.Connection | None = None) -> dict
 
         # Send emails only for newly created alerts
         alerts = await list_active_alerts(conn)
+        recipients = await get_admin_recipients(conn)
         emails_sent = 0
         for alert in alerts:
             if alert["alert_id"] not in existing_alert_ids:
-                recipients = []
-                if settings.alert_recipients:
-                    recipients = [r.strip() for r in settings.alert_recipients.split(",") if r.strip()]
                 if not recipients:
                     continue
                 days_remaining = (alert["expiry_date"] - today).days
+                threshold_days = alert["alert_threshold_days"]
+                if threshold_days == thresholds["days_90"]:
+                    severity = "early"
+                elif threshold_days == thresholds["days_60"]:
+                    severity = "mid"
+                elif threshold_days == thresholds["days_30"]:
+                    severity = "critical"
+                else:
+                    severity = "early"
                 try:
-                    await send_expiry_alert_email(recipients, alert, days_remaining)
+                    await send_expiry_alert_email(
+                        recipients, alert, days_remaining, severity
+                    )
                     emails_sent += 1
                 except Exception as exc:
                     logger.warning(

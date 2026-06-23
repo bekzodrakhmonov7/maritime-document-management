@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { apiFetch } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import type {
@@ -78,4 +79,49 @@ export function useVerifyDocument() {
       queryClient.invalidateQueries({ queryKey: ['documents'] })
     },
   })
+}
+
+export interface DocumentPreview {
+  objectUrl: string
+  contentType: string
+}
+
+export function useDocumentPreview(documentId: number | null) {
+  const query = useQuery<DocumentPreview>({
+    queryKey: ['document-preview', documentId],
+    queryFn: async () => {
+      if (documentId === null) {
+        throw new Error('No document selected')
+      }
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token
+      if (!token) {
+        throw new Error('Not authenticated')
+      }
+
+      const res = await fetch(`${API_BASE}/documents/${documentId}/preview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        throw new Error(`Failed to load preview (HTTP ${res.status})`)
+      }
+      const blob = await res.blob()
+      return {
+        objectUrl: URL.createObjectURL(blob),
+        contentType: blob.type || 'application/octet-stream',
+      }
+    },
+    enabled: documentId !== null,
+    staleTime: 60_000,
+  })
+
+  useEffect(() => {
+    if (!query.data) return
+    const url = query.data.objectUrl
+    return () => {
+      URL.revokeObjectURL(url)
+    }
+  }, [query.data])
+
+  return query
 }

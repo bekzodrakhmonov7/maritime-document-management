@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 import asyncpg
@@ -7,6 +8,7 @@ from pydantic import BaseModel, field_validator
 from app.deps import get_current_user, get_db, require_role
 from app.models.auth import UserPayload
 from app.services import alert_service
+from app.worker.run_expiry_scan import _run_scan
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -64,6 +66,14 @@ class ThresholdUpdate(BaseModel):
         if days_60 is not None and v >= days_60:
             raise ValueError("days_30 must be less than days_60")
         return v
+
+
+@router.post("/scan", response_model=dict)
+async def trigger_scan(
+    current_user: Annotated[UserPayload, Depends(require_role("administrator"))],
+    db: asyncpg.Connection = Depends(get_db),
+) -> dict:
+    return await _run_scan(date.today(), db)
 
 
 @router.get("", response_model=list[dict])

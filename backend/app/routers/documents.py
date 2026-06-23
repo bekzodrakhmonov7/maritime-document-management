@@ -4,9 +4,9 @@ from typing import Annotated
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 
-from app.deps import get_current_user, get_db
+from app.deps import get_current_user, get_db, require_role
 from app.models.auth import UserPayload
 from app.models.document import DocumentCreate, DocumentRead, DocumentVerify
 from app.services import document_service
@@ -79,7 +79,31 @@ async def get_document(
 async def verify_document(
     document_id: int,
     verify: DocumentVerify,
-    current_user: UserPayload = Depends(get_current_user),
+    current_user: UserPayload = Depends(
+        require_role("administrator", "crewing_officer")
+    ),
     db: asyncpg.Connection = Depends(get_db),
 ) -> DocumentRead:
     return await document_service.verify_document(db, document_id, verify.status)
+
+
+@router.get("/{document_id}/preview")
+async def preview_document(
+    document_id: int,
+    current_user: UserPayload = Depends(
+        require_role("administrator", "crewing_officer")
+    ),
+    db: asyncpg.Connection = Depends(get_db),
+) -> Response:
+    file_bytes, content_type = await document_service.preview_document(
+        db, document_id
+    )
+    return Response(
+        content=file_bytes,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": "inline",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

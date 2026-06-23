@@ -45,6 +45,117 @@ async def test_verified_to_expiring_soon_at_90_days(db_conn):
 
 
 @pytest.mark.asyncio
+async def test_verified_to_valid_at_91_days(db_conn):
+    today = date(2025, 6, 1)
+    expiry = today + timedelta(days=91)
+
+    seafarer_id = await db_conn.fetchval(
+        """
+        INSERT INTO public.seafarer (vessel_id, first_name, last_name, rank)
+        VALUES (NULL, 'John', 'Doe', 'Captain')
+        RETURNING seafarer_id
+        """
+    )
+    doc_type_id = await db_conn.fetchval(
+        "INSERT INTO public.document_type (type_name, is_mandatory) VALUES ($1, true) RETURNING doc_type_id",
+        f"Passport-{uuid4().hex[:8]}",
+    )
+    doc_id = await db_conn.fetchval(
+        """
+        INSERT INTO public.document (seafarer_id, doc_type_id, document_number, issue_date, expiry_date, file_path, status)
+        VALUES ($1, $2, 'DOC001-V', $3, $4, '/fake/path.pdf', 'verified')
+        RETURNING document_id
+        """,
+        seafarer_id,
+        doc_type_id,
+        today - timedelta(days=365),
+        expiry,
+    )
+
+    count = await scan_and_transition(db_conn, today)
+    assert count == 1
+
+    status = await db_conn.fetchval(
+        "SELECT status FROM public.document WHERE document_id = $1", doc_id
+    )
+    assert status == "valid"
+
+
+@pytest.mark.asyncio
+async def test_valid_to_expiring_soon_when_crossing_90_days(db_conn):
+    today = date(2025, 6, 1)
+    expiry = today + timedelta(days=60)
+
+    seafarer_id = await db_conn.fetchval(
+        """
+        INSERT INTO public.seafarer (vessel_id, first_name, last_name, rank)
+        VALUES (NULL, 'John', 'Doe', 'Captain')
+        RETURNING seafarer_id
+        """
+    )
+    doc_type_id = await db_conn.fetchval(
+        "INSERT INTO public.document_type (type_name, is_mandatory) VALUES ($1, true) RETURNING doc_type_id",
+        f"Passport-{uuid4().hex[:8]}",
+    )
+    doc_id = await db_conn.fetchval(
+        """
+        INSERT INTO public.document (seafarer_id, doc_type_id, document_number, issue_date, expiry_date, file_path, status)
+        VALUES ($1, $2, 'DOC001-VE', $3, $4, '/fake/path.pdf', 'valid')
+        RETURNING document_id
+        """,
+        seafarer_id,
+        doc_type_id,
+        today - timedelta(days=365),
+        expiry,
+    )
+
+    count = await scan_and_transition(db_conn, today)
+    assert count == 1
+
+    status = await db_conn.fetchval(
+        "SELECT status FROM public.document WHERE document_id = $1", doc_id
+    )
+    assert status == "expiring_soon"
+
+
+@pytest.mark.asyncio
+async def test_valid_stays_valid_at_91_days(db_conn):
+    today = date(2025, 6, 1)
+    expiry = today + timedelta(days=200)
+
+    seafarer_id = await db_conn.fetchval(
+        """
+        INSERT INTO public.seafarer (vessel_id, first_name, last_name, rank)
+        VALUES (NULL, 'John', 'Doe', 'Captain')
+        RETURNING seafarer_id
+        """
+    )
+    doc_type_id = await db_conn.fetchval(
+        "INSERT INTO public.document_type (type_name, is_mandatory) VALUES ($1, true) RETURNING doc_type_id",
+        f"Passport-{uuid4().hex[:8]}",
+    )
+    doc_id = await db_conn.fetchval(
+        """
+        INSERT INTO public.document (seafarer_id, doc_type_id, document_number, issue_date, expiry_date, file_path, status)
+        VALUES ($1, $2, 'DOC001-SV', $3, $4, '/fake/path.pdf', 'valid')
+        RETURNING document_id
+        """,
+        seafarer_id,
+        doc_type_id,
+        today - timedelta(days=365),
+        expiry,
+    )
+
+    count = await scan_and_transition(db_conn, today)
+    assert count == 0
+
+    status = await db_conn.fetchval(
+        "SELECT status FROM public.document WHERE document_id = $1", doc_id
+    )
+    assert status == "valid"
+
+
+@pytest.mark.asyncio
 async def test_expiring_soon_to_expired_at_0_days(db_conn):
     today = date(2025, 6, 1)
     expiry = today

@@ -14,6 +14,7 @@ import { useSeafarers } from '../hooks/useSeafarers'
 import { useAuth } from '../context/AuthContext'
 import { StatusBadge } from '../components/StatusBadge'
 import { DocumentDropzone } from '../components/DocumentDropzone'
+import { DocumentPreviewModal } from '../components/DocumentPreviewModal'
 import { DOC_TYPE_OPTIONS, getDocTypeName } from '../lib/docTypes'
 import { cn } from '../lib/cn'
 import type { DocumentRecord } from '../types'
@@ -35,6 +36,7 @@ export function DocumentsPage() {
   const verifyMutation = useVerifyDocument()
 
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [previewDoc, setPreviewDoc] = useState<DocumentRecord | null>(null)
 
   const canVerify = role === 'administrator' || role === 'crewing_officer'
 
@@ -50,6 +52,17 @@ export function DocumentsPage() {
 
   const handleVerify = (doc: DocumentRecord, status: 'verified' | 'rejected') => {
     verifyMutation.mutate({ documentId: doc.document_id, input: { status } })
+  }
+
+  const handlePreviewVerify = async (
+    doc: DocumentRecord,
+    status: 'verified' | 'rejected'
+  ) => {
+    await verifyMutation.mutateAsync({
+      documentId: doc.document_id,
+      input: { status },
+    })
+    setPreviewDoc(null)
   }
 
   return (
@@ -165,6 +178,15 @@ export function DocumentsPage() {
                           <>
                             <button
                               type="button"
+                              onClick={() => setPreviewDoc(doc)}
+                              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-navy-300 transition-colors hover:bg-navy-700 hover:text-navy-100 focus:outline-none focus:ring-2 focus:ring-navy-400/40"
+                              aria-label={`Review document ${doc.document_number}`}
+                            >
+                              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                              Review
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleVerify(doc, 'verified')}
                               disabled={verifyMutation.isPending}
                               className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-status-valid transition-colors hover:bg-status-valid-bg/20 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50"
@@ -185,18 +207,6 @@ export function DocumentsPage() {
                             </button>
                           </>
                         )}
-                        {doc.signed_url && (
-                          <a
-                            href={doc.signed_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-navy-300 transition-colors hover:bg-navy-700 hover:text-navy-100 focus:outline-none focus:ring-2 focus:ring-navy-400/40"
-                            aria-label={`View document ${doc.document_number}`}
-                          >
-                            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                            View
-                          </a>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -212,6 +222,16 @@ export function DocumentsPage() {
           onClose={() => setIsModalOpen(false)}
           uploadMutation={uploadMutation}
           seafarers={seafarersQuery.data ?? []}
+        />
+      )}
+
+      {previewDoc && (
+        <DocumentPreviewModal
+          doc={previewDoc}
+          seafarerName={seafarerMap.get(previewDoc.seafarer_id) ?? `Seafarer #${previewDoc.seafarer_id}`}
+          onClose={() => setPreviewDoc(null)}
+          onVerify={handlePreviewVerify}
+          isVerifying={verifyMutation.isPending}
         />
       )}
     </div>

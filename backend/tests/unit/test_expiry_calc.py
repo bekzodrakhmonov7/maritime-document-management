@@ -32,8 +32,8 @@ class TestComputeDaysRemaining:
 
 
 class TestClassifyStatus:
-    def test_91_days_is_verified(self):
-        assert classify_status(91) == "verified"
+    def test_91_days_is_valid(self):
+        assert classify_status(91) == "valid"
 
     def test_90_days_is_expiring_soon(self):
         assert classify_status(90) == "expiring_soon"
@@ -52,7 +52,7 @@ class TestClassifyStatus:
 
     def test_custom_threshold_80_days(self):
         thresholds = {"days_90": 80}
-        assert classify_status(81, thresholds) == "verified"
+        assert classify_status(81, thresholds) == "valid"
         assert classify_status(80, thresholds) == "expiring_soon"
         assert classify_status(1, thresholds) == "expiring_soon"
         assert classify_status(0, thresholds) == "expired"

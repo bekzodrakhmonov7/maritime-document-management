@@ -29,6 +29,10 @@ class StorageClient:
         )
         return result["signedURL"]
 
+    async def download_file(self, path: str) -> bytes:
+        client = await self._get_client()
+        return await client.storage.from_(self.bucket).download(path)
+
     async def delete_file(self, path: str) -> None:
         client = await self._get_client()
         await client.storage.from_(self.bucket).remove([path])

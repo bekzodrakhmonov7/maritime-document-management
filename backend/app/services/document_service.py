@@ -10,9 +10,17 @@ ALLOWED_MIME_TYPES = {"application/pdf", "image/jpeg", "image/png"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 BUCKET = "crew-documents"
 
+_EXT_TO_MIME: dict[str, str] = {
+    "pdf": "application/pdf",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+}
+
 _VALID_TRANSITIONS: dict[str, set[str]] = {
     "pending": {"verified", "rejected"},
     "verified": set(),
+    "valid": set(),
     "rejected": set(),
     "expiring_soon": set(),
     "expired": set(),
@@ -149,3 +157,25 @@ async def get_document(
     if row is None:
         return None
     return DocumentRead(**dict(row))
+
+
+async def preview_document(
+    conn: asyncpg.Connection, document_id: int
+) -> tuple[bytes, str]:
+    doc = await get_document(conn, document_id)
+    if doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    ext = doc.file_path.rsplit(".", 1)[-1].lower() if "." in doc.file_path else ""
+    content_type = _EXT_TO_MIME.get(ext)
+    if content_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Document has an unsupported file type.",
+        )
+
+    storage = StorageClient(BUCKET)
+    file_bytes = await storage.download_file(doc.file_path)
+    return file_bytes, content_type

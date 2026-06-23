@@ -8,7 +8,6 @@ from fastapi_mail import ConnectionConfig, FastMail
 
 from app.services import notification_service
 from app.worker.run_expiry_scan import _run_scan
-from app.config import settings
 
 
 class _TestSmtpHandler:
@@ -43,8 +42,24 @@ async def test_smtp_dispatch(db_conn):
     )
     original_fast_mail = notification_service.fast_mail
     notification_service.fast_mail = FastMail(test_conf)
-    original_alert_recipients = settings.alert_recipients
-    settings.alert_recipients = "test@example.com"
+
+    # Insert an administrator so get_admin_recipients returns a real address.
+    # The handle_new_user trigger creates a public.users row on auth.users insert;
+    # we then promote it to administrator.
+    admin_email = "test-admin@example.com"
+    admin_id = uuid4()
+    await db_conn.execute(
+        """
+        INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, created_at, updated_at)
+        VALUES ($1, $2, 'fake', now(), now(), now())
+        """,
+        admin_id,
+        admin_email,
+    )
+    await db_conn.execute(
+        "UPDATE public.users SET role = 'administrator', full_name = 'Test Admin' WHERE id = $1",
+        admin_id,
+    )
 
     try:
         today = date(2025, 6, 1)
@@ -84,6 +99,7 @@ async def test_smtp_dispatch(db_conn):
         subject = parsed["Subject"]
         assert "Document Expiry Alert" in subject
         assert "expires in 90 days" in subject
+        assert admin_email in msg["to"]
 
         # Extract HTML body from multipart message
         body = ""
@@ -98,7 +114,7 @@ async def test_smtp_dispatch(db_conn):
         assert "Jack Sparrow" in body
         assert "SMTP001" in body
         assert "90" in body
+        assert "severity-early" in body
     finally:
         notification_service.fast_mail = original_fast_mail
-        settings.alert_recipients = original_alert_recipients
         controller.stop()

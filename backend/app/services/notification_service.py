@@ -14,8 +14,8 @@ _mail_conf = ConnectionConfig(
     MAIL_FROM=settings.mail_from,
     MAIL_PORT=settings.smtp_port,
     MAIL_SERVER=settings.smtp_host,
-    MAIL_STARTTLS=False,
-    MAIL_SSL_TLS=False,
+    MAIL_STARTTLS=settings.smtp_starttls,
+    MAIL_SSL_TLS=settings.smtp_ssl_tls,
     USE_CREDENTIALS=bool(settings.smtp_user),
 )
 
@@ -26,6 +26,7 @@ async def send_expiry_alert_email(
     recipients: list[str],
     document: dict,
     days_remaining: int,
+    severity: str = "early",
 ) -> None:
     template = _jinja_env.get_template("expiry_alert.html")
     html = template.render(
@@ -35,6 +36,7 @@ async def send_expiry_alert_email(
         expiry_date=document.get("expiry_date", ""),
         days_remaining=days_remaining,
         threshold_value=document.get("alert_threshold_days", ""),
+        severity=severity,
         dashboard_link=document.get("dashboard_link", "http://localhost:5173/documents"),
     )
 

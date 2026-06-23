@@ -22,8 +22,11 @@ class Settings(BaseSettings):
     smtp_port: int
     smtp_user: str
     smtp_pass: str
+    smtp_starttls: bool = True
+    smtp_ssl_tls: bool = False
     mail_from: str
-    alert_recipients: str = ""
+
+    enable_daily_scan: bool = True
 
 
 settings = Settings()

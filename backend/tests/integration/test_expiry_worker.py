@@ -27,6 +27,10 @@ async def test_expiry_worker_transitions_and_alerts(db_conn):
         "INSERT INTO public.document_type (type_name, is_mandatory) VALUES ($1, true) RETURNING doc_type_id",
         f"Visa-{uuid4().hex[:8]}",
     )
+    doc_type_3 = await db_conn.fetchval(
+        "INSERT INTO public.document_type (type_name, is_mandatory) VALUES ($1, true) RETURNING doc_type_id",
+        f"STCW-{uuid4().hex[:8]}",
+    )
 
     # Doc 1: verified, expires in 90 days -> should transition to expiring_soon
     doc1 = await db_conn.fetchval(
@@ -54,9 +58,22 @@ async def test_expiry_worker_transitions_and_alerts(db_conn):
         today,
     )
 
+    # Doc 3: verified, expires in 200 days -> should transition to valid
+    doc3 = await db_conn.fetchval(
+        """
+        INSERT INTO public.document (seafarer_id, doc_type_id, document_number, issue_date, expiry_date, file_path, status)
+        VALUES ($1, $2, 'DOC003', $3, $4, '/fake/3.pdf', 'verified')
+        RETURNING document_id
+        """,
+        seafarer_id,
+        doc_type_3,
+        today - timedelta(days=365),
+        today + timedelta(days=200),
+    )
+
     summary = await _run_scan(today, db_conn)
 
-    assert summary["transitioned"] == 2
+    assert summary["transitioned"] == 3
     assert summary["alerts_generated"] >= 1
 
     status1 = await db_conn.fetchval(
@@ -65,8 +82,12 @@ async def test_expiry_worker_transitions_and_alerts(db_conn):
     status2 = await db_conn.fetchval(
         "SELECT status FROM public.document WHERE document_id = $1", doc2
     )
+    status3 = await db_conn.fetchval(
+        "SELECT status FROM public.document WHERE document_id = $1", doc3
+    )
     assert status1 == "expiring_soon"
     assert status2 == "expired"
+    assert status3 == "valid"
 
     alerts = await db_conn.fetch(
         "SELECT * FROM public.alert WHERE document_id = $1", doc1

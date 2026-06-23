@@ -26,7 +26,7 @@ class DocumentRead(BaseModel):
     document_number: str
     issue_date: date
     expiry_date: date
-    status: Literal["pending", "verified", "rejected", "expiring_soon", "expired"]
+    status: Literal["pending", "verified", "valid", "rejected", "expiring_soon", "expired"]
     file_path: str
     uploaded_by: UUID | None = None
     created_at: datetime | None = None

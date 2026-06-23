@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("ENABLE_DAILY_SCAN", "0")
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
