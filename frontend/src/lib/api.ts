@@ -1,12 +1,14 @@
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
-export async function apiFetch(path: string, options: RequestInit = {}) {
+export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const { supabase } = await import('./supabase')
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
 
   const headers = new Headers(options.headers)
-  headers.set('Content-Type', 'application/json')
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json')
+  }
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
@@ -21,5 +23,9 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     throw new Error(err || `HTTP ${res.status}`)
   }
 
-  return res.json()
+  if (res.status === 204 || res.headers.get('content-length') === '0') {
+    return undefined as T
+  }
+
+  return res.json() as Promise<T>
 }

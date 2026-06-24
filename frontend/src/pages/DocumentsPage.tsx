@@ -174,17 +174,17 @@ export function DocumentsPage() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDoc(doc)}
+                          className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-navy-300 transition-colors hover:bg-navy-700 hover:text-navy-100 focus:outline-none focus:ring-2 focus:ring-navy-400/40"
+                          aria-label={`Preview document ${doc.document_number}`}
+                        >
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                          Preview
+                        </button>
                         {canVerify && doc.status === 'pending' && (
                           <>
-                            <button
-                              type="button"
-                              onClick={() => setPreviewDoc(doc)}
-                              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-navy-300 transition-colors hover:bg-navy-700 hover:text-navy-100 focus:outline-none focus:ring-2 focus:ring-navy-400/40"
-                              aria-label={`Review document ${doc.document_number}`}
-                            >
-                              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                              Review
-                            </button>
                             <button
                               type="button"
                               onClick={() => handleVerify(doc, 'verified')}

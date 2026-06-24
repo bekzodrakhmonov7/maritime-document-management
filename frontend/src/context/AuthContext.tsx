@@ -43,12 +43,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    let cancelled = false
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (cancelled) return
       setSession(data.session)
       setUser(data.session?.user ?? null)
-      setLoading(false)
       if (data.session) {
-        fetchRole()
+        await fetchRole()
+      }
+      if (!cancelled) {
+        setLoading(false)
       }
     })
 
@@ -63,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => {
+      cancelled = true
       listener.subscription.unsubscribe()
     }
   }, [fetchRole])
