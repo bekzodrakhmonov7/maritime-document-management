@@ -35,6 +35,7 @@ async def _run_scan(today: date, conn: asyncpg.Connection | None = None) -> dict
         alerts = await list_active_alerts(conn)
         recipients = await get_admin_recipients(conn)
         emails_sent = 0
+        emails_failed = 0
         for alert in alerts:
             if alert["alert_id"] not in existing_alert_ids:
                 if not recipients:
@@ -55,9 +56,11 @@ async def _run_scan(today: date, conn: asyncpg.Connection | None = None) -> dict
                     )
                     emails_sent += 1
                 except Exception as exc:
+                    emails_failed += 1
                     logger.warning(
-                        "Failed to send expiry alert email for alert_id=%s: %s",
+                        "SMTP send failed for alert_id=%s (%s): %s",
                         alert["alert_id"],
+                        type(exc).__name__,
                         exc,
                     )
 
@@ -66,6 +69,7 @@ async def _run_scan(today: date, conn: asyncpg.Connection | None = None) -> dict
             "transitioned": transitioned,
             "alerts_generated": alerts_generated,
             "emails_sent": emails_sent,
+            "emails_failed": emails_failed,
         }
     finally:
         if pool is not None:

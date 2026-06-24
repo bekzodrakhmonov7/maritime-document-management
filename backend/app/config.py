@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     smtp_pass: str
     smtp_starttls: bool = True
     smtp_ssl_tls: bool = False
+    smtp_timeout: int = 30
     mail_from: str
 
     enable_daily_scan: bool = True

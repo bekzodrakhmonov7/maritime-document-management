@@ -16,6 +16,7 @@ _mail_conf = ConnectionConfig(
     MAIL_SERVER=settings.smtp_host,
     MAIL_STARTTLS=settings.smtp_starttls,
     MAIL_SSL_TLS=settings.smtp_ssl_tls,
+    TIMEOUT=settings.smtp_timeout,
     USE_CREDENTIALS=bool(settings.smtp_user),
 )
 
