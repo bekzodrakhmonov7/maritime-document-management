@@ -45,6 +45,12 @@ cp ../.env.example .env
 npx supabase@latest db reset   # Applies migrations in supabase/migrations/
 ```
 
+> **Note:** `supabase db reset` is destructive — it drops and recreates the
+> local database, which **wipes all registered auth users** (`auth.users` and
+> `public.users`). Only the seed data (vessels, seafarers, document types) is
+> restored. After every reset you must re-register your account. Use a hosted
+> Supabase project for durable data.
+
 Start the FastAPI server:
 
 ```bash

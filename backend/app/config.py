@@ -14,9 +14,11 @@ class Settings(BaseSettings):
 
     supabase_url: str
     supabase_service_role_key: str
-    supabase_jwt_secret: str
+    supabase_jwt_secret: str = ""
 
     database_url: str
+
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     smtp_host: str
     smtp_port: int
