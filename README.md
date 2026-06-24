@@ -94,6 +94,7 @@ uv run pytest tests/ -v
 ```
 
 All 68 tests should pass:
+
 - 4 E2E tests
 - 38 integration tests
 - 26 unit tests
@@ -171,7 +172,3 @@ With the backend running, visit:
 
 - **Administrator**: Full access to vessels, seafarers, documents, reports, and configuration.
 - **Crewing Officer**: Can manage seafarers and documents, read-only on vessels and reports.
-
-## License
-
-MIT
