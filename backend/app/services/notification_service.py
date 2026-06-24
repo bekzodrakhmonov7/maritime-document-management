@@ -37,7 +37,7 @@ async def send_expiry_alert_email(
         days_remaining=days_remaining,
         threshold_value=document.get("alert_threshold_days", ""),
         severity=severity,
-        dashboard_link=document.get("dashboard_link", "http://localhost:5173/documents"),
+        dashboard_link=document.get("dashboard_link", f"{settings.frontend_url}/documents"),
     )
 
     message = MessageSchema(

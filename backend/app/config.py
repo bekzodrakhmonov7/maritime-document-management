@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    frontend_url: str = "http://localhost:5173"
+
     smtp_host: str
     smtp_port: int
     smtp_user: str
