@@ -22,13 +22,7 @@ class Settings(BaseSettings):
 
     frontend_url: str = "http://localhost:5173"
 
-    smtp_host: str
-    smtp_port: int
-    smtp_user: str
-    smtp_pass: str
-    smtp_starttls: bool = True
-    smtp_ssl_tls: bool = False
-    smtp_timeout: int = 30
+    resend_api_key: str = ""
     mail_from: str
 
     enable_daily_scan: bool = True
