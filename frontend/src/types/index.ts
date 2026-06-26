@@ -76,6 +76,14 @@ export interface ThresholdConfig {
   days_30: number
 }
 
+export interface ScanSummary {
+  date: string
+  transitioned: number
+  alerts_generated: number
+  emails_sent: number
+  emails_failed: number
+}
+
 export interface Vessel {
   vessel_id: number
   vessel_name: string

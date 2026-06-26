@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../lib/api'
-import type { Alert, ThresholdConfig } from '../types'
+import type { Alert, ScanSummary, ThresholdConfig } from '../types'
 
 export function useAlerts() {
   return useQuery<Alert[]>({
@@ -45,6 +45,24 @@ export function useUpdateThresholds() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['thresholds'] })
+    },
+  })
+}
+
+export function useTriggerScan() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      return apiFetch('/alerts/scan', {
+        method: 'POST',
+        body: '{}',
+      }) as Promise<ScanSummary>
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alerts'] })
+      queryClient.invalidateQueries({ queryKey: ['documents'] })
+      queryClient.invalidateQueries({ queryKey: ['reports'] })
     },
   })
 }

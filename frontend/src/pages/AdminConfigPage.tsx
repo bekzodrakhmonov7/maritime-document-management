@@ -6,8 +6,10 @@ import {
   AlertCircle,
   CheckCircle,
   RotateCcw,
+  Zap,
+  Mail,
 } from 'lucide-react'
-import { useThresholds, useUpdateThresholds } from '../hooks/useAlerts'
+import { useThresholds, useTriggerScan, useUpdateThresholds } from '../hooks/useAlerts'
 import { ThresholdSliders } from '../components/ThresholdSliders'
 import { cn } from '../lib/cn'
 import type { ThresholdConfig } from '../types'
@@ -21,6 +23,7 @@ const DEFAULT_THRESHOLDS: ThresholdConfig = {
 export function AdminConfigPage() {
   const thresholdsQuery = useThresholds()
   const updateMutation = useUpdateThresholds()
+  const scanMutation = useTriggerScan()
 
   const [values, setValues] = useState<ThresholdConfig>(DEFAULT_THRESHOLDS)
   const [saved, setSaved] = useState(false)
@@ -202,6 +205,80 @@ export function AdminConfigPage() {
                 Reset
               </button>
             )}
+          </div>
+
+          <div className="rounded-xl border border-navy-800 bg-navy-900 p-5">
+            <div className="flex items-start gap-3">
+              <Zap className="mt-0.5 h-5 w-5 shrink-0 text-status-expiring" aria-hidden="true" />
+              <div className="flex-1">
+                <h2 className="text-sm font-semibold text-navy-100">Run Expiry Scan</h2>
+                <p className="mt-1 text-xs text-navy-400">
+                  Manually runs the same pipeline as the daily 09:00 scan: transitions document
+                  statuses, generates new alerts, and emails administrators for any new threshold
+                  breaches.
+                </p>
+
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={() => scanMutation.mutate()}
+                    disabled={scanMutation.isPending}
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-navy-400/40',
+                      !scanMutation.isPending
+                        ? 'bg-navy-600 text-navy-50 hover:bg-navy-500'
+                        : 'cursor-not-allowed bg-navy-800 text-navy-500',
+                    )}
+                    aria-label="Run expiry scan"
+                  >
+                    {scanMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Zap className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    {scanMutation.isPending ? 'Scanning...' : 'Run Scan Now'}
+                  </button>
+                </div>
+
+                {scanMutation.isError && (
+                  <div
+                    role="alert"
+                    className="mt-4 flex items-start gap-3 rounded-lg border border-status-expired/40 bg-status-expired-bg/10 p-4"
+                  >
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-status-expired" />
+                    <p className="text-sm text-status-expired">
+                      {scanMutation.error instanceof Error
+                        ? scanMutation.error.message
+                        : 'Failed to run expiry scan.'}
+                    </p>
+                  </div>
+                )}
+
+                {scanMutation.isSuccess && scanMutation.data && (
+                  <div
+                    role="status"
+                    className="mt-4 flex items-start gap-3 rounded-lg border border-status-valid/40 bg-status-valid-bg/10 p-4"
+                  >
+                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-status-valid" />
+                    <div className="text-sm text-status-valid">
+                      <p>
+                        Scan complete on {scanMutation.data.date}. Status changes:{' '}
+                        <span className="font-semibold">{scanMutation.data.transitioned}</span>.
+                        New alerts:{' '}
+                        <span className="font-semibold">{scanMutation.data.alerts_generated}</span>.
+                      </p>
+                      <p className="mt-1 flex items-center gap-1.5">
+                        <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+                        Emails sent:{' '}
+                        <span className="font-semibold">{scanMutation.data.emails_sent}</span>.
+                        Failed:{' '}
+                        <span className="font-semibold">{scanMutation.data.emails_failed}</span>.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
