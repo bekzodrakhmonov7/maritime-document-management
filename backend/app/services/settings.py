@@ -20,25 +20,28 @@ from app.audit import AuditAction, AuditContext
 from app.models.settings import EDITABLE
 
 _COLUMNS = ", ".join((*EDITABLE, "version", "updated_at"))
+_SELECT = f"SELECT {_COLUMNS} FROM public.settings"
 
 
 class StaleVersion(Exception):
     pass
 
 
-def _hh_mm(value: time) -> str:
-    return value.strftime("%H:%M")
-
-
 def _as_dict(row: asyncpg.Record) -> dict[str, Any]:
+    """The row as API values: the check time `time` column becomes "HH:MM"."""
     values = dict(row)
-    values["daily_check_time"] = _hh_mm(values["daily_check_time"])
+    values["daily_check_time"] = values["daily_check_time"].strftime("%H:%M")
     return values
+
+
+def _column_value(column: str, value: Any) -> Any:
+    """An API value as its column takes it: "HH:MM" becomes a `time`."""
+    return time.fromisoformat(value) if column == "daily_check_time" else value
 
 
 async def get(conn: asyncpg.Connection) -> dict[str, Any]:
     """The current settings, with the check time as "HH:MM"."""
-    return _as_dict(await conn.fetchrow(f"SELECT {_COLUMNS} FROM public.settings"))
+    return _as_dict(await conn.fetchrow(_SELECT))
 
 
 async def save(
@@ -49,9 +52,7 @@ async def save(
     version: int,
 ) -> dict[str, Any]:
     async with conn.transaction():
-        current = _as_dict(
-            await conn.fetchrow(f"SELECT {_COLUMNS} FROM public.settings FOR UPDATE")
-        )
+        current = _as_dict(await conn.fetchrow(f"{_SELECT} FOR UPDATE"))
         if current["version"] != version:
             raise StaleVersion()
         before, after = audit.changed_fields(
@@ -60,9 +61,7 @@ async def save(
         if not after:
             return current
 
-        params = [
-            time.fromisoformat(v) if c == "daily_check_time" else v for c, v in after.items()
-        ]
+        params = [_column_value(c, v) for c, v in after.items()]
         assignments = ", ".join(f"{c} = ${i}" for i, c in enumerate(after, start=2))
         row = await conn.fetchrow(
             f"""
