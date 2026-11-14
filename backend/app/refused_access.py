@@ -17,7 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
 from app import audit
-from app.audit import AuditAction, request_audit_context
+from app.audit import AuditAction, audit_context_for, request_audit_context
 from app.models.auth import UserPayload
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ async def _record_refusal(request: Request, exc: StarletteHTTPException) -> None
     # when the token has no Account.
     account: UserPayload | None = getattr(request.state, "account", None)
     if account is not None:
-        ctx = request_audit_context(request, account.sub, account.email, account.role)
+        ctx = audit_context_for(request, account)
     else:
         ctx = request_audit_context(request, getattr(request.state, "token_sub", None), None, None)
 

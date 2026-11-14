@@ -57,7 +57,8 @@ async def _record_failure(
         "SELECT id, role FROM public.users WHERE lower(email) = lower($1)", email
     )
     actor_id = account["id"] if account else None
-    ctx = request_audit_context(request, actor_id, email, account["role"] if account else None)
+    actor_role = account["role"] if account else None
+    ctx = request_audit_context(request, actor_id, email, actor_role)
     async with db.transaction():
         await audit.record(
             db, ctx, AuditAction.LOGIN_FAILED,
