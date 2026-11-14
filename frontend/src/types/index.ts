@@ -205,3 +205,92 @@ export interface RequirementEvaluation {
   /** The exceptions that decide a type for this pair (the most specific one wins). */
   applied_exceptions: RequirementException[]
 }
+
+/** The actions an Audit Record can have (app/audit.py), with their labels. */
+export const AUDIT_ACTION_LABELS = {
+  login_succeeded: 'Login succeeded',
+  login_failed: 'Login failed',
+  logout: 'Logout',
+  access_refused: 'Access refused',
+  account_approved: 'Account approved',
+  account_role_changed: 'Account role changed',
+  account_deactivated: 'Account deactivated',
+  account_reactivated: 'Account reactivated',
+  vessel_created: 'Vessel created',
+  vessel_edited: 'Vessel edited',
+  vessel_deactivated: 'Vessel deactivated',
+  vessel_reactivated: 'Vessel reactivated',
+  position_created: 'Position created',
+  position_edited: 'Position edited',
+  position_retired: 'Position retired',
+  position_unretired: 'Position unretired',
+  position_deleted: 'Position deleted',
+  document_type_created: 'Document Type created',
+  document_type_edited: 'Document Type edited',
+  document_type_retired: 'Document Type retired',
+  document_type_unretired: 'Document Type unretired',
+  document_type_deleted: 'Document Type deleted',
+  requirement_added: 'Requirement added',
+  requirement_removed: 'Requirement removed',
+  requirement_exception_created: 'Requirement exception created',
+  requirement_exception_edited: 'Requirement exception edited',
+  requirement_exception_deleted: 'Requirement exception deleted',
+  seafarer_created: 'Seafarer created',
+  seafarer_edited: 'Seafarer edited',
+  seafarer_set_inactive: 'Seafarer set Inactive',
+  seafarer_reactivated: 'Seafarer reactivated',
+  assignment_created: 'Assignment created',
+  assignment_edited: 'Assignment edited',
+  assignment_cancelled: 'Assignment cancelled',
+  responsible_officer_added: 'Responsible Officer added',
+  responsible_officer_removed: 'Responsible Officer removed',
+  settings_changed: 'Settings changed',
+  audit_searched: 'Audit Log searched',
+  audit_exported: 'Audit Log exported',
+} as const
+
+export type AuditAction = keyof typeof AUDIT_ACTION_LABELS
+
+export type AuditOutcome = 'succeeded' | 'refused'
+
+/** One Audit Record (S13). */
+export interface AuditRecord {
+  id: number
+  occurred_at: string
+  actor_id: string | null
+  actor_email: string | null
+  actor_role: string | null
+  action: string
+  outcome: AuditOutcome
+  target_type: string | null
+  target_id: string | null
+  seafarer_id: number | null
+  /** The changed fields only. */
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  reason: string | null
+  ip: string | null
+  request_id: string | null
+}
+
+/** The Audit Log search; every filter given must match. */
+export interface AuditFilters {
+  date_from: string
+  date_to: string
+  actor_email: string
+  actions: AuditAction[]
+  seafarer_id: string
+  target_type: string
+  target_id: string
+  outcome: AuditOutcome | ''
+}
+
+/** GET /api/audit: one page, newest first. */
+export interface AuditPage {
+  items: AuditRecord[]
+  total: number
+  page: number
+  page_size: number
+  /** The company time zone the timestamps are shown in. */
+  time_zone: string
+}

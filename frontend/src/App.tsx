@@ -17,6 +17,7 @@ import { SeafarersPage } from './pages/SeafarersPage'
 import { SeafarerPage } from './pages/SeafarerPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RequirementsPage } from './pages/RequirementsPage'
+import { AuditLogPage } from './pages/AuditLogPage'
 
 const queryClient = new QueryClient()
 
@@ -106,6 +107,14 @@ export default function App() {
                 element={
                   <RoleGate roles={['administrator']}>
                     <SettingsPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="admin/audit"
+                element={
+                  <RoleGate roles={['administrator']}>
+                    <AuditLogPage />
                   </RoleGate>
                 }
               />

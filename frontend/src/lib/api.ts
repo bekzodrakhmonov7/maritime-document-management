@@ -41,7 +41,8 @@ async function toApiError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, text || `HTTP ${res.status}`)
 }
 
-export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+/** A request with the session's token; a refusal becomes an ApiError. */
+async function authorizedFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const { supabase } = await import('./supabase')
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
@@ -66,10 +67,30 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
     }
     throw err
   }
+  return res
+}
+
+export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await authorizedFetch(path, options)
 
   if (res.status === 204 || res.headers.get('content-length') === '0') {
     return undefined as T
   }
 
   return res.json() as Promise<T>
+}
+
+/** A file from the API, saved through the browser under the name it gives.
+ * Returns the response headers. */
+export async function apiDownload(path: string, fallbackName: string): Promise<Headers> {
+  const res = await authorizedFetch(path)
+  const disposition = res.headers.get('content-disposition') ?? ''
+  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  URL.revokeObjectURL(url)
+  return res.headers
 }
