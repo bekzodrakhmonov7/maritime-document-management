@@ -144,6 +144,21 @@ def _summary(
     }
 
 
+async def current_versions(conn: asyncpg.Connection, document_ids: list[int]) -> dict[int, dict | None]:
+    """Each Document's Current Version with its review state, or None when it
+    has none (no Version, or every one rejected)."""
+    versions = await _versions_of(conn, document_ids)
+    reviews = await _reviews_of(conn, [v for vs in versions.values() for v in vs])
+    found: dict[int, dict | None] = {}
+    for document_id in document_ids:
+        current = domain.current_version(versions.get(document_id, []), reviews)
+        found[document_id] = (
+            None if current is None
+            else {**current, "review_state": domain.review_state(current["id"], reviews)}
+        )
+    return found
+
+
 async def list_for_seafarer(conn: asyncpg.Connection, scope: Scope, seafarer_id: int) -> list[dict]:
     """A seafarer's documents, by type name, each with its Current Version
     and Expiry Status."""

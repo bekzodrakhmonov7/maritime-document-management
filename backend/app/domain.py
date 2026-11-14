@@ -6,10 +6,10 @@ slices add coverage and the rest here.
 """
 
 import calendar
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping, Set
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
-from typing import Any, Literal
+from datetime import date, datetime, time, timezone
+from typing import Any, Literal, TypeVar
 from zoneinfo import ZoneInfo
 
 AssignmentState = Literal["upcoming", "under_way", "finished"]
@@ -223,3 +223,67 @@ def required_set(
         else:
             required.discard(type_id)
     return required - set(retired_types)
+
+
+# --- Alerts and the daily check (FR-16; T6, T9) --------------------------------------
+
+
+@dataclass(frozen=True)
+class StepToRaise:
+    """The Alert Step to raise and send, and the earlier steps reached with it
+    that are stored as skipped (never sent)."""
+
+    step: int
+    skipped: tuple[int, ...]
+
+
+def step_to_raise(
+    expiry: date, today: date, steps: Iterable[int], already_raised: Collection[int]
+) -> StepToRaise | None:
+    """The most urgent Alert Step reached for this expiry date, unless it was
+    raised already. A step is reached from `step` days before expiry on, so an
+    expired document has reached every step. Steps reached late (missed runs,
+    an upload already inside a window) send only the most urgent one; the
+    other ones not raised yet are skipped, largest first. `already_raised` are
+    the steps raised (or skipped) for this same Document and expiry date, so a
+    renewal with a new expiry date starts over."""
+    days_left = (expiry - today).days
+    reached = sorted((s for s in set(steps) if days_left <= s), reverse=True)
+    if not reached or reached[-1] in already_raised:
+        return None
+    *earlier, most_urgent = reached
+    return StepToRaise(most_urgent, tuple(s for s in earlier if s not in already_raised))
+
+
+def alert_is_open(alert_expiry: date, *, current_expiry: date | None, seafarer_inactive: bool) -> bool:
+    """An Alert stays open while the seafarer isn't Inactive and the Document's
+    Current Version still has the expiry date it was raised for. Nobody closes
+    one by hand."""
+    return not seafarer_inactive and current_expiry == alert_expiry
+
+
+Recipient = TypeVar("Recipient")
+
+
+def alert_recipients(
+    vessel_ids: Iterable[int],
+    active_officers: Mapping[int, Set[Recipient]],
+    administrators: Set[Recipient],
+) -> set[Recipient]:
+    """Who is warned about a seafarer's document: the active Responsible
+    Officers of every vessel the seafarer has an upcoming or under-way
+    Assignment on. A Pool seafarer (no such vessel), or a vessel with no
+    active officer, brings in the active administrators."""
+    vessel_ids = list(vessel_ids)
+    recipients: set[Recipient] = set()
+    if not vessel_ids:
+        return set(administrators)
+    for vessel_id in vessel_ids:
+        recipients |= active_officers.get(vessel_id) or administrators
+    return recipients
+
+
+def daily_check_due(local_now: datetime, check_time: time, ran_today: bool) -> bool:
+    """The scheduled check runs once per local date, from the check time on;
+    after downtime it catches up on the next wake-up the same day."""
+    return not ran_today and local_now.time() >= check_time

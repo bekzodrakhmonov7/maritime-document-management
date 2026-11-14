@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Loader2, Lock, Plus, RotateCw, X } from 'lucide-react'
+import { Loader2, Lock, Play, Plus, RotateCw, X } from 'lucide-react'
 import { useSaveSettings, useSettings } from '../hooks/useSettings'
+import { useRunDailyCheck } from '../hooks/useAlerts'
 import { ApiError } from '../lib/api'
 import type { Settings } from '../types'
 import { ActionButton } from '../components/ActionButton'
@@ -67,7 +68,45 @@ export function SettingsPage() {
           }}
         />
       )}
+
+      <DailyCheckPanel />
     </div>
+  )
+}
+
+/** Run the daily check now. It doesn't count as the day's scheduled run, and
+ * it is recorded in the Audit Log. */
+function DailyCheckPanel() {
+  const run = useRunDailyCheck()
+  const result = run.data
+
+  return (
+    <section
+      aria-labelledby="daily-check-heading"
+      className="space-y-3 rounded-xl border border-navy-800 bg-navy-900 p-6"
+    >
+      <div>
+        <h3 id="daily-check-heading" className="text-sm font-semibold text-navy-50">
+          Daily check
+        </h3>
+        <p className="mt-1 text-xs text-navy-400">
+          Runs once a day at the check time. Running it now raises any alerts due, sends the
+          digests and retries failed e-mails; it doesn’t replace today’s scheduled run.
+        </p>
+      </div>
+      {run.error && <ErrorNote message={run.error.message} />}
+      {result && (
+        <p className="text-sm text-navy-200" role="status">
+          Raised {result.raised} alert{result.raised === 1 ? '' : 's'}, sent {result.sent} digest
+          {result.sent === 1 ? '' : 's'}
+          {result.failed > 0 && `, ${result.failed} failed (retried on the next run)`}.
+        </p>
+      )}
+      <ActionButton tone="primary" onClick={() => run.mutate()} disabled={run.isPending}>
+        {run.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+        Run now
+      </ActionButton>
+    </section>
   )
 }
 

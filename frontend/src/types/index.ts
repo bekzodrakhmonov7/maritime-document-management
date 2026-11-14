@@ -355,6 +355,7 @@ export const AUDIT_ACTION_LABELS = {
   settings_changed: 'Settings changed',
   audit_searched: 'Audit Log searched',
   audit_exported: 'Audit Log exported',
+  daily_check_run_manually: 'Daily check run manually',
 } as const
 
 export type AuditAction = keyof typeof AUDIT_ACTION_LABELS
@@ -401,4 +402,33 @@ export interface AuditPage {
   page_size: number
   /** The company time zone the timestamps are shown in. */
   time_zone: string
+}
+
+// --- Alerts and the daily check (FR-16) ---------------------------------------------
+
+/** An open Alert: a document that reached an Alert Step for its current expiry date. */
+export interface Alert {
+  id: number
+  document_id: number
+  seafarer_id: number
+  seafarer_name: string
+  document_type_name: string
+  /** Days before expiry. */
+  step: number
+  expiry_date: string
+  /** Against today in the company time zone; negative once expired. */
+  days_left: number
+  raised_at: string
+  awaiting_review: boolean
+}
+
+export interface DailyCheckResult {
+  run_id: number
+  local_date: string
+  manual: boolean
+  raised: number
+  skipped: number
+  /** Digests, one per recipient. */
+  sent: number
+  failed: number
 }

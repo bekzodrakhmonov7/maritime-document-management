@@ -19,6 +19,7 @@ import { DocumentPage } from './pages/DocumentPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RequirementsPage } from './pages/RequirementsPage'
 import { AuditLogPage } from './pages/AuditLogPage'
+import { AlertsPage } from './pages/AlertsPage'
 
 const queryClient = new QueryClient()
 
@@ -60,6 +61,14 @@ export default function App() {
                 element={
                   <RoleGate roles={['administrator', 'crewing_officer']}>
                     <DocumentPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="alerts"
+                element={
+                  <RoleGate roles={['administrator', 'crewing_officer']}>
+                    <AlertsPage />
                   </RoleGate>
                 }
               />

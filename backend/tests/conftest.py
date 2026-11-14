@@ -147,6 +147,8 @@ REFERENCE_TABLES = (
     "version",
     "review",
     "verification",
+    "alert",
+    "alert_delivery",
 )
 
 
@@ -267,14 +269,17 @@ async def storage(app):
 
 @pytest_asyncio.fixture
 async def documents_cleanup(owner_db, make_account, reference_cleanup):
-    """Empty the Document, Version, Review and Verification tables before and
-    after the test.
+    """Empty the Document, Version, Review, Verification and Alert tables
+    before and after the test.
 
     Versions, Reviews and Verifications reference Accounts, so this depends on
     make_account and is torn down first. TRUNCATE doesn't fire the Version
     immutability and append-only triggers (they block UPDATE and DELETE only).
     """
-    statement = "TRUNCATE public.review, public.verification, public.version, public.document"
+    statement = (
+        "TRUNCATE public.alert_delivery, public.alert, public.review, public.verification, "
+        "public.version, public.document"
+    )
     await owner_db.execute(statement)
     yield
     await owner_db.execute(statement)
