@@ -163,7 +163,7 @@ async def add_to_all_positions(
 
 # --- Exceptions ------------------------------------------------------------------
 
-_EXCEPTION_MESSAGES = {
+_CONSTRAINT_MESSAGES = {
     "uq_requirement_exception": (
         "An exception for that vessel or flag, Position and Document Type already exists: edit it instead."
     ),
@@ -175,9 +175,9 @@ async def _write(conn: asyncpg.Connection, query: str, *args: Any) -> Any:
     try:
         return await conn.fetchval(query, *args)
     except asyncpg.UniqueViolationError as exc:
-        raise Conflict(_EXCEPTION_MESSAGES.get(exc.constraint_name or "", str(exc)))
+        raise Conflict(_CONSTRAINT_MESSAGES.get(exc.constraint_name or "", str(exc)))
     except (asyncpg.CheckViolationError, asyncpg.ForeignKeyViolationError) as exc:
-        raise Invalid(_EXCEPTION_MESSAGES.get(exc.constraint_name or "", str(exc)))
+        raise Invalid(_CONSTRAINT_MESSAGES.get(exc.constraint_name or "", str(exc)))
 
 
 async def _check_picks(conn: asyncpg.Connection, values: dict[str, Any]) -> None:
@@ -335,6 +335,10 @@ async def evaluate(conn: asyncpg.Connection, position_id: int, vessel_id: int | 
     def by_name(type_id: int) -> tuple[str, int]:
         return names[type_id].lower(), type_id
 
+    def adding_exception_id(type_id: int) -> int | None:
+        e = deciding.get(type_id)
+        return e.id if e is not None and e.effect == "add" else None
+
     return {
         "position_id": position_id,
         "vessel": vessel,
@@ -342,7 +346,7 @@ async def evaluate(conn: asyncpg.Connection, position_id: int, vessel_id: int | 
             {
                 "id": type_id,
                 "name": names[type_id],
-                "exception_id": e.id if (e := deciding.get(type_id)) and e.effect == "add" else None,
+                "exception_id": adding_exception_id(type_id),
             }
             for type_id in sorted(required, key=by_name)
         ],

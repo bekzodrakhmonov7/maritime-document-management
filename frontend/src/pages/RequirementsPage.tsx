@@ -8,9 +8,7 @@ import {
   useRequirementExceptions,
 } from '../hooks/useRequirements'
 import type {
-  DocumentType,
   ExceptionEffect,
-  Position,
   RequirementException,
   RequirementExceptionWrite,
 } from '../types'
@@ -312,8 +310,8 @@ function ExceptionForm({
   const canSubmit = (body.vessel_id !== null || body.flag !== null) && !!typeId && !!body.reason
 
   const vesselOptions = pickable(vessels, (v) => v.active, exception?.vessel_id ?? null)
-  const positionOptions = pickable<Position>(positions, (p) => !p.retired, exception?.position_id ?? null)
-  const typeOptions = pickable<DocumentType>(types, (t) => !t.retired, exception?.document_type_id ?? null)
+  const positionOptions = pickable(positions, (p) => !p.retired, exception?.position_id ?? null)
+  const typeOptions = pickable(types, (t) => !t.retired, exception?.document_type_id ?? null)
 
   return (
     <FormDialog

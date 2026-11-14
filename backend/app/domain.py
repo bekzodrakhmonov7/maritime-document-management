@@ -46,10 +46,12 @@ def deciding_exceptions(
         if e.position_id is not None and e.position_id != position_id:
             return None
         if e.vessel_id is not None:
-            scope = 2 if e.vessel_id == vessel.id else None
+            if e.vessel_id != vessel.id:
+                return None
+            scope = 2
+        elif e.flag == vessel.flag:
+            scope = 1
         else:
-            scope = 1 if e.flag == vessel.flag else None
-        if scope is None:
             return None
         return scope, 1 if e.position_id is not None else 0
 
