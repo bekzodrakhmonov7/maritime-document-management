@@ -1,12 +1,12 @@
-"""Documents and Versions (FR-09, FR-10, FR-13, FR-15; T1, T2)."""
+"""Documents, Versions, Reviews and Verifications (FR-09 to FR-13, FR-15; T1, T2)."""
 
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, StringConstraints, field_validator, model_validator
 
-from app.domain import ExpiryStatus
+from app.domain import ExpiryStatus, ReviewState
 from app.upload_safety import ReasonCode
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
@@ -35,6 +35,46 @@ class VersionDetails(BaseModel):
         return self
 
 
+Decision = Literal["accept", "reject"]
+VerificationResult = Literal["confirmed", "not_confirmed"]
+Comment = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
+class ReviewWrite(BaseModel):
+    decision: Decision
+    comment: Comment
+
+
+class ReviewRead(BaseModel):
+    id: int
+    decision: Decision
+    comment: str
+    reviewed_by: UUID
+    reviewed_by_name: str
+    reviewed_at: datetime
+
+
+class VerificationDetails(BaseModel):
+    """A Verification's details, sent as form fields next to the optional
+    proof file. The date can't be after today in the company time zone (the
+    service checks that)."""
+
+    checked_on: date
+    source: Text
+    result: VerificationResult
+    reference: Text
+
+
+class VerificationRead(VerificationDetails):
+    id: int
+    recorded_by: UUID
+    recorded_by_name: str
+    recorded_at: datetime
+    # Both None when no proof file was attached.
+    proof_original_filename: str | None
+    proof_content_type: str | None
+
+
 class VersionRead(BaseModel):
     id: int
     # 1 for the first upload, counting up.
@@ -51,6 +91,11 @@ class VersionRead(BaseModel):
     is_current: bool
     # Set on a details-only Version: the earlier Version whose file it reuses.
     file_from_version_number: int | None
+    # The latest Review decides; never "rejected" for the Current Version.
+    review_state: ReviewState
+    # Newest first.
+    reviews: list[ReviewRead]
+    verifications: list[VerificationRead]
 
 
 class CurrentVersionSummary(BaseModel):
@@ -59,6 +104,8 @@ class CurrentVersionSummary(BaseModel):
     issue_date: date
     expiry_date: date | None
     uploaded_at: datetime
+    # "not_reviewed" shows the Not-reviewed tag.
+    review_state: ReviewState
 
 
 class DocumentSummary(BaseModel):
@@ -76,6 +123,8 @@ class DocumentSummary(BaseModel):
     # None when every Version is rejected: the Document counts as missing.
     current_version: CurrentVersionSummary | None
     expiry_status: ExpiryStatus | None
+    # The Current Version's latest Verification is confirmed (never Reviewed).
+    verified: bool
 
 
 class DocumentRead(DocumentSummary):

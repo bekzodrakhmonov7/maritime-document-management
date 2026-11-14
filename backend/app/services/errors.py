@@ -26,3 +26,8 @@ class OutOfScope(Exception):
 class NotResponsible(Exception):
     """A crewing officer acting on a vessel they aren't a Responsible Officer
     for (answered as 403 and recorded as refused access)."""
+
+
+class OwnVersion(Exception):
+    """The uploader reviewing their own Version: the four-eyes rule (answered
+    as 403 and recorded as refused access)."""

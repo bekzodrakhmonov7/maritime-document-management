@@ -55,6 +55,8 @@ class AuditAction(StrEnum):
     VERSION_UPLOADED = "version_uploaded"
     UPLOAD_REJECTED = "upload_rejected"
     FILE_URL_ISSUED = "file_url_issued"
+    VERSION_REVIEWED = "version_reviewed"
+    VERIFICATION_RECORDED = "verification_recorded"
     SETTINGS_CHANGED = "settings_changed"
     AUDIT_SEARCHED = "audit_searched"
     AUDIT_EXPORTED = "audit_exported"

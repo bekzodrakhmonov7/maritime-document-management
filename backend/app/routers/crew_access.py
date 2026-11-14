@@ -37,7 +37,8 @@ async def get_crew_access(
 @contextmanager
 def errors_as_http() -> Iterator[None]:
     """Turn the services' refusals into HTTP answers. Out of Scope looks like a
-    missing record (404) but is recorded, as is a missing responsibility (403)."""
+    missing record (404) but is recorded, as is a missing responsibility
+    (403) and a review of one's own Version (403)."""
     try:
         yield
     except errors.NotFound:
@@ -46,6 +47,8 @@ def errors_as_http() -> Iterator[None]:
         raise OutOfScope(exc.target_type, exc.target_id, seafarer_id=exc.seafarer_id)
     except errors.NotResponsible as exc:
         raise account_refused("not_responsible", str(exc))
+    except errors.OwnVersion as exc:
+        raise account_refused("own_version", str(exc))
     except errors.Conflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
     except errors.Invalid as exc:

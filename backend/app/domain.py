@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 AssignmentState = Literal["upcoming", "under_way", "finished"]
 Effect = Literal["add", "remove"]
 ExpiryStatus = Literal["unexpired", "expiring_soon", "expired", "no_expiry_date"]
+ReviewState = Literal["not_reviewed", "accepted", "rejected"]
 
 
 def today_in(time_zone: str, now: datetime | None = None) -> date:
@@ -48,6 +49,29 @@ def current_assignment(
 # --- Documents and Versions (FR-10, FR-15; T1, T2) ------------------------------------
 
 
+def _latest_by_version(rows: Iterable[Mapping[str, Any]]) -> dict[int, Mapping[str, Any]]:
+    """Each Version's latest row (the highest id) among its Reviews or Verifications."""
+    latest: dict[int, Mapping[str, Any]] = {}
+    for row in rows:
+        held = latest.get(row["version_id"])
+        if held is None or row["id"] > held["id"]:
+            latest[row["version_id"]] = row
+    return latest
+
+
+def _latest_for(version_id: int, rows: Iterable[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    """One Version's latest row (the highest id), or None when it has none."""
+    return _latest_by_version(r for r in rows if r["version_id"] == version_id).get(version_id)
+
+
+def review_state(version_id: int, reviews: Iterable[Mapping[str, Any]]) -> ReviewState:
+    """A Version's latest Review decides: accepted, rejected, or not reviewed yet."""
+    latest = _latest_for(version_id, reviews)
+    if latest is None:
+        return "not_reviewed"
+    return "accepted" if latest["decision"] == "accept" else "rejected"
+
+
 def current_version(
     versions: Iterable[Mapping[str, Any]], reviews: Iterable[Mapping[str, Any]]
 ) -> Mapping[str, Any] | None:
@@ -57,17 +81,26 @@ def current_version(
     Review overturns an earlier one. With every Version rejected (or none at
     all) the Document has no Current Version and counts as missing.
     """
-    latest_decision: dict[int, tuple[int, str]] = {}
-    for r in reviews:
-        held = latest_decision.get(r["version_id"])
-        if held is None or r["id"] > held[0]:
-            latest_decision[r["version_id"]] = (r["id"], r["decision"])
+    latest = _latest_by_version(reviews)
     candidates = [
-        v for v in versions if latest_decision.get(v["id"], (0, None))[1] != "reject"
+        v for v in versions
+        if v["id"] not in latest or latest[v["id"]]["decision"] != "reject"
     ]
     if not candidates:
         return None
     return max(candidates, key=lambda v: (v["uploaded_at"], v["id"]))
+
+
+def is_verified(
+    current: Mapping[str, Any] | None, verifications: Iterable[Mapping[str, Any]]
+) -> bool:
+    """Verified: the Current Version's latest Verification (the highest id) is
+    confirmed. A renewal is a new Version, so it is not Verified until it is
+    checked again."""
+    if current is None:
+        return False
+    latest = _latest_for(current["id"], verifications)
+    return latest is not None and latest["result"] == "confirmed"
 
 
 def expiry_status(expiry: date | None, today: date, largest_step: int) -> ExpiryStatus:
