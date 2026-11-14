@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     supabase_url: str
     supabase_service_role_key: str
+    # The public key, for the sign-in proxy; the service key is used if unset.
+    supabase_anon_key: str = ""
     supabase_jwt_secret: str = ""
 
     # The app's connection, as the restricted app_backend role (ADR 0002).

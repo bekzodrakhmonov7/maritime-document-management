@@ -13,6 +13,12 @@ import type { AccountStatus, Me, UserRole } from '../types'
 
 const SWITCHED_OFF_KEY = 'account-switched-off'
 
+/** The part of the sign-in proxy's response that `setSession` needs. */
+interface SessionTokens {
+  access_token: string
+  refresh_token: string
+}
+
 interface AuthContextValue {
   user: User | null
   session: Session | null
@@ -57,22 +63,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const signOut = useCallback(async () => {
+  const endSession = useCallback(async () => {
     await supabase.auth.signOut()
     setRole(null)
     setStatus(null)
   }, [])
 
+  const signOut = useCallback(async () => {
+    // Records *logout* in the Audit Log. Best effort: signing out must work
+    // even when the API can't be reached.
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      // ignored
+    }
+    await endSession()
+  }, [endSession])
+
   // FR-02: a switched-off account is refused on its next request; sign out
-  // and tell the person why.
+  // and tell the person why. The API would refuse its logout call too, so
+  // only the local session is ended.
   useEffect(
     () =>
       onAccountSwitchedOff(() => {
         sessionStorage.setItem(SWITCHED_OFF_KEY, '1')
         setSwitchedOff(true)
-        void signOut()
+        void endSession()
       }),
-    [signOut],
+    [endSession],
   )
 
   useEffect(() => {
@@ -111,8 +129,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSwitchedOff(false)
   }, [])
 
+  // Sign-in goes through the API so failed attempts reach the Audit Log
+  // (T7); the session it returns is then handed to Supabase.
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    let tokens: SessionTokens
+    try {
+      tokens = await apiFetch<SessionTokens>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
+    } catch (err) {
+      return { error: err instanceof Error ? err : new Error('Sign-in failed.') }
+    }
+    const { error } = await supabase.auth.setSession({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+    })
     if (!error) clearSwitchedOff()
     return { error: error ?? undefined }
   }
