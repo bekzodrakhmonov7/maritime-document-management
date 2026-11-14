@@ -1,12 +1,13 @@
 """Documents and Versions (FR-09, FR-10, FR-13, FR-15; T1, T2)."""
 
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, StringConstraints, field_validator, model_validator
 
 from app.domain import ExpiryStatus
+from app.upload_safety import ReasonCode
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
@@ -94,8 +95,5 @@ class FileUrl(BaseModel):
 
 
 class UploadRefusal(BaseModel):
-    code: Literal[
-        "too_large", "unsupported_type", "type_mismatch", "corrupt",
-        "pdf_active_content", "pdf_encrypted", "too_many_pages", "image_too_large",
-    ]
+    code: ReasonCode
     message: str

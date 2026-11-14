@@ -129,7 +129,7 @@ async def upload_version(
     try:
         await storage.upload(stored.path, safe.content, safe.content_type)
     except StorageUnavailable:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "File storage is unavailable; try again.")
+        raise _storage_unavailable()
 
     # 5. One transaction for the Version and its record; on failure the file goes.
     try:
@@ -188,7 +188,11 @@ async def issue_file_url(
                 db, audit_context_for(request, access.user), access.scope, storage, version_id
             )
     except StorageUnavailable:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "File storage is unavailable; try again.")
+        raise _storage_unavailable()
+
+
+def _storage_unavailable() -> HTTPException:
+    return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "File storage is unavailable; try again.")
 
 
 # --- Multipart parsing ---------------------------------------------------------------------
