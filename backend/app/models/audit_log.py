@@ -1,7 +1,7 @@
 """Audit Log search and export (FR-23, T7)."""
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -36,7 +36,7 @@ class AuditRecordRead(BaseModel):
     actor_email: str | None
     actor_role: str | None
     action: str
-    outcome: Literal["succeeded", "refused"]
+    outcome: Outcome
     target_type: str | None
     target_id: str | None
     seafarer_id: int | None

@@ -20,6 +20,11 @@ function actionLabel(action: string): string {
   return AUDIT_ACTION_LABELS[action as AuditAction] ?? action
 }
 
+function actor(record: AuditRecord): string {
+  if (record.actor_email !== null) return record.actor_email
+  return record.actor_role === 'system' ? 'System' : '—'
+}
+
 function target(record: AuditRecord): string {
   if (!record.target_type) return '—'
   return record.target_id ? `${record.target_type} ${record.target_id}` : record.target_type
@@ -258,7 +263,7 @@ export function AuditLogPage() {
                   {formatTime(record.occurred_at)}
                 </td>
                 <td className="px-4 py-3 text-navy-200">
-                  <div>{record.actor_email ?? (record.actor_role === 'system' ? 'System' : '—')}</div>
+                  <div>{actor(record)}</div>
                   {record.actor_role && record.actor_role !== 'system' && (
                     <div className="text-xs text-navy-400">{record.actor_role}</div>
                   )}
