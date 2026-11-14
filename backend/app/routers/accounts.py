@@ -1,5 +1,7 @@
 """Administrator-only account management (FR-02)."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
 import asyncpg
@@ -24,10 +26,15 @@ router = APIRouter(prefix="/accounts", tags=["accounts"])
 admin_only = require_role("administrator")
 
 
-def _http_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, AccountNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
-    return HTTPException(status.HTTP_409_CONFLICT, str(exc))
+@contextmanager
+def _account_errors_as_http() -> Iterator[None]:
+    """Turn the service's refusals into 404 (unknown account) or 409."""
+    try:
+        yield
+    except AccountNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
+    except AccountConflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
 
 
 @router.get("", response_model=list[AccountRead])
@@ -55,12 +62,10 @@ async def approve(
     db: asyncpg.Connection = Depends(get_db),
     admin: UserPayload = Depends(admin_only),
 ):
-    try:
+    with _account_errors_as_http():
         return await accounts.approve(
             db, audit_context_for(request, admin), account_id, body.role, body.reason
         )
-    except (AccountNotFound, AccountConflict) as exc:
-        raise _http_error(exc)
 
 
 @router.post("/{account_id}/role", response_model=AccountRead)
@@ -71,12 +76,10 @@ async def change_role(
     db: asyncpg.Connection = Depends(get_db),
     admin: UserPayload = Depends(admin_only),
 ):
-    try:
+    with _account_errors_as_http():
         return await accounts.change_role(
             db, audit_context_for(request, admin), account_id, body.role, body.reason
         )
-    except (AccountNotFound, AccountConflict) as exc:
-        raise _http_error(exc)
 
 
 @router.post("/{account_id}/deactivate", response_model=AccountRead)
@@ -87,12 +90,10 @@ async def deactivate(
     db: asyncpg.Connection = Depends(get_db),
     admin: UserPayload = Depends(admin_only),
 ):
-    try:
+    with _account_errors_as_http():
         return await accounts.deactivate(
             db, audit_context_for(request, admin), account_id, body.reason
         )
-    except (AccountNotFound, AccountConflict) as exc:
-        raise _http_error(exc)
 
 
 @router.post("/{account_id}/reactivate", response_model=AccountRead)
@@ -103,9 +104,7 @@ async def reactivate(
     db: asyncpg.Connection = Depends(get_db),
     admin: UserPayload = Depends(admin_only),
 ):
-    try:
+    with _account_errors_as_http():
         return await accounts.reactivate(
             db, audit_context_for(request, admin), account_id, body.reason, body.role
         )
-    except (AccountNotFound, AccountConflict) as exc:
-        raise _http_error(exc)

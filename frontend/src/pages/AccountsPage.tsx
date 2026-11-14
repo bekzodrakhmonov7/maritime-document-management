@@ -30,6 +30,19 @@ const FORM_TITLE: Record<FormKind, string> = {
 
 const ROLES = Object.keys(ROLE_LABELS) as UserRole[]
 
+/** The actions offered for an account in each status, in display order. */
+const ACTIONS: Record<AccountStatus, { kind: FormKind; label: string }[]> = {
+  pending: [
+    { kind: 'approve', label: 'Approve' },
+    { kind: 'deactivate', label: 'Reject' },
+  ],
+  active: [
+    { kind: 'role', label: 'Change role' },
+    { kind: 'deactivate', label: 'Switch off' },
+  ],
+  deactivated: [{ kind: 'reactivate', label: 'Switch on' }],
+}
+
 /** Administrators approve, re-role and switch accounts off/on (FR-02). */
 export function AccountsPage() {
   const [filter, setFilter] = useState<Filter>('pending')
@@ -129,7 +142,7 @@ export function AccountsPage() {
                       <span className="text-xs text-navy-500">You</span>
                     ) : (
                       <div className="flex justify-end gap-2">
-                        {actionsFor(account).map((kind) => (
+                        {ACTIONS[account.status].map(({ kind, label }) => (
                           <button
                             key={kind}
                             type="button"
@@ -141,7 +154,7 @@ export function AccountsPage() {
                                 : 'bg-navy-700 text-navy-50 hover:bg-navy-600',
                             )}
                           >
-                            {ACTION_LABEL[account.status][kind]}
+                            {label}
                           </button>
                         ))}
                       </div>
@@ -164,23 +177,6 @@ export function AccountsPage() {
       )}
     </div>
   )
-}
-
-function actionsFor(account: Account): FormKind[] {
-  switch (account.status) {
-    case 'pending':
-      return ['approve', 'deactivate']
-    case 'active':
-      return ['role', 'deactivate']
-    case 'deactivated':
-      return ['reactivate']
-  }
-}
-
-const ACTION_LABEL: Record<AccountStatus, Partial<Record<FormKind, string>>> = {
-  pending: { approve: 'Approve', deactivate: 'Reject' },
-  active: { role: 'Change role', deactivate: 'Switch off' },
-  deactivated: { reactivate: 'Switch on' },
 }
 
 /** The request body for a form; null when a required role is missing. */
