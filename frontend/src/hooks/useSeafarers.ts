@@ -66,6 +66,7 @@ export function useSeafarerAction() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ['seafarers'] }),
         queryClient.invalidateQueries({ queryKey: ['readiness'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
       ]),
   })
 }

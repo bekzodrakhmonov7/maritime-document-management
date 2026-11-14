@@ -66,3 +66,9 @@ def seafarer_scope(account: UserPayload, today: date) -> Scope:
             f"{_unassigned_pool(today)} OR {_on_officers_vessels(account, today)}", today
         )
     return Scope("false", today)
+
+
+def whole_fleet(today: date) -> Scope:
+    """Every seafarer, for the fleet totals only: they carry counts, never
+    names or records, so managers and administrators both get the whole fleet."""
+    return Scope("true", today)

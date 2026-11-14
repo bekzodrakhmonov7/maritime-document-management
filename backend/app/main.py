@@ -11,6 +11,7 @@ from app.routers import (
     assignments,
     audit_log,
     auth,
+    dashboard,
     documents,
     me,
     reference_data,
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_log.router, prefix="/api")
     app.include_router(alerts.router, prefix="/api")
     app.include_router(alerts.admin, prefix="/api")
+    app.include_router(dashboard.router, prefix="/api")
 
     return app
 

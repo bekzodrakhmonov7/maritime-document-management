@@ -337,6 +337,22 @@ async def requirement_rows(
     )
 
 
+async def fleet_requirement_rows(conn: asyncpg.Connection) -> RequirementRows:
+    """Every matrix row and exception, for the required sets of many pairs at
+    once (the dashboard); `RequirementRows.required` picks what applies."""
+    matrix = await conn.fetch("SELECT position_id, document_type_id FROM public.position_requirement")
+    return RequirementRows(
+        matrix=[(r["position_id"], r["document_type_id"]) for r in matrix],
+        exceptions=[
+            _as_exception(r)
+            for r in await conn.fetch(f"SELECT {_EXCEPTION_COLUMNS} FROM {_EXCEPTION_FROM}")
+        ],
+        retired_types=[
+            r["id"] for r in await conn.fetch("SELECT id FROM public.document_type WHERE retired")
+        ],
+    )
+
+
 async def document_types(conn: asyncpg.Connection, type_ids: Iterable[int]) -> list[dict]:
     """Document Types by name: id, name and the renewable-at-sea rule."""
     rows = await conn.fetch(

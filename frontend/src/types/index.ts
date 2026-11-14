@@ -484,3 +484,86 @@ export interface DailyCheckResult {
   sent: number
   failed: number
 }
+
+// --- Dashboard (S11, FR-20, T10 variant C) ---
+
+export type DashboardQueue =
+  | 'missing'
+  | 'expired'
+  | 'expiring_soon'
+  | 'waiting_for_review'
+  | 'starting_soon'
+  | 'in_order'
+
+export const DASHBOARD_QUEUE_LABELS: Record<DashboardQueue, string> = {
+  missing: 'Missing',
+  expired: 'Expired',
+  expiring_soon: 'Expiring soon',
+  waiting_for_review: 'Waiting for review',
+  starting_soon: 'Starting soon',
+  in_order: 'In order',
+}
+
+export type ActionHint = 'upload' | 'review' | 'open'
+
+export interface DashboardSeafarer {
+  id: number
+  first_name: string
+  last_name: string
+  position_id: number
+  position_name: string
+  /** null: ashore today. */
+  current_vessel_id: number | null
+  current_vessel_name: string | null
+  inactive: boolean
+}
+
+export interface QueueEntry {
+  document_type_id: number
+  document_type_name: string
+  /** null for a missing type with no Document; set when every Version is rejected. */
+  document_id: number | null
+  expiry_date: string | null
+  /** null: missing (no Current Version). */
+  expiry_status: ExpiryStatus | null
+  review_state: ReviewState | null
+  action: ActionHint
+}
+
+export interface SeafarerGroup {
+  seafarer: DashboardSeafarer
+  entries: QueueEntry[]
+}
+
+export interface StartingSoonEntry {
+  assignment_id: number
+  seafarer: DashboardSeafarer
+  vessel_id: number
+  vessel_name: string
+  position_id: number
+  position_name: string
+  start_date: string
+  end_date: string
+  counters: Record<Exclude<ReadinessBucket, 'covers_all'>, number>
+}
+
+/** GET /api/dashboard: administrators and crewing officers, within Scope. */
+export interface Dashboard {
+  today: string
+  planning_horizon_days: number
+  counts: Record<DashboardQueue, number>
+  queues: Record<Exclude<DashboardQueue, 'starting_soon'>, SeafarerGroup[]> & {
+    starting_soon: StartingSoonEntry[]
+  }
+}
+
+export type TotalsColumn = 'missing' | 'expired' | 'expiring_soon' | 'unexpired' | 'no_expiry_date'
+export type Breakdown = 'vessel' | 'position' | 'document_type'
+
+/** GET /api/dashboard/totals: counts only, no names. */
+export interface FleetTotals {
+  today: string
+  totals: Record<TotalsColumn, number>
+  breakdown: Breakdown
+  rows: { id: number | null; name: string; counts: Record<TotalsColumn, number> }[]
+}

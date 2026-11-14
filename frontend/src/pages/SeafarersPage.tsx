@@ -14,7 +14,7 @@ import {
 
 const COLUMNS = 5
 
-/** The seafarers in the caller's Scope (FR-04): the landing page until the dashboard. */
+/** The seafarers in the caller's Scope (FR-04). */
 export function SeafarersPage() {
   const [search, setSearch] = useState('')
   const [showInactive, setShowInactive] = useState(false)

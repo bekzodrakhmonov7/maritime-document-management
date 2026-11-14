@@ -7,7 +7,7 @@ import { AppShell } from './components/layout/AppShell'
 import { RoleGate } from './components/RoleGate'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
-import { HomePage } from './pages/HomePage'
+import { DashboardPage } from './pages/DashboardPage'
 import { AccountsPage } from './pages/AccountsPage'
 import { VesselsPage } from './pages/VesselsPage'
 import { VesselPage } from './pages/VesselPage'
@@ -40,7 +40,7 @@ export default function App() {
                 </ProtectedRoute>
               }
             >
-              <Route index element={<HomePage />} />
+              <Route index element={<DashboardPage />} />
               <Route
                 path="seafarers"
                 element={

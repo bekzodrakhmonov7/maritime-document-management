@@ -168,17 +168,28 @@ async def list_for_seafarer(conn: asyncpg.Connection, scope: Scope, seafarer_id:
 
 async def summaries_for(conn: asyncpg.Connection, seafarer_id: int, today: date) -> list[dict]:
     """The document summaries of a seafarer the caller already checked is in Scope."""
+    return (await summaries_by_seafarer(conn, [seafarer_id], today)).get(seafarer_id, [])
+
+
+async def summaries_by_seafarer(
+    conn: asyncpg.Connection, seafarer_ids: list[int], today: date
+) -> dict[int, list[dict]]:
+    """Each seafarer's document summaries, by type name, for seafarers the
+    caller already read through its Scope."""
     documents = await conn.fetch(
-        f"SELECT {_DOCUMENT_FIELDS} WHERE d.seafarer_id = $1 ORDER BY lower(t.name), d.id",
-        seafarer_id,
+        f"SELECT {_DOCUMENT_FIELDS} WHERE d.seafarer_id = ANY($1::bigint[]) "
+        "ORDER BY lower(t.name), d.id",
+        seafarer_ids,
     )
     versions = await _versions_of(conn, [d["id"] for d in documents])
     checks = await _Checks.of(conn, [v for vs in versions.values() for v in vs])
     largest_step = await _largest_alert_step(conn)
-    return [
-        _summary(dict(d), versions.get(d["id"], []), checks, today, largest_step)
-        for d in documents
-    ]
+    by_seafarer: dict[int, list[dict]] = {}
+    for d in documents:
+        by_seafarer.setdefault(d["seafarer_id"], []).append(
+            _summary(dict(d), versions.get(d["id"], []), checks, today, largest_step)
+        )
+    return by_seafarer
 
 
 async def get(conn: asyncpg.Connection, scope: Scope, document_id: int) -> dict:
