@@ -23,6 +23,7 @@ from app.models.reference import (
     VesselRead,
     VesselWrite,
 )
+from app.services import errors
 from app.services import reference_data as svc
 from app.services.reference_data import DOCUMENT_TYPE, POSITION, VESSEL, Table
 
@@ -35,11 +36,11 @@ all_staff = require_role("administrator", "crewing_officer", "manager")
 def _errors_as_http(table: Table) -> Iterator[None]:
     try:
         yield
-    except svc.NotFound:
+    except errors.NotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"No such {table.label}.")
-    except svc.Conflict as exc:
+    except errors.Conflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
-    except svc.Invalid as exc:
+    except errors.Invalid as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
 
 

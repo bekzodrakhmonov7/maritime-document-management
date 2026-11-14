@@ -6,6 +6,7 @@ import type { Seafarer } from '../types'
 import { ActionButton } from './ActionButton'
 import { ConfirmDialog } from './ConfirmDialog'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
+import { StateBadge } from './StateBadge'
 
 /** Which seafarer dialog is open: add, edit, set Inactive or reactivate. */
 export type SeafarerDialogState =
@@ -49,6 +50,12 @@ export function SeafarerActions({
       </ActionButton>
     </div>
   )
+}
+
+/** "Active" or "Inactive". */
+export function SeafarerStatusBadge({ seafarer }: { seafarer: Seafarer }) {
+  const active = seafarer.inactive_since === null
+  return <StateBadge on={active} label={active ? 'Active' : 'Inactive'} />
 }
 
 function SeafarerForm({ seafarer, onClose }: { seafarer: Seafarer | null; onClose: () => void }) {

@@ -6,8 +6,11 @@ import { flagLabel } from '../lib/flags'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
 import { FIELD_CLASS } from '../components/FormDialog'
-import { StateBadge } from '../components/StateBadge'
-import { SeafarerDialog, type SeafarerDialogState } from '../components/SeafarerDialogs'
+import {
+  SeafarerDialog,
+  SeafarerStatusBadge,
+  type SeafarerDialogState,
+} from '../components/SeafarerDialogs'
 
 const COLUMNS = 4
 
@@ -102,10 +105,7 @@ export function SeafarersPage() {
                   {seafarer.nationality ? flagLabel(seafarer.nationality) : '—'}
                 </td>
                 <td className="px-4 py-3">
-                  <StateBadge
-                    on={seafarer.inactive_since === null}
-                    label={seafarer.inactive_since === null ? 'Active' : 'Inactive'}
-                  />
+                  <SeafarerStatusBadge seafarer={seafarer} />
                 </td>
               </tr>
             ))}

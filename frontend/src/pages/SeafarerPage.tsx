@@ -4,10 +4,10 @@ import { ArrowLeft } from 'lucide-react'
 import { fullName, useSeafarer } from '../hooks/useSeafarers'
 import { flagLabel } from '../lib/flags'
 import { ErrorNote } from '../components/ErrorNote'
-import { StateBadge } from '../components/StateBadge'
 import {
   SeafarerActions,
   SeafarerDialog,
+  SeafarerStatusBadge,
   type SeafarerDialogState,
 } from '../components/SeafarerDialogs'
 
@@ -45,10 +45,7 @@ export function SeafarerPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-semibold text-navy-50">{fullName(seafarer)}</h2>
-              <StateBadge
-                on={seafarer.inactive_since === null}
-                label={seafarer.inactive_since === null ? 'Active' : 'Inactive'}
-              />
+              <SeafarerStatusBadge seafarer={seafarer} />
             </div>
             <SeafarerActions seafarer={seafarer} onOpen={setDialog} />
           </div>

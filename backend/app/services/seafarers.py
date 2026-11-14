@@ -68,7 +68,7 @@ async def create(
         seafarer_id = await conn.fetchval(
             f"""
             INSERT INTO public.seafarer ({", ".join(WRITABLE)})
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ({", ".join(f"${i}" for i in range(1, len(WRITABLE) + 1))})
             RETURNING id
             """,
             *(values[c] for c in WRITABLE),
