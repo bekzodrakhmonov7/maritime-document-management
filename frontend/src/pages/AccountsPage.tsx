@@ -183,6 +183,23 @@ const ACTION_LABEL: Record<AccountStatus, Partial<Record<FormKind, string>>> = {
   deactivated: { reactivate: 'Switch on' },
 }
 
+/** The request body for a form; null when a required role is missing. */
+function buildAction(
+  kind: FormKind,
+  reason: string,
+  role: UserRole | undefined,
+): AccountAction | null {
+  switch (kind) {
+    case 'deactivate':
+      return { kind, reason }
+    case 'reactivate':
+      return role ? { kind, reason, role } : { kind, reason }
+    case 'approve':
+    case 'role':
+      return role ? { kind, reason, role } : null
+  }
+}
+
 function AccountForm({
   account,
   kind,
@@ -201,11 +218,8 @@ function AccountForm({
     e.preventDefault()
     const trimmed = reason.trim()
     if (!trimmed || (needsRole && !role)) return
-    let payload: AccountAction
-    if (kind === 'deactivate') payload = { kind, reason: trimmed }
-    else if (kind === 'reactivate')
-      payload = { kind, reason: trimmed, ...(needsRole && role ? { role } : {}) }
-    else payload = { kind, reason: trimmed, role: role as UserRole }
+    const payload = buildAction(kind, trimmed, needsRole && role ? role : undefined)
+    if (!payload) return
     action.mutate({ id: account.id, action: payload }, { onSuccess: onClose })
   }
 

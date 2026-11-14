@@ -1,6 +1,5 @@
 """Administrator-only account management (FR-02)."""
 
-from typing import Literal
 from uuid import UUID
 
 import asyncpg
@@ -16,7 +15,7 @@ from app.models.account import (
     PendingCount,
     Reactivate,
 )
-from app.models.auth import UserPayload
+from app.models.auth import AccountStatus, UserPayload
 from app.services import accounts
 from app.services.accounts import AccountConflict, AccountNotFound
 
@@ -33,7 +32,7 @@ def _http_error(exc: Exception) -> HTTPException:
 
 @router.get("", response_model=list[AccountRead])
 async def list_accounts(
-    status_filter: Literal["pending", "active", "deactivated"] | None = Query(None, alias="status"),
+    status_filter: AccountStatus | None = Query(None, alias="status"),
     db: asyncpg.Connection = Depends(get_db),
     _: UserPayload = Depends(admin_only),
 ):
