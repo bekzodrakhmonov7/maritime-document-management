@@ -49,3 +49,23 @@ SELECT f, l, d::date, n, (SELECT id FROM public.position WHERE name = p)
 UPDATE public.seafarer
    SET inactive_since = now(), inactive_reason = 'Left the company'
  WHERE first_name = 'Elena' AND last_name = 'Popescu';
+
+-- Assignments (S6): one under way, one starting soon, one finished, one
+-- cancelled. Dates are relative to the day of the reset. Responsible Officer
+-- links need Accounts, which come from sign-up, so the seed has none.
+INSERT INTO public.assignment (seafarer_id, vessel_id, position_id, start_date, end_date)
+SELECT (SELECT id FROM public.seafarer WHERE first_name = f AND last_name = l),
+       (SELECT id FROM public.vessel WHERE name = v),
+       (SELECT id FROM public.position WHERE name = p),
+       CURRENT_DATE + s, CURRENT_DATE + e
+  FROM (VALUES
+    ('Anna', 'Petrova', 'MV Northern Star', 'Master', -40, 80),
+    ('Ivan', 'Horvat', 'MV Baltic Dawn', 'Chief Engineer', 14, 134),
+    ('Jose', 'Santos', 'MT Aegean Spirit', 'Able Seaman', -200, -20)
+  ) AS a (f, l, v, p, s, e);
+
+INSERT INTO public.assignment
+    (seafarer_id, vessel_id, position_id, start_date, end_date, cancelled_at, cancel_reason)
+SELECT s.id, (SELECT id FROM public.vessel WHERE name = 'MV Pacific Trader'), s.position_id,
+       CURRENT_DATE + 30, CURRENT_DATE + 150, now(), 'Vessel schedule changed'
+  FROM public.seafarer s WHERE s.first_name = 'Mykola' AND s.last_name = 'Shevchenko';

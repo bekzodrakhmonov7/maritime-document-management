@@ -20,6 +20,7 @@ from app.models.account import (
 from app.models.auth import AccountStatus, UserPayload
 from app.services import accounts
 from app.services.accounts import AccountConflict, AccountNotFound
+from app.services.errors import Invalid
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -35,6 +36,8 @@ def _account_errors_as_http() -> Iterator[None]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
     except AccountConflict as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    except Invalid as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
 
 
 @router.get("", response_model=list[AccountRead])
@@ -64,7 +67,8 @@ async def approve(
 ):
     with _account_errors_as_http():
         return await accounts.approve(
-            db, audit_context_for(request, admin), account_id, body.role, body.reason
+            db, audit_context_for(request, admin), account_id, body.role, body.reason,
+            body.vessel_ids,
         )
 
 

@@ -47,8 +47,15 @@ export function useReferenceAction<W>(collection: Collection) {
   })
 }
 
-export function useVessels() {
-  return useQuery({ queryKey: ['vessels'], queryFn: () => apiFetch<Vessel[]>(PATHS.vessels) })
+/** The fleet; optionally only the vessels with no active Responsible Officer. */
+export function useVessels(withoutActiveOfficer = false) {
+  return useQuery({
+    queryKey: ['vessels', { withoutActiveOfficer }],
+    queryFn: () =>
+      apiFetch<Vessel[]>(
+        withoutActiveOfficer ? `${PATHS.vessels}?without_active_officer=true` : PATHS.vessels,
+      ),
+  })
 }
 
 export function useVessel(id: number) {

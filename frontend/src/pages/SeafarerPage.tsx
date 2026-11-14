@@ -1,8 +1,15 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Plus } from 'lucide-react'
+import { useSeafarerAssignments } from '../hooks/useAssignments'
 import { fullName, useSeafarer } from '../hooks/useSeafarers'
 import { flagLabel } from '../lib/flags'
+import { ActionButton } from '../components/ActionButton'
+import {
+  AssignmentDialog,
+  AssignmentsTable,
+  type AssignmentDialogState,
+} from '../components/AssignmentDialogs'
 import { ErrorNote } from '../components/ErrorNote'
 import {
   SeafarerActions,
@@ -20,12 +27,14 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-/** One seafarer's record: personal details and held Position. Later slices add
- * the Current Vessel and Assignments (S6), documents (S7) and missing documents (S10). */
+/** One seafarer's record: personal details, held Position, Current Vessel and
+ * Assignments. Later slices add documents (S7) and missing documents (S10). */
 export function SeafarerPage() {
   const { id } = useParams()
   const { data: seafarer, isLoading, error } = useSeafarer(Number(id))
+  const assignments = useSeafarerAssignments(Number(id))
   const [dialog, setDialog] = useState<SeafarerDialogState | null>(null)
+  const [assignmentDialog, setAssignmentDialog] = useState<AssignmentDialogState | null>(null)
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -68,11 +77,46 @@ export function SeafarerPage() {
               {seafarer.nationality ? flagLabel(seafarer.nationality) : '—'}
             </Detail>
             <Detail label="Date of birth">{seafarer.date_of_birth ?? '—'}</Detail>
+            <Detail label="Current vessel">
+              {seafarer.current_vessel_id ? (
+                <Link to={`/vessels/${seafarer.current_vessel_id}`} className="hover:underline">
+                  {seafarer.current_vessel_name}
+                </Link>
+              ) : (
+                'Ashore'
+              )}
+            </Detail>
           </dl>
+
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-lg font-semibold text-navy-50">Assignments</h3>
+              {!seafarer.inactive_since && (
+                <ActionButton
+                  tone="primary"
+                  onClick={() => setAssignmentDialog({ kind: 'create', seafarer })}
+                >
+                  <Plus className="h-4 w-4" />
+                  Plan Assignment
+                </ActionButton>
+              )}
+            </div>
+            {assignments.error && <ErrorNote message={assignments.error.message} />}
+            <AssignmentsTable
+              assignments={assignments.data}
+              show="vessel"
+              empty="No Assignments yet."
+              onEdit={(assignment) => setAssignmentDialog({ kind: 'edit', seafarer, assignment })}
+              onCancel={(assignment) => setAssignmentDialog({ kind: 'cancel', assignment })}
+            />
+          </section>
         </>
       )}
 
       {dialog && <SeafarerDialog state={dialog} onClose={() => setDialog(null)} />}
+      {assignmentDialog && (
+        <AssignmentDialog state={assignmentDialog} onClose={() => setAssignmentDialog(null)} />
+      )}
     </div>
   )
 }

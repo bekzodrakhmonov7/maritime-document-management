@@ -4,38 +4,18 @@ Administrators and crewing officers, within their Scope; managers get 403.
 There is no delete endpoint: a seafarer is set Inactive instead.
 """
 
-from collections.abc import Iterator
-from contextlib import contextmanager
-
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.audit import audit_context_for
-from app.deps import get_db, require_role
-from app.models.auth import UserPayload
+from app.deps import get_db
+from app.models.assignment import AssignmentRead
 from app.models.seafarer import SeafarerRead, SeafarerWrite, SetInactive
-from app.refused_access import OutOfScope
-from app.scope import seafarer_scope
-from app.services import errors
+from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
+from app.services import assignments
 from app.services import seafarers as svc
 
-crew_staff = require_role("administrator", "crewing_officer")
-
 router = APIRouter(prefix="/seafarers", tags=["seafarers"])
-
-
-@contextmanager
-def _errors_as_http() -> Iterator[None]:
-    try:
-        yield
-    except errors.NotFound:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    except errors.OutOfScope as exc:
-        raise OutOfScope(exc.target_type, exc.target_id, seafarer_id=exc.seafarer_id)
-    except errors.Conflict as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
-    except errors.Invalid as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
 
 
 @router.get("", response_model=list[SeafarerRead])
@@ -43,10 +23,10 @@ async def list_seafarers(
     search: str = Query("", max_length=200),
     show_inactive: bool = False,
     db: asyncpg.Connection = Depends(get_db),
-    user: UserPayload = Depends(crew_staff),
+    access: CrewAccess = Depends(get_crew_access),
 ):
     return await svc.list_seafarers(
-        db, seafarer_scope(user), search=search, show_inactive=show_inactive
+        db, access.scope, search=search, show_inactive=show_inactive
     )
 
 
@@ -54,10 +34,10 @@ async def list_seafarers(
 async def get_seafarer(
     seafarer_id: int,
     db: asyncpg.Connection = Depends(get_db),
-    user: UserPayload = Depends(crew_staff),
+    access: CrewAccess = Depends(get_crew_access),
 ):
-    with _errors_as_http():
-        return await svc.get_seafarer(db, seafarer_scope(user), seafarer_id)
+    with errors_as_http():
+        return await svc.get_seafarer(db, access.scope, seafarer_id)
 
 
 @router.post("", response_model=SeafarerRead, status_code=status.HTTP_201_CREATED)
@@ -65,10 +45,10 @@ async def create_seafarer(
     body: SeafarerWrite,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    user: UserPayload = Depends(crew_staff),
+    access: CrewAccess = Depends(get_crew_access),
 ):
-    with _errors_as_http():
-        return await svc.create(db, audit_context_for(request, user), body.model_dump())
+    with errors_as_http():
+        return await svc.create(db, audit_context_for(request, access.user), body.model_dump())
 
 
 @router.put("/{seafarer_id}", response_model=SeafarerRead)
@@ -77,11 +57,11 @@ async def edit_seafarer(
     body: SeafarerWrite,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    user: UserPayload = Depends(crew_staff),
+    access: CrewAccess = Depends(get_crew_access),
 ):
-    with _errors_as_http():
+    with errors_as_http():
         return await svc.edit(
-            db, audit_context_for(request, user), seafarer_scope(user), seafarer_id, body.model_dump()
+            db, audit_context_for(request, access.user), access.scope, seafarer_id, body.model_dump()
         )
 
 
@@ -91,11 +71,11 @@ async def set_seafarer_inactive(
     body: SetInactive,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    user: UserPayload = Depends(crew_staff),
+    access: CrewAccess = Depends(get_crew_access),
 ):
-    with _errors_as_http():
+    with errors_as_http():
         return await svc.set_inactive(
-            db, audit_context_for(request, user), seafarer_scope(user), seafarer_id, body.reason
+            db, audit_context_for(request, access.user), access.scope, seafarer_id, body.reason
         )
 
 
@@ -104,9 +84,20 @@ async def reactivate_seafarer(
     seafarer_id: int,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    user: UserPayload = Depends(crew_staff),
+    access: CrewAccess = Depends(get_crew_access),
 ):
-    with _errors_as_http():
+    with errors_as_http():
         return await svc.reactivate(
-            db, audit_context_for(request, user), seafarer_scope(user), seafarer_id
+            db, audit_context_for(request, access.user), access.scope, seafarer_id
         )
+
+
+@router.get("/{seafarer_id}/assignments", response_model=list[AssignmentRead])
+async def list_seafarer_assignments(
+    seafarer_id: int,
+    db: asyncpg.Connection = Depends(get_db),
+    access: CrewAccess = Depends(get_crew_access),
+):
+    """The whole Assignment history, finished and cancelled ones included."""
+    with errors_as_http():
+        return await assignments.list_for_seafarer(db, access.scope, seafarer_id)

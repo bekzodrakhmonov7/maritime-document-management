@@ -132,13 +132,16 @@ async def app():
         db_module._pool = None
 
 
-# Seafarers reference Positions, so they go with the reference data.
-REFERENCE_TABLES = ("vessel", "position", "document_type", "seafarer")
+# Seafarers reference Positions, and Assignments and Responsible Officer links
+# reference vessels, so they all go with the reference data.
+REFERENCE_TABLES = (
+    "vessel", "position", "document_type", "seafarer", "assignment", "responsible_officer",
+)
 
 
 @pytest_asyncio.fixture
 async def reference_cleanup(owner_db):
-    """Empty the reference-data and seafarer tables before and after the test.
+    """Empty the reference-data, seafarer and Assignment tables before and after the test.
 
     Tests never depend on the seed, so its demo rows go too (a local
     `sandbox-db reset` brings them back).
@@ -175,3 +178,46 @@ async def client(app):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+
+
+@pytest_asyncio.fixture
+async def crew(owner_db, reference_cleanup):
+    """Factories for vessels, Positions, seafarers and Responsible Officer
+    links, made as the owner (tests never depend on the seed)."""
+
+    class Crew:
+        imo = 1000000
+
+        async def vessel(self, name: str = "Alpha", active: bool = True) -> int:
+            Crew.imo += 1
+            return await owner_db.fetchval(
+                """
+                INSERT INTO public.vessel (name, imo_number, flag, active)
+                VALUES ($1, $2, 'MT', $3) RETURNING id
+                """,
+                name, str(Crew.imo), active,
+            )
+
+        async def position(self, name: str = "Master", retired: bool = False) -> int:
+            return await owner_db.fetchval(
+                "INSERT INTO public.position (name, retired) VALUES ($1, $2) RETURNING id",
+                name, retired,
+            )
+
+        async def seafarer(self, position_id: int, first_name: str = "Anna") -> int:
+            return await owner_db.fetchval(
+                """
+                INSERT INTO public.seafarer (first_name, last_name, position_id)
+                VALUES ($1, 'Petrova', $2) RETURNING id
+                """,
+                first_name, position_id,
+            )
+
+        async def link(self, officer_id: UUID, *vessel_ids: int) -> None:
+            for vessel_id in vessel_ids:
+                await owner_db.execute(
+                    "INSERT INTO public.responsible_officer (user_id, vessel_id) VALUES ($1, $2)",
+                    officer_id, vessel_id,
+                )
+
+    return Crew()

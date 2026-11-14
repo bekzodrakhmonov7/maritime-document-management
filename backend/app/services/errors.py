@@ -21,3 +21,8 @@ class OutOfScope(Exception):
         self.target_type = target_type
         self.target_id = target_id
         self.seafarer_id = seafarer_id
+
+
+class NotResponsible(Exception):
+    """A crewing officer acting on a vessel they aren't a Responsible Officer
+    for (answered as 403 and recorded as refused access)."""

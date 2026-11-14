@@ -3,6 +3,10 @@
 Each change runs in one transaction with its Audit Record. Guards:
 - nobody changes their own role or status;
 - the last active administrator can't be deactivated or demoted.
+
+Responsible Officer links follow the role: approving a crewing officer may
+link vessels, and any change away from crewing officer drops the links (each
+with its own Audit Record). Deactivating keeps them.
 """
 
 from typing import Any
@@ -12,6 +16,8 @@ import asyncpg
 
 from app import audit
 from app.audit import AuditAction, AuditContext
+from app.services import responsible_officers
+from app.services.errors import Invalid
 
 ACCOUNT_COLUMNS = "id, email, full_name, status, role, status_reason, status_changed_at, created_at"
 
@@ -41,16 +47,27 @@ async def count_pending(conn: asyncpg.Connection) -> int:
 
 
 async def approve(
-    conn: asyncpg.Connection, ctx: AuditContext, account_id: UUID, role: str, reason: str
+    conn: asyncpg.Connection,
+    ctx: AuditContext,
+    account_id: UUID,
+    role: str,
+    reason: str,
+    vessel_ids: list[int] | None = None,
 ) -> dict:
+    """Approve with a role; a crewing officer may get their vessels at once."""
+    if vessel_ids and role != "crewing_officer":
+        raise Invalid("Only a crewing officer can be given vessels.")
     async with conn.transaction():
         current = await _lock(conn, ctx, account_id)
         if current["status"] != "pending":
             raise AccountConflict("Only a pending account can be approved.")
-        return await _apply(
+        approved = await _apply(
             conn, ctx, current, AuditAction.ACCOUNT_APPROVED,
             {"status": "active", "role": role}, reason,
         )
+        for vessel_id in dict.fromkeys(vessel_ids or []):
+            await responsible_officers.link(conn, ctx, account_id, vessel_id, reason)
+        return approved
 
 
 async def change_role(
@@ -136,6 +153,9 @@ async def _apply(
     changes: dict[str, Any],
     reason: str,
 ) -> dict:
+    new_role = changes.get("role", current["role"])
+    if current["role"] == "crewing_officer" and new_role != "crewing_officer":
+        await responsible_officers.drop_all(conn, ctx, current["id"], reason)
     row = await conn.fetchrow(
         f"""
         UPDATE public.users
@@ -145,7 +165,7 @@ async def _apply(
         """,
         current["id"],
         changes.get("status", current["status"]),
-        changes.get("role", current["role"]),
+        new_role,
         reason,
     )
     before, after = audit.changed_fields(

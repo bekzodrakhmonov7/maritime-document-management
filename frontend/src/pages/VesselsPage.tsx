@@ -13,7 +13,8 @@ import { VesselActions, VesselDialog, type VesselDialogState } from '../componen
 export function VesselsPage() {
   const { role } = useAuth()
   const isAdmin = role === 'administrator'
-  const { data: vessels, isLoading, error } = useVessels()
+  const [withoutOfficer, setWithoutOfficer] = useState(false)
+  const { data: vessels, isLoading, error } = useVessels(withoutOfficer)
   const [dialog, setDialog] = useState<VesselDialogState | null>(null)
   const sorted = vessels ? [...vessels].sort((a, b) => Number(b.active) - Number(a.active)) : []
   const columns = isAdmin ? 5 : 4
@@ -35,6 +36,16 @@ export function VesselsPage() {
           </ActionButton>
         )}
       </div>
+
+      <label className="flex items-center gap-2 text-sm text-navy-300">
+        <input
+          type="checkbox"
+          checked={withoutOfficer}
+          onChange={(e) => setWithoutOfficer(e.target.checked)}
+          className="h-4 w-4 rounded border-navy-700 bg-navy-950"
+        />
+        Only vessels with no active Responsible Officer
+      </label>
 
       {error && <ErrorNote message={error.message} />}
 
@@ -62,7 +73,7 @@ export function VesselsPage() {
             {vessels?.length === 0 && (
               <tr>
                 <td colSpan={columns} className="px-4 py-6 text-center text-navy-400">
-                  No vessels yet.
+                  {withoutOfficer ? 'Every vessel has an active Responsible Officer.' : 'No vessels yet.'}
                 </td>
               </tr>
             )}

@@ -25,6 +25,7 @@ from app.models.reference import (
 )
 from app.services import errors
 from app.services import reference_data as svc
+from app.services import responsible_officers
 from app.services.reference_data import DOCUMENT_TYPE, POSITION, VESSEL, Table
 
 admin_only = require_role("administrator")
@@ -51,8 +52,14 @@ vessels = APIRouter(prefix="/vessels", tags=["vessels"])
 
 @vessels.get("", response_model=list[VesselRead])
 async def list_vessels(
-    db: asyncpg.Connection = Depends(get_db), _: UserPayload = Depends(fleet_readers)
+    without_active_officer: bool = False,
+    db: asyncpg.Connection = Depends(get_db),
+    _: UserPayload = Depends(fleet_readers),
 ):
+    """The fleet; `without_active_officer` keeps the vessels no active crewing
+    officer is responsible for."""
+    if without_active_officer:
+        return await responsible_officers.vessels_without_active_officer(db)
     return await svc.list_rows(db, VESSEL)
 
 

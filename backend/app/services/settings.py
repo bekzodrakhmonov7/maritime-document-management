@@ -9,13 +9,13 @@ changes something bumps the version and writes one *settings changed* Audit
 Record with the changed fields only; a save that changes nothing writes none.
 """
 
-from datetime import time
+from datetime import date, time
 from typing import Any
 from uuid import UUID
 
 import asyncpg
 
-from app import audit
+from app import audit, domain
 from app.audit import AuditAction, AuditContext
 from app.models.settings import EDITABLE
 
@@ -77,3 +77,8 @@ async def save(
             target_type="settings", before=before, after=after,
         )
         return _as_dict(row)
+
+
+async def company_today(conn: asyncpg.Connection) -> date:
+    """Today's date in the configured company time zone."""
+    return domain.today_in(await conn.fetchval("SELECT time_zone FROM public.settings"))

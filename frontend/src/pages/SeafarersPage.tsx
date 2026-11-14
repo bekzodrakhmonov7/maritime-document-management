@@ -12,7 +12,7 @@ import {
   type SeafarerDialogState,
 } from '../components/SeafarerDialogs'
 
-const COLUMNS = 4
+const COLUMNS = 5
 
 /** The seafarers in the caller's Scope (FR-04): the landing page until the dashboard. */
 export function SeafarersPage() {
@@ -72,6 +72,7 @@ export function SeafarersPage() {
               <th scope="col" className="px-4 py-3">Name</th>
               <th scope="col" className="px-4 py-3">Position</th>
               <th scope="col" className="px-4 py-3">Nationality</th>
+              <th scope="col" className="px-4 py-3">Current vessel</th>
               <th scope="col" className="px-4 py-3">Status</th>
             </tr>
           </thead>
@@ -103,6 +104,9 @@ export function SeafarersPage() {
                 <td className="px-4 py-3 text-navy-200">{seafarer.position_name}</td>
                 <td className="px-4 py-3 text-navy-200">
                   {seafarer.nationality ? flagLabel(seafarer.nationality) : '—'}
+                </td>
+                <td className="px-4 py-3 text-navy-200">
+                  {seafarer.current_vessel_name ?? 'Ashore'}
                 </td>
                 <td className="px-4 py-3">
                   <SeafarerStatusBadge seafarer={seafarer} />

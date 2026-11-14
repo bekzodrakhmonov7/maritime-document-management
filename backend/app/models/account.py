@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 
 from app.models.auth import AccountStatus, Role
 
@@ -27,6 +27,9 @@ class PendingCount(BaseModel):
 class ApproveAccount(BaseModel):
     role: Role
     reason: Reason
+    # A crewing officer's vessels (Responsible Officer links); may be empty,
+    # leaving the Unassigned Pool only.
+    vessel_ids: list[int] = Field(default_factory=list, max_length=500)
 
 
 class ChangeRole(BaseModel):

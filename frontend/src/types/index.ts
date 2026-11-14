@@ -91,6 +91,9 @@ export interface Seafarer {
   /** Set while the seafarer is Inactive. */
   inactive_since: string | null
   inactive_reason: string | null
+  /** The vessel of the Assignment under way today; null means ashore. */
+  current_vessel_id: number | null
+  current_vessel_name: string | null
   created_at: string
   updated_at: string
 }
@@ -99,6 +102,51 @@ export type SeafarerWrite = Pick<
   Seafarer,
   'first_name' | 'last_name' | 'date_of_birth' | 'nationality' | 'position_id'
 >
+
+/** Upcoming / under way / finished come from the dates; cancelled is stored. */
+export type AssignmentState = 'upcoming' | 'under_way' | 'finished' | 'cancelled'
+
+export const ASSIGNMENT_STATE_LABELS: Record<AssignmentState, string> = {
+  upcoming: 'Upcoming',
+  under_way: 'Under way',
+  finished: 'Finished',
+  cancelled: 'Cancelled',
+}
+
+/** A plan for a seafarer to serve on a vessel in a Position (S6). */
+export interface Assignment {
+  id: number
+  seafarer_id: number
+  seafarer_first_name: string
+  seafarer_last_name: string
+  vessel_id: number
+  vessel_name: string
+  position_id: number
+  position_name: string
+  /** Advisory: the Assignment's Position isn't the seafarer's held one. */
+  position_differs: boolean
+  /** ISO dates (YYYY-MM-DD), both days included. */
+  start_date: string
+  end_date: string
+  state: AssignmentState
+  cancelled_at: string | null
+  cancel_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** PUT /api/assignments/{id}: the seafarer can't be changed. */
+export type AssignmentEdit = Pick<Assignment, 'vessel_id' | 'position_id' | 'start_date' | 'end_date'>
+
+export type AssignmentCreate = AssignmentEdit & Pick<Assignment, 'seafarer_id'>
+
+/** A crewing officer linked to a vessel. A deactivated one's link is kept but ignored. */
+export interface ResponsibleOfficer {
+  id: string
+  email: string
+  full_name: string
+  status: AccountStatus
+}
 
 /** GET /api/settings: the one Settings row (S9). */
 export interface Settings {

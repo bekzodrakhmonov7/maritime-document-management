@@ -5,6 +5,7 @@ Seafarer with a held Position; managers get 403. Seafarers are set Inactive
 and reactivated, never deleted. Every write leaves an Audit Record.
 """
 
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -296,8 +297,9 @@ def _account(role: str, status: str = "active") -> UserPayload:
     "role, status, sees_everyone",
     [
         ("administrator", "active", True),
-        # The Unassigned Pool: everyone until Assignments exist (S6).
+        # With no Assignments, everyone is in the Unassigned Pool.
         ("crewing_officer", "active", True),
+        ("crewing_officer", "deactivated", False),
         ("manager", "active", False),
         ("administrator", "deactivated", False),
     ],
@@ -305,7 +307,7 @@ def _account(role: str, status: str = "active") -> UserPayload:
 async def test_the_scope_function(client, admin, master, owner_db, role, status, sees_everyone):
     first = await _create(client, admin, _body(master))
     second = await _create(client, admin, _body(master, first_name="Ivan"))
-    scope = seafarer_scope(_account(role, status))
+    scope = seafarer_scope(_account(role, status), date.today())
 
     listed = await seafarers.list_seafarers(owner_db, scope)
     expected = {first["id"], second["id"]} if sees_everyone else set()
@@ -316,7 +318,7 @@ async def test_a_seafarer_outside_the_scope_is_told_apart_from_a_missing_one(
     client, admin, master, owner_db
 ):
     seafarer = await _create(client, admin, _body(master))
-    nobody = seafarer_scope(_account("manager"))
+    nobody = seafarer_scope(_account("manager"), date.today())
 
     with pytest.raises(errors.OutOfScope) as refused:
         await seafarers.get_seafarer(owner_db, nobody, seafarer["id"])

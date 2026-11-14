@@ -43,5 +43,8 @@ class SeafarerRead(BaseModel):
     position_retired: bool
     inactive_since: datetime | None
     inactive_reason: str | None
+    # The vessel of the Assignment under way today; None means ashore.
+    current_vessel_id: int | None
+    current_vessel_name: str | None
     created_at: datetime
     updated_at: datetime

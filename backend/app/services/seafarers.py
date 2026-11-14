@@ -5,16 +5,21 @@ record that exists but is outside the Scope raises OutOfScope, which the
 router answers exactly like a missing one. Each change runs in one
 transaction with its Audit Record; an edit that changes nothing writes none.
 Seafarers are set Inactive and reactivated, never deleted.
+
+Each record carries its Current Vessel, derived from the Assignment under way
+on the Scope's "today" (None: ashore).
 """
 
+from datetime import date
 from typing import Any
 
 import asyncpg
 
-from app import audit
+from app import audit, domain
 from app.audit import AuditAction, AuditContext
 from app.scope import Scope
-from app.services.errors import Conflict, Invalid, NotFound, OutOfScope
+from app.services import reference_data
+from app.services.errors import Conflict, NotFound, OutOfScope
 
 TARGET = "seafarer"
 WRITABLE = ("first_name", "last_name", "date_of_birth", "nationality", "position_id")
@@ -52,19 +57,22 @@ async def list_seafarers(
         """,
         *args,
     )
-    return [dict(r) for r in rows]
+    return await _with_current_vessel(conn, [dict(r) for r in rows], scope.today)
 
 
 async def get_seafarer(conn: asyncpg.Connection, scope: Scope, seafarer_id: int) -> dict:
-    return await _fetch_in_scope(conn, scope, seafarer_id)
+    [seafarer] = await _with_current_vessel(
+        conn, [await fetch_in_scope(conn, scope, seafarer_id)], scope.today
+    )
+    return seafarer
 
 
 async def create(
     conn: asyncpg.Connection, ctx: AuditContext, values: dict[str, Any]
 ) -> dict:
-    """A new seafarer has no Assignment, so it starts in the Unassigned Pool."""
+    """A new seafarer has no Assignment, so it starts in the Unassigned Pool, ashore."""
     async with conn.transaction():
-        await _check_position_pickable(conn, values["position_id"])
+        await reference_data.check_pickable(conn, reference_data.POSITION, values["position_id"])
         seafarer_id = await conn.fetchval(
             f"""
             INSERT INTO public.seafarer ({", ".join(WRITABLE)})
@@ -78,7 +86,7 @@ async def create(
             target_type=TARGET, target_id=seafarer_id, seafarer_id=seafarer_id,
             after={c: values[c] for c in WRITABLE},
         )
-        return await _fetch(conn, seafarer_id)
+        return {**await _fetch(conn, seafarer_id), **_current_vessel_fields(None)}
 
 
 async def edit(
@@ -89,15 +97,15 @@ async def edit(
     values: dict[str, Any],
 ) -> dict:
     async with conn.transaction():
-        current = await _lock_in_scope(conn, scope, seafarer_id)
+        current = await lock_in_scope(conn, scope, seafarer_id)
         before, after = audit.changed_fields(
             {c: current[c] for c in WRITABLE}, {c: values[c] for c in WRITABLE}
         )
         if not after:
-            return await _fetch(conn, seafarer_id)
+            return await get_seafarer(conn, scope, seafarer_id)
         # A held Position retired since may be kept; a newly picked one may not be retired.
         if "position_id" in after:
-            await _check_position_pickable(conn, after["position_id"])
+            await reference_data.check_pickable(conn, reference_data.POSITION, after["position_id"])
         assignments = ", ".join(f"{c} = ${i}" for i, c in enumerate(after, start=2))
         await conn.execute(
             f"UPDATE public.seafarer SET {assignments}, updated_at = now() WHERE id = $1",
@@ -109,7 +117,7 @@ async def edit(
             target_type=TARGET, target_id=seafarer_id, seafarer_id=seafarer_id,
             before=before, after=after,
         )
-        return await _fetch(conn, seafarer_id)
+        return await get_seafarer(conn, scope, seafarer_id)
 
 
 async def set_inactive(
@@ -117,12 +125,26 @@ async def set_inactive(
 ) -> dict:
     """Stop tracking a seafarer actively; `inactive_since` starts the retention clock.
 
-    S6 adds the refusal while an upcoming or under-way Assignment exists.
+    Refused while the seafarer has an upcoming or under-way Assignment, so
+    planned crew can't vanish from the plan. Creating an Assignment locks the
+    seafarer row too, so the two can't cross.
     """
     async with conn.transaction():
-        current = await _lock_in_scope(conn, scope, seafarer_id)
+        current = await lock_in_scope(conn, scope, seafarer_id)
         if current["inactive_since"] is not None:
             raise Conflict("The seafarer is already Inactive.")
+        if await conn.fetchval(
+            """
+            SELECT EXISTS (SELECT 1 FROM public.assignment
+                            WHERE seafarer_id = $1 AND cancelled_at IS NULL AND end_date >= $2)
+            """,
+            seafarer_id,
+            scope.today,
+        ):
+            raise Conflict(
+                "The seafarer has an upcoming or under-way Assignment: cancel it before "
+                "setting them Inactive."
+            )
         row = await conn.fetchrow(
             """
             UPDATE public.seafarer
@@ -139,7 +161,7 @@ async def set_inactive(
             before={"inactive_since": None}, after={"inactive_since": row["inactive_since"]},
             reason=reason,
         )
-        return await _fetch(conn, seafarer_id)
+        return await get_seafarer(conn, scope, seafarer_id)
 
 
 async def reactivate(
@@ -147,7 +169,7 @@ async def reactivate(
 ) -> dict:
     """Make an Inactive seafarer active again; this clears `inactive_since`."""
     async with conn.transaction():
-        current = await _lock_in_scope(conn, scope, seafarer_id)
+        current = await lock_in_scope(conn, scope, seafarer_id)
         if current["inactive_since"] is None:
             raise Conflict("The seafarer is not Inactive.")
         await conn.execute(
@@ -167,26 +189,50 @@ async def reactivate(
             },
             after={"inactive_since": None, "inactive_reason": None},
         )
-        return await _fetch(conn, seafarer_id)
+        return await get_seafarer(conn, scope, seafarer_id)
 
 
-async def _check_position_pickable(conn: asyncpg.Connection, position_id: int) -> None:
-    """Only a non-retired Position from the managed list. The row is locked so
-    it can't be retired or deleted until this change commits."""
-    retired = await conn.fetchval(
-        "SELECT retired FROM public.position WHERE id = $1 FOR SHARE", position_id
+def _current_vessel_fields(assignment: Any) -> dict:
+    return {
+        "current_vessel_id": assignment["vessel_id"] if assignment else None,
+        "current_vessel_name": assignment["vessel_name"] if assignment else None,
+    }
+
+
+async def _with_current_vessel(
+    conn: asyncpg.Connection, seafarers: list[dict], today: date
+) -> list[dict]:
+    """Add each seafarer's Current Vessel. Only non-cancelled Assignments not
+    yet finished can be under way, so only those are fetched."""
+    rows = await conn.fetch(
+        """
+        SELECT a.seafarer_id, a.vessel_id, v.name AS vessel_name,
+               a.start_date, a.end_date, a.cancelled_at
+          FROM public.assignment a JOIN public.vessel v ON v.id = a.vessel_id
+         WHERE a.seafarer_id = ANY($1::bigint[]) AND a.cancelled_at IS NULL AND a.end_date >= $2
+        """,
+        [s["id"] for s in seafarers],
+        today,
     )
-    if retired is None:
-        raise Invalid("That Position doesn't exist.")
-    if retired:
-        raise Invalid("That Position is retired: pick one from the current list.")
+    by_seafarer: dict[int, list] = {}
+    for row in rows:
+        by_seafarer.setdefault(row["seafarer_id"], []).append(row)
+    return [
+        {
+            **s,
+            **_current_vessel_fields(
+                domain.current_assignment(by_seafarer.get(s["id"], []), today)
+            ),
+        }
+        for s in seafarers
+    ]
 
 
 async def _fetch(conn: asyncpg.Connection, seafarer_id: int) -> dict:
     return dict(await conn.fetchrow(f"SELECT {_COLUMNS} FROM {_FROM} WHERE s.id = $1", seafarer_id))
 
 
-async def _fetch_in_scope(conn: asyncpg.Connection, scope: Scope, seafarer_id: int) -> dict:
+async def fetch_in_scope(conn: asyncpg.Connection, scope: Scope, seafarer_id: int) -> dict:
     row = await conn.fetchrow(
         f"SELECT {_COLUMNS}, {scope.where('s')} AS in_scope FROM {_FROM} WHERE s.id = $1",
         seafarer_id,
@@ -194,7 +240,9 @@ async def _fetch_in_scope(conn: asyncpg.Connection, scope: Scope, seafarer_id: i
     return _in_scope_or_raise(row, seafarer_id)
 
 
-async def _lock_in_scope(conn: asyncpg.Connection, scope: Scope, seafarer_id: int) -> dict:
+async def lock_in_scope(conn: asyncpg.Connection, scope: Scope, seafarer_id: int) -> dict:
+    """Lock a seafarer's row for a change; missing -> NotFound, outside the
+    Scope -> OutOfScope."""
     row = await conn.fetchrow(
         f"""
         SELECT s.*, {scope.where("s")} AS in_scope

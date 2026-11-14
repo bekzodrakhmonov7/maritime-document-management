@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useAccountAction, useAccounts, usePendingCount, type AccountAction } from '../hooks/useAccounts'
+import { useVessels } from '../hooks/useReferenceData'
 import { cn } from '../lib/cn'
 import { ErrorNote } from '../components/ErrorNote'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
@@ -185,6 +186,7 @@ function buildAction(
   kind: FormKind,
   reason: string,
   role: UserRole | undefined,
+  vesselIds: number[],
 ): AccountAction | null {
   switch (kind) {
     case 'deactivate':
@@ -192,6 +194,11 @@ function buildAction(
     case 'reactivate':
       return role ? { kind, reason, role } : { kind, reason }
     case 'approve':
+      if (!role) return null
+      // Only a crewing officer is given vessels (Responsible Officer links).
+      return role === 'crewing_officer'
+        ? { kind, reason, role, vessel_ids: vesselIds }
+        : { kind, reason, role }
     case 'role':
       return role ? { kind, reason, role } : null
   }
@@ -209,9 +216,12 @@ function AccountForm({
   const needsRole = kind === 'approve' || kind === 'role' || (kind === 'reactivate' && !account.role)
   const [role, setRole] = useState<UserRole | ''>(kind === 'role' ? '' : (account.role ?? ''))
   const [reason, setReason] = useState('')
+  const [vesselIds, setVesselIds] = useState<number[]>([])
   const action = useAccountAction()
+  const pickVessels = kind === 'approve' && role === 'crewing_officer'
+  const { data: vessels } = useVessels()
   const trimmedReason = reason.trim()
-  const payload = buildAction(kind, trimmedReason, needsRole && role ? role : undefined)
+  const payload = buildAction(kind, trimmedReason, needsRole && role ? role : undefined, vesselIds)
   const canSubmit = !!trimmedReason && (!needsRole || !!role) && payload !== null
 
   return (
@@ -252,6 +262,34 @@ function AccountForm({
             </p>
           )}
         </div>
+      )}
+
+      {pickVessels && (
+        <fieldset>
+          <legend className={LABEL_CLASS}>Vessels (Responsible Officer)</legend>
+          <p className="mb-2 text-xs text-navy-400">
+            Leave empty to start with the Unassigned Pool only.
+          </p>
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-navy-700 bg-navy-950 p-2">
+            {(vessels ?? [])
+              .filter((v) => v.active)
+              .map((v) => (
+                <label key={v.id} className="flex items-center gap-2 text-sm text-navy-100">
+                  <input
+                    type="checkbox"
+                    checked={vesselIds.includes(v.id)}
+                    onChange={(e) =>
+                      setVesselIds((ids) =>
+                        e.target.checked ? [...ids, v.id] : ids.filter((id) => id !== v.id),
+                      )
+                    }
+                    className="h-4 w-4 rounded border-navy-700 bg-navy-950"
+                  />
+                  {v.name}
+                </label>
+              ))}
+          </div>
+        </fieldset>
       )}
 
       {kind === 'deactivate' && (

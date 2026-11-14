@@ -187,6 +187,25 @@ async def delete(conn: asyncpg.Connection, ctx: AuditContext, table: Table, row_
         )
 
 
+_UNPICKABLE = {
+    "active": "deactivated: pick an active one",
+    "retired": "retired: pick one from the current list",
+}
+
+
+async def check_pickable(conn: asyncpg.Connection, table: Table, row_id: int) -> None:
+    """Only an active vessel, or a Position or Document Type that isn't retired,
+    can be picked for a new choice. The row is locked so it can't be switched
+    off or deleted until the caller's change commits."""
+    flag = await conn.fetchval(
+        f"SELECT {table.flag} FROM public.{table.name} WHERE id = $1 FOR SHARE", row_id
+    )
+    if flag is None:
+        raise Invalid(f"That {table.label} doesn't exist.")
+    if flag != (table.flag == "active"):
+        raise Invalid(f"That {table.label} is {_UNPICKABLE[table.flag]}.")
+
+
 async def _lock(conn: asyncpg.Connection, table: Table, row_id: int) -> asyncpg.Record:
     row = await conn.fetchrow(
         f"SELECT {table.columns} FROM public.{table.name} WHERE id = $1 FOR UPDATE", row_id
