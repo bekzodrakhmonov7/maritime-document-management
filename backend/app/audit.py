@@ -56,6 +56,8 @@ class AuditAction(StrEnum):
     UPLOAD_REJECTED = "upload_rejected"
     FILE_URL_ISSUED = "file_url_issued"
     SETTINGS_CHANGED = "settings_changed"
+    AUDIT_SEARCHED = "audit_searched"
+    AUDIT_EXPORTED = "audit_exported"
     # Written by the auth.audit_log_entries trigger, not by the API.
     LOGIN_SUCCEEDED = "login_succeeded"
     LOGIN_FAILED = "login_failed"

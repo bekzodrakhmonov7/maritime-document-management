@@ -3,6 +3,7 @@ import {
   Anchor,
   Briefcase,
   FileText,
+  History,
   Home,
   ListChecks,
   Settings,
@@ -53,6 +54,7 @@ const NAV: NavGroup[] = [
       { to: '/admin/positions', label: 'Positions', icon: Briefcase, roles: ['administrator'] },
       { to: '/admin/requirements', label: 'Requirements', icon: ListChecks, roles: ['administrator'] },
       { to: '/admin/settings', label: 'Settings', icon: Settings, roles: ['administrator'] },
+      { to: '/admin/audit', label: 'Audit Log', icon: History, roles: ['administrator'] },
     ],
   },
 ]

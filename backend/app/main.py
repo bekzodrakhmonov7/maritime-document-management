@@ -8,6 +8,7 @@ from app.request_context import RequestIdMiddleware
 from app.routers import (
     accounts,
     assignments,
+    audit_log,
     auth,
     documents,
     me,
@@ -30,7 +31,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
+        expose_headers=["X-Request-ID", "Content-Disposition", "X-Export-Rows", "X-Export-Truncated"],
     )
 
     @app.get("/health")
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(assignments.router, prefix="/api")
     app.include_router(documents.router, prefix="/api")
     app.include_router(settings_router.router, prefix="/api")
+    app.include_router(audit_log.router, prefix="/api")
 
     return app
 
