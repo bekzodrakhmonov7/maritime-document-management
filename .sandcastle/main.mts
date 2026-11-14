@@ -55,6 +55,9 @@ const MAX_ITERATIONS = 20;
 // issues wait for the next cycle. Set to 1 for fully sequential runs.
 const MAX_PARALLEL = 2;
 
+// Every ticket's work goes on `faet/<ticket-id>`, e.g. faet/fr-build-plan-01.
+const BRANCH_PREFIX = "faet/";
+
 // Hooks run inside the sandbox before the agent starts. Dependencies are
 // installed fresh in Linux; the host's .venv and node_modules are Windows
 // builds and wouldn't work in the container.
@@ -118,6 +121,9 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     sandbox: docker(),
     name: "planner",
     logging: agentLog(iteration, "planner", "planner"),
+    // Docker's default "head" mode bind-mounts your real project folder;
+    // a worktree keeps the sandbox off it (and allows copyToWorktree).
+    branchStrategy: { type: "merge-to-head" },
     copyToWorktree,
     // One iteration is enough: the planner just needs to read and reason,
     // not write code. (Structured output requires maxIterations: 1.)
@@ -133,9 +139,13 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
   // Drop anything the planner invented that isn't actually ready, then keep
   // only the first MAX_PARALLEL (the planner lists them in priority order).
+  // Branch names are set here, not by the planner, so loop work always lives
+  // on `faet/<ticket-id>` (the typo is deliberate: it keeps agent branches
+  // apart from hand-written ones) and re-planning reuses the same branch.
   const issues = plan.output.issues
     .filter((i) => readyById.has(i.id))
-    .slice(0, MAX_PARALLEL);
+    .slice(0, MAX_PARALLEL)
+    .map((i) => ({ ...i, branch: `${BRANCH_PREFIX}${i.id}` }));
 
   if (issues.length === 0) {
     // No unblocked work — either everything is done or everything is blocked.
@@ -276,6 +286,11 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     sandbox: docker(),
     name: "merger",
     logging: mergeLog,
+    // In a worktree, not your project folder: otherwise its hooks (uv sync,
+    // npm ci) would replace your Windows .venv and node_modules with Linux
+    // builds. The merges are brought back onto your current branch at the end.
+    branchStrategy: { type: "merge-to-head" },
+    copyToWorktree,
     maxIterations: 1,
     agent: sandcastle.claudeCode(MODEL),
     promptFile: "./.sandcastle/merge-prompt.md",
