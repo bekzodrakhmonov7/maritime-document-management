@@ -16,9 +16,11 @@ import { DocumentTypesPage } from './pages/DocumentTypesPage'
 import { SeafarersPage } from './pages/SeafarersPage'
 import { SeafarerPage } from './pages/SeafarerPage'
 import { DocumentPage } from './pages/DocumentPage'
+import { ReadinessPage } from './pages/ReadinessPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RequirementsPage } from './pages/RequirementsPage'
 import { AuditLogPage } from './pages/AuditLogPage'
+import { AlertsPage } from './pages/AlertsPage'
 
 const queryClient = new QueryClient()
 
@@ -60,6 +62,22 @@ export default function App() {
                 element={
                   <RoleGate roles={['administrator', 'crewing_officer']}>
                     <DocumentPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="alerts"
+                element={
+                  <RoleGate roles={['administrator', 'crewing_officer']}>
+                    <AlertsPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="assignments/:id/readiness"
+                element={
+                  <RoleGate roles={['administrator', 'crewing_officer']}>
+                    <ReadinessPage />
                   </RoleGate>
                 }
               />

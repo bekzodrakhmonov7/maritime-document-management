@@ -32,12 +32,14 @@ EDITABLE = ("vessel_id", "position_id", "start_date", "end_date")
 _FIELDS = """
            a.id, a.seafarer_id, s.first_name AS seafarer_first_name,
            s.last_name AS seafarer_last_name, a.vessel_id, v.name AS vessel_name,
-           a.position_id, p.name AS position_name, s.position_id AS held_position_id,
+           v.flag AS vessel_flag, a.position_id, p.name AS position_name,
+           s.position_id AS held_position_id, hp.name AS held_position_name,
            a.start_date, a.end_date, a.cancelled_at, a.cancel_reason, a.created_at, a.updated_at
       FROM public.assignment a
       JOIN public.seafarer s ON s.id = a.seafarer_id
       JOIN public.vessel v ON v.id = a.vessel_id
       JOIN public.position p ON p.id = a.position_id
+      JOIN public.position hp ON hp.id = s.position_id
 """
 
 
@@ -56,7 +58,7 @@ def _state(row: Mapping[str, Any], today: date) -> AssignmentStatus:
 def _read(row: asyncpg.Record, scope: Scope) -> dict:
     found = dict(row)
     found.pop("in_scope", None)
-    found["position_differs"] = found["position_id"] != found.pop("held_position_id")
+    found["position_differs"] = found["position_id"] != found["held_position_id"]
     found["state"] = _state(found, scope.today)
     return found
 

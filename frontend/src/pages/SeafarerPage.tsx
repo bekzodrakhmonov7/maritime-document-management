@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Plus, Upload } from 'lucide-react'
+import { ArrowLeft, FileWarning, Plus, Upload } from 'lucide-react'
 import { useSeafarerAssignments } from '../hooks/useAssignments'
 import { useSeafarerDocuments } from '../hooks/useDocuments'
 import { fullName, useSeafarer } from '../hooks/useSeafarers'
@@ -19,6 +19,7 @@ import {
   SeafarerStatusBadge,
   type SeafarerDialogState,
 } from '../components/SeafarerDialogs'
+import type { SeafarerRecord } from '../types'
 
 function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -29,8 +30,47 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+/** The required documents with no Current Version, for the Assignment under
+ * way (or the held Position when ashore). Expiry is shown in the table below. */
+function MissingDocumentsStrip({ seafarer }: { seafarer: SeafarerRecord }) {
+  const missing = seafarer.missing_documents
+  const basis = seafarer.current_vessel_name
+    ? `as on board ${seafarer.current_vessel_name}`
+    : `for ${seafarer.position_name}, ashore`
+  if (missing.length === 0) {
+    return <p className="text-sm text-navy-400">No required documents missing ({basis}).</p>
+  }
+  return (
+    <section
+      aria-label="Missing documents"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-status-expired/40 bg-status-expired-bg/10 p-3 text-sm"
+    >
+      <FileWarning className="h-4 w-4 shrink-0 text-status-expired" aria-hidden="true" />
+      <span className="font-medium text-status-expired">
+        {missing.length} missing ({basis}):
+      </span>
+      {missing.map((m) =>
+        m.document_id ? (
+          <Link
+            key={m.document_type_id}
+            to={`/documents/${m.document_id}`}
+            className="rounded-full bg-navy-800 px-2.5 py-0.5 text-xs text-navy-100 hover:underline"
+            title="Every Version was rejected"
+          >
+            {m.name}
+          </Link>
+        ) : (
+          <span key={m.document_type_id} className="rounded-full bg-navy-800 px-2.5 py-0.5 text-xs text-navy-100">
+            {m.name}
+          </span>
+        ),
+      )}
+    </section>
+  )
+}
+
 /** One seafarer's record: personal details, held Position, Current Vessel,
- * Assignments and documents. Missing documents arrive in S10. */
+ * missing documents, Assignments and documents. */
 export function SeafarerPage() {
   const { id } = useParams()
   const { data: seafarer, isLoading, error } = useSeafarer(Number(id))
@@ -91,6 +131,8 @@ export function SeafarerPage() {
               )}
             </Detail>
           </dl>
+
+          {!seafarer.inactive_since && <MissingDocumentsStrip seafarer={seafarer} />}
 
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">

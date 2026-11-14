@@ -10,9 +10,10 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from app.audit import audit_context_for
 from app.deps import get_db
 from app.models.assignment import AssignmentRead
+from app.models.coverage import SeafarerRecord
 from app.models.seafarer import SeafarerRead, SeafarerWrite, SetInactive
 from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
-from app.services import assignments
+from app.services import assignments, coverage
 from app.services import seafarers as svc
 
 router = APIRouter(prefix="/seafarers", tags=["seafarers"])
@@ -30,14 +31,17 @@ async def list_seafarers(
     )
 
 
-@router.get("/{seafarer_id}", response_model=SeafarerRead)
+@router.get("/{seafarer_id}", response_model=SeafarerRecord)
 async def get_seafarer(
     seafarer_id: int,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
+    """The record, with the required documents it has no Current Version of."""
     with errors_as_http():
-        return await svc.get_seafarer(db, access.scope, seafarer_id)
+        seafarer = await svc.get_seafarer(db, access.scope, seafarer_id)
+    missing = await coverage.missing_documents(db, seafarer, access.scope.today)
+    return {**seafarer, "missing_documents": missing}
 
 
 @router.post("", response_model=SeafarerRead, status_code=status.HTTP_201_CREATED)

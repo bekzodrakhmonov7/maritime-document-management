@@ -137,6 +137,58 @@ export interface Assignment {
   updated_at: string
 }
 
+/** A required Document Type the seafarer has no Current Version of (S10). */
+export interface MissingDocument {
+  document_type_id: number
+  name: string
+  /** Set when the Document exists but every Version of it is rejected. */
+  document_id: number | null
+}
+
+/** GET /api/seafarers/{id}: the record with its missing documents. Missing
+ * documents use the Assignment under way, or the held Position when ashore. */
+export interface SeafarerRecord extends Seafarer {
+  missing_documents: MissingDocument[]
+}
+
+/** How one required document stands against an Assignment's dates (T3). */
+export type CoverageClass = 'missing' | 'runs_out_before_start' | 'runs_out_during' | 'covers_all'
+
+export const COVERAGE_LABELS: Record<CoverageClass, string> = {
+  missing: 'Missing',
+  runs_out_before_start: 'Runs out before start',
+  runs_out_during: 'Runs out during',
+  covers_all: 'Covers all',
+}
+
+export interface ReadinessEntry {
+  document_type_id: number
+  name: string
+  document_id: number | null
+  expiry_date: string | null
+  coverage: CoverageClass
+  /** The advisory renewal suggestion; null when it covers all. */
+  suggestion: string | null
+  review_state: ReviewState | null
+  /** A badge only: Verified has no bucket and no suggestion. */
+  verified: boolean
+}
+
+export type ReadinessBucket = 'before_joining' | 'renewable_at_sea' | 'not_reviewed' | 'covers_all'
+
+/** GET /api/assignments/{id}/readiness (T4 variant B). Advice only: it approves
+ * and blocks nothing, and gives no overall verdict. */
+export interface Readiness {
+  assignment: Assignment & { vessel_flag: string; held_position_name: string }
+  state: 'upcoming' | 'under_way'
+  /** Set when the Assignment's Position differs from the held one. */
+  position_notice: string | null
+  /** "Before joining", or "Act now" when under way. */
+  before_joining_label: string
+  counters: Record<Exclude<ReadinessBucket, 'covers_all'>, number>
+  buckets: Record<ReadinessBucket, ReadinessEntry[]>
+}
+
 /** PUT /api/assignments/{id}: the seafarer can't be changed. */
 export type AssignmentEdit = Pick<Assignment, 'vessel_id' | 'position_id' | 'start_date' | 'end_date'>
 
@@ -355,6 +407,7 @@ export const AUDIT_ACTION_LABELS = {
   settings_changed: 'Settings changed',
   audit_searched: 'Audit Log searched',
   audit_exported: 'Audit Log exported',
+  daily_check_run_manually: 'Daily check run manually',
 } as const
 
 export type AuditAction = keyof typeof AUDIT_ACTION_LABELS
@@ -401,4 +454,33 @@ export interface AuditPage {
   page_size: number
   /** The company time zone the timestamps are shown in. */
   time_zone: string
+}
+
+// --- Alerts and the daily check (FR-16) ---------------------------------------------
+
+/** An open Alert: a document that reached an Alert Step for its current expiry date. */
+export interface Alert {
+  id: number
+  document_id: number
+  seafarer_id: number
+  seafarer_name: string
+  document_type_name: string
+  /** Days before expiry. */
+  step: number
+  expiry_date: string
+  /** Against today in the company time zone; negative once expired. */
+  days_left: number
+  raised_at: string
+  awaiting_review: boolean
+}
+
+export interface DailyCheckResult {
+  run_id: number
+  local_date: string
+  manual: boolean
+  raised: number
+  skipped: number
+  /** Digests, one per recipient. */
+  sent: number
+  failed: number
 }

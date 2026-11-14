@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../lib/api'
-import type { Seafarer, SeafarerWrite } from '../types'
+import type { Seafarer, SeafarerRecord, SeafarerWrite } from '../types'
 
 const BASE = '/api/seafarers'
 
@@ -22,10 +22,11 @@ export function useSeafarers({ search, showInactive }: SeafarerFilters) {
   })
 }
 
+/** One seafarer's record, with its missing documents. */
 export function useSeafarer(id: number) {
   return useQuery({
     queryKey: ['seafarers', id],
-    queryFn: () => apiFetch<Seafarer>(`${BASE}/${id}`),
+    queryFn: () => apiFetch<SeafarerRecord>(`${BASE}/${id}`),
     enabled: Number.isInteger(id),
   })
 }
@@ -60,7 +61,12 @@ export function useSeafarerAction() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: request,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['seafarers'] }),
+    // A changed held Position changes the readiness view's Position notice.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['seafarers'] }),
+        queryClient.invalidateQueries({ queryKey: ['readiness'] }),
+      ]),
   })
 }
 

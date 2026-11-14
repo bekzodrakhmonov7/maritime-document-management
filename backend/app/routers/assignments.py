@@ -16,8 +16,10 @@ from app.models.assignment import (
     AssignmentRead,
     CancelAssignment,
 )
+from app.models.coverage import ReadinessRead
 from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
 from app.services import assignments as svc
+from app.services import coverage
 
 router = APIRouter(prefix="/assignments", tags=["assignments"])
 
@@ -30,6 +32,18 @@ async def get_assignment(
 ):
     with errors_as_http():
         return await svc.get(db, access.scope, assignment_id)
+
+
+@router.get("/{assignment_id}/readiness", response_model=ReadinessRead)
+async def get_readiness(
+    assignment_id: int,
+    db: asyncpg.Connection = Depends(get_db),
+    access: CrewAccess = Depends(get_crew_access),
+):
+    """Advice only, for upcoming and under-way Assignments; finished and
+    cancelled ones have none (404)."""
+    with errors_as_http():
+        return await coverage.readiness(db, access.scope, assignment_id)
 
 
 @router.post("", response_model=AssignmentRead, status_code=status.HTTP_201_CREATED)

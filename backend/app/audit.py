@@ -60,6 +60,7 @@ class AuditAction(StrEnum):
     SETTINGS_CHANGED = "settings_changed"
     AUDIT_SEARCHED = "audit_searched"
     AUDIT_EXPORTED = "audit_exported"
+    DAILY_CHECK_RUN_MANUALLY = "daily_check_run_manually"
     # Written by the auth.audit_log_entries trigger, not by the API.
     LOGIN_SUCCEEDED = "login_succeeded"
     LOGIN_FAILED = "login_failed"

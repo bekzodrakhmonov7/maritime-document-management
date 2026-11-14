@@ -1,15 +1,14 @@
 """The domain rules, as pure functions over plain rows (no database, no HTTP).
 
 Queries fetch rows; these functions decide what they mean. Readiness, the
-dashboard, the daily check and the reports share these functions; later
-slices add coverage and the rest here.
+dashboard, the daily check and the reports share these functions.
 """
 
 import calendar
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping, Set
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
-from typing import Any, Literal
+from datetime import date, datetime, time, timezone
+from typing import Any, Literal, TypeVar
 from zoneinfo import ZoneInfo
 
 AssignmentState = Literal["upcoming", "under_way", "finished"]
@@ -223,3 +222,241 @@ def required_set(
         else:
             required.discard(type_id)
     return required - set(retired_types)
+
+
+# --- Alerts and the daily check (FR-16; T6, T9) --------------------------------------
+
+
+@dataclass(frozen=True)
+class StepToRaise:
+    """The Alert Step to raise and send, and the earlier steps reached with it
+    that are stored as skipped (never sent)."""
+
+    step: int
+    skipped: tuple[int, ...]
+
+
+def step_to_raise(
+    expiry: date, today: date, steps: Iterable[int], already_raised: Collection[int]
+) -> StepToRaise | None:
+    """The most urgent Alert Step reached for this expiry date, unless it was
+    raised already. A step is reached from `step` days before expiry on, so an
+    expired document has reached every step. Steps reached late (missed runs,
+    an upload already inside a window) send only the most urgent one; the
+    other ones not raised yet are skipped, largest first. `already_raised` are
+    the steps raised (or skipped) for this same Document and expiry date, so a
+    renewal with a new expiry date starts over."""
+    days_left = (expiry - today).days
+    reached = sorted((s for s in set(steps) if days_left <= s), reverse=True)
+    if not reached or reached[-1] in already_raised:
+        return None
+    *earlier, most_urgent = reached
+    return StepToRaise(most_urgent, tuple(s for s in earlier if s not in already_raised))
+
+
+def alert_is_open(alert_expiry: date, *, current_expiry: date | None, seafarer_inactive: bool) -> bool:
+    """An Alert stays open while the seafarer isn't Inactive and the Document's
+    Current Version still has the expiry date it was raised for. Nobody closes
+    one by hand."""
+    return not seafarer_inactive and current_expiry == alert_expiry
+
+
+Recipient = TypeVar("Recipient")
+
+
+def alert_recipients(
+    vessel_ids: Iterable[int],
+    active_officers: Mapping[int, Set[Recipient]],
+    administrators: Set[Recipient],
+) -> set[Recipient]:
+    """Who is warned about a seafarer's document: the active Responsible
+    Officers of every vessel the seafarer has an upcoming or under-way
+    Assignment on. A Pool seafarer (no such vessel), or a vessel with no
+    active officer, brings in the active administrators."""
+    vessel_ids = list(vessel_ids)
+    if not vessel_ids:
+        return set(administrators)
+    recipients: set[Recipient] = set()
+    for vessel_id in vessel_ids:
+        recipients |= active_officers.get(vessel_id) or administrators
+    return recipients
+
+
+def daily_check_due(local_now: datetime, check_time: time, ran_today: bool) -> bool:
+    """The scheduled check runs once per local date, from the check time on;
+    after downtime it catches up on the next wake-up the same day."""
+    return not ran_today and local_now.time() >= check_time
+
+
+@dataclass(frozen=True)
+class RequirementRows:
+    """The rows the required set is read from: the matrix as (position id,
+    document type id) pairs, the exceptions and the retired types."""
+
+    matrix: Collection[tuple[int, int]]
+    exceptions: Collection[RequirementException]
+    retired_types: Collection[int]
+
+    def required(self, position_id: int, vessel: VesselRef | None) -> set[int]:
+        return required_set(position_id, vessel, self.matrix, self.exceptions, self.retired_types)
+
+
+# --- Coverage, missing documents and readiness (FR-17, FR-18, FR-19; T3, T4) --------------
+
+CoverageClass = Literal["missing", "runs_out_before_start", "runs_out_during", "covers_all"]
+ReadinessBucket = Literal["before_joining", "renewable_at_sea", "not_reviewed", "covers_all"]
+READINESS_BUCKETS: tuple[ReadinessBucket, ...] = (
+    "before_joining", "renewable_at_sea", "not_reviewed", "covers_all"
+)
+
+
+def coverage_class(
+    start: date, end: date, current: Mapping[str, Any] | None
+) -> CoverageClass:
+    """How one required document stands against an Assignment from `start` to
+    `end`, by its Current Version's expiry date E (valid through E). Only the
+    expiry counts: not the issue date, the review or the verification, so a
+    Version awaiting review counts too."""
+    if current is None:
+        return "missing"
+    expiry = current["expiry_date"]
+    if expiry is None or expiry >= end:
+        return "covers_all"
+    if expiry < start:
+        return "runs_out_before_start"
+    return "runs_out_during"
+
+
+def evaluated_pair(
+    held_position_id: int, assignments: Iterable[Mapping[str, Any]], today: date
+) -> tuple[int, VesselRef | None]:
+    """The (Position, Vessel) a seafarer's missing documents are read for: the
+    Assignment under way's, otherwise the held Position with no vessel.
+    Upcoming Assignments don't count."""
+    under_way = current_assignment(assignments, today)
+    if under_way is None:
+        return held_position_id, None
+    return under_way["position_id"], VesselRef(
+        id=under_way["vessel_id"], flag=under_way["vessel_flag"]
+    )
+
+
+def missing_documents(
+    held_position_id: int,
+    assignments: Iterable[Mapping[str, Any]],
+    today: date,
+    requirements: RequirementRows,
+    current_by_type: Mapping[int, Mapping[str, Any] | None],
+) -> set[int]:
+    """The required Document Types a seafarer has no Current Version of (no
+    Document, or every Version rejected). Expiry is a separate signal."""
+    position_id, vessel = evaluated_pair(held_position_id, assignments, today)
+    return {
+        type_id
+        for type_id in requirements.required(position_id, vessel)
+        if current_by_type.get(type_id) is None
+    }
+
+
+@dataclass(frozen=True)
+class RequiredDocument:
+    """One required Document Type of an Assignment and what the seafarer holds of it."""
+
+    document_type_id: int
+    name: str
+    renewable_at_sea: bool
+    document_id: int | None = None
+    current_version: Mapping[str, Any] | None = None
+    review_state: ReviewState | None = None
+    verified: bool = False
+
+
+def _advice(
+    coverage: CoverageClass,
+    expiry: date | None,
+    *,
+    renewable_at_sea: bool,
+    under_way: bool,
+    today: date,
+) -> tuple[ReadinessBucket | None, str | None]:
+    """T4's suggestion rule: the action bucket (1 or 2, None: covers all) and its text."""
+    e = expiry.isoformat() if expiry else ""
+    if coverage == "missing":
+        return "before_joining", (
+            "Obtain as soon as possible" if under_way else "Obtain before joining"
+        )
+    if coverage == "runs_out_before_start":
+        return "before_joining", (
+            f"Expired {e}, renew as soon as possible" if under_way
+            else f"Renew before joining (runs out {e})"
+        )
+    if coverage == "runs_out_during":
+        if under_way and expiry < today:
+            # The class stays "runs out during"; only the advice changes.
+            return "before_joining", f"Expired {e} while on board, renew now"
+        if renewable_at_sea:
+            return "renewable_at_sea", f"Can be renewed at sea, by {e}"
+        return "before_joining", (
+            f"Plan relief or port renewal before {e}" if under_way
+            else "Renew before joining, not renewable at sea"
+        )
+    return None, None
+
+
+def readiness(
+    assignment: Mapping[str, Any], required: Iterable[RequiredDocument], today: date
+) -> dict:
+    """The advice-only readiness view of one upcoming or under-way Assignment.
+
+    Each required document lands in (1) before joining, or (2) can be renewed
+    at sea, or neither; one awaiting review is also listed in (3) not
+    reviewed; (4) covers all holds everything in none of the first three.
+    There is no overall verdict. `assignment` carries its dates and its own
+    and the held Position (ids and names).
+    """
+    start, end = assignment["start_date"], assignment["end_date"]
+    state = assignment_state(start, end, today)
+    if state == "finished":
+        raise ValueError("A finished Assignment has no readiness view.")
+    under_way = state == "under_way"
+
+    buckets: dict[ReadinessBucket, list[dict]] = {b: [] for b in READINESS_BUCKETS}
+    for doc in sorted(required, key=lambda d: (d.name.lower(), d.document_type_id)):
+        current = doc.current_version
+        expiry = None if current is None else current["expiry_date"]
+        coverage = coverage_class(start, end, current)
+        bucket, suggestion = _advice(
+            coverage, expiry, renewable_at_sea=doc.renewable_at_sea, under_way=under_way, today=today
+        )
+        entry = {
+            "document_type_id": doc.document_type_id,
+            "name": doc.name,
+            "document_id": doc.document_id,
+            "expiry_date": expiry,
+            "coverage": coverage,
+            "suggestion": suggestion,
+            "review_state": doc.review_state,
+            "verified": doc.verified,
+        }
+        awaiting_review = doc.review_state == "not_reviewed"
+        if bucket is not None:
+            buckets[bucket].append(entry)
+        if awaiting_review:
+            buckets["not_reviewed"].append(entry)
+        if bucket is None and not awaiting_review:
+            buckets["covers_all"].append(entry)
+
+    position_notice = None
+    if assignment["position_id"] != assignment["held_position_id"]:
+        position_notice = (
+            f"Assigned as {assignment['position_name']}; holds "
+            f"{assignment['held_position_name']}. Requirements below are for "
+            f"{assignment['position_name']}."
+        )
+    return {
+        "state": state,
+        "position_notice": position_notice,
+        "before_joining_label": "Act now" if under_way else "Before joining",
+        "counters": {b: len(buckets[b]) for b in READINESS_BUCKETS if b != "covers_all"},
+        "buckets": buckets,
+    }

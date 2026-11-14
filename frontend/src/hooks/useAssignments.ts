@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../lib/api'
-import type { Assignment, AssignmentCreate, AssignmentEdit, ResponsibleOfficer } from '../types'
+import type {
+  Assignment,
+  AssignmentCreate,
+  AssignmentEdit,
+  Readiness,
+  ResponsibleOfficer,
+} from '../types'
 
 /** Every Assignment of one seafarer, finished and cancelled ones included. */
 export function useSeafarerAssignments(seafarerId: number) {
@@ -17,6 +23,15 @@ export function useVesselCrew(vesselId: number) {
     queryKey: ['assignments', 'vessel', vesselId],
     queryFn: () => apiFetch<Assignment[]>(`/api/vessels/${vesselId}/crew`),
     enabled: Number.isInteger(vesselId),
+  })
+}
+
+/** The advice-only readiness view of an upcoming or under-way Assignment. */
+export function useReadiness(assignmentId: number) {
+  return useQuery({
+    queryKey: ['readiness', assignmentId],
+    queryFn: () => apiFetch<Readiness>(`/api/assignments/${assignmentId}/readiness`),
+    enabled: Number.isInteger(assignmentId),
   })
 }
 
@@ -55,6 +70,7 @@ export function useAssignmentAction() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
         queryClient.invalidateQueries({ queryKey: ['seafarers'] }),
+        queryClient.invalidateQueries({ queryKey: ['readiness'] }),
       ]),
   })
 }

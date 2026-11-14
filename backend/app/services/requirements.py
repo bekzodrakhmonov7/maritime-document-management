@@ -12,13 +12,20 @@ nothing write no record. Only a non-retired Position or Document Type and an
 active vessel can be newly picked; an exception may keep one retired since.
 """
 
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import asyncpg
 
 from app import audit
 from app.audit import AuditAction, AuditContext
-from app.domain import RequirementException, VesselRef, deciding_exceptions, required_set
+from app.domain import (
+    RequirementException,
+    RequirementRows,
+    VesselRef,
+    deciding_exceptions,
+    required_set,
+)
 from app.services.errors import Conflict, Invalid, NotFound
 
 MATRIX_TARGET = "position_requirement"
@@ -277,6 +284,71 @@ async def delete_exception(conn: asyncpg.Connection, ctx: AuditContext, exceptio
         )
 
 
+# --- The required set --------------------------------------------------------------
+
+
+async def _matrix_pairs(conn: asyncpg.Connection, position_id: int) -> list[tuple[int, int]]:
+    rows = await conn.fetch(
+        "SELECT position_id, document_type_id FROM public.position_requirement WHERE position_id = $1",
+        position_id,
+    )
+    return [(r["position_id"], r["document_type_id"]) for r in rows]
+
+
+async def _exception_rows(
+    conn: asyncpg.Connection, position_id: int, vessel: VesselRef | None
+) -> list[asyncpg.Record]:
+    """The exceptions that can speak about this pair; with no vessel, none."""
+    if vessel is None:
+        return []
+    return await conn.fetch(
+        f"""
+        SELECT {_EXCEPTION_COLUMNS} FROM {_EXCEPTION_FROM}
+         WHERE (e.position_id IS NULL OR e.position_id = $1)
+           AND (e.vessel_id = $2 OR e.flag = $3)
+        """,
+        position_id,
+        vessel.id,
+        vessel.flag,
+    )
+
+
+def _as_exception(row: Mapping[str, Any]) -> RequirementException:
+    return RequirementException(
+        id=row["id"],
+        document_type_id=row["document_type_id"],
+        effect=row["effect"],
+        vessel_id=row["vessel_id"],
+        flag=row["flag"],
+        position_id=row["position_id"],
+    )
+
+
+async def requirement_rows(
+    conn: asyncpg.Connection, position_id: int, vessel: VesselRef | None
+) -> RequirementRows:
+    """The rows the required set of this pair is decided by, read live."""
+    return RequirementRows(
+        matrix=await _matrix_pairs(conn, position_id),
+        exceptions=[_as_exception(r) for r in await _exception_rows(conn, position_id, vessel)],
+        retired_types=[
+            r["id"] for r in await conn.fetch("SELECT id FROM public.document_type WHERE retired")
+        ],
+    )
+
+
+async def document_types(conn: asyncpg.Connection, type_ids: Iterable[int]) -> list[dict]:
+    """Document Types by name: id, name and the renewable-at-sea rule."""
+    rows = await conn.fetch(
+        """
+        SELECT id, name, renewable_at_sea FROM public.document_type
+         WHERE id = ANY($1::bigint[]) ORDER BY lower(name), id
+        """,
+        list(type_ids),
+    )
+    return [dict(r) for r in rows]
+
+
 # --- The preview -------------------------------------------------------------------
 
 
@@ -291,40 +363,14 @@ async def evaluate(conn: asyncpg.Connection, position_id: int, vessel_id: int | 
             raise NotFound("No such vessel.")
         vessel = dict(row)
 
-    matrix = await conn.fetch(
-        "SELECT position_id, document_type_id FROM public.position_requirement WHERE position_id = $1",
-        position_id,
-    )
-    exception_rows = []
-    if vessel is not None:
-        exception_rows = await conn.fetch(
-            f"""
-            SELECT {_EXCEPTION_COLUMNS} FROM {_EXCEPTION_FROM}
-             WHERE (e.position_id IS NULL OR e.position_id = $1)
-               AND (e.vessel_id = $2 OR e.flag = $3)
-            """,
-            position_id,
-            vessel["id"],
-            vessel["flag"],
-        )
-    types = await conn.fetch("SELECT id, name, retired FROM public.document_type")
-
     vessel_ref = None if vessel is None else VesselRef(id=vessel["id"], flag=vessel["flag"])
-    exceptions = [
-        RequirementException(
-            id=r["id"],
-            document_type_id=r["document_type_id"],
-            effect=r["effect"],
-            vessel_id=r["vessel_id"],
-            flag=r["flag"],
-            position_id=r["position_id"],
-        )
-        for r in exception_rows
-    ]
+    exception_rows = await _exception_rows(conn, position_id, vessel_ref)
+    exceptions = [_as_exception(r) for r in exception_rows]
+    types = await conn.fetch("SELECT id, name, retired FROM public.document_type")
     required = required_set(
         position_id,
         vessel_ref,
-        [(r["position_id"], r["document_type_id"]) for r in matrix],
+        await _matrix_pairs(conn, position_id),
         exceptions,
         {t["id"] for t in types if t["retired"]},
     )

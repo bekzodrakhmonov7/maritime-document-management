@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   Anchor,
+  Bell,
   Briefcase,
   FileText,
   History,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { usePendingCount } from '../../hooks/useAccounts'
+import { useAlertCount } from '../../hooks/useAlerts'
 import type { UserRole } from '../../types'
 
 interface NavItem {
@@ -21,7 +23,7 @@ interface NavItem {
   label: string
   icon: LucideIcon
   roles: UserRole[]
-  badge?: 'pending-accounts'
+  badge?: 'pending-accounts' | 'open-alerts'
 }
 
 interface NavGroup {
@@ -37,6 +39,13 @@ const NAV: NavGroup[] = [
       // Managers have no seafarer view; their Dashboard (totals only) comes in S11.
       { to: '/', label: 'Home', icon: Home, roles: ['manager'] },
       { to: '/seafarers', label: 'Seafarers', icon: Users, roles: ['administrator', 'crewing_officer'] },
+      {
+        to: '/alerts',
+        label: 'Alerts',
+        icon: Bell,
+        roles: ['administrator', 'crewing_officer'],
+        badge: 'open-alerts',
+      },
       { to: '/vessels', label: 'Vessels', icon: Ship, roles: ['administrator', 'crewing_officer'] },
     ],
   },
@@ -68,6 +77,8 @@ interface SidebarProps {
 export function Sidebar({ role, isOpen, onClose }: SidebarProps) {
   const isAdmin = role === 'administrator'
   const { data: pending } = usePendingCount(isAdmin)
+  const { data: openAlerts } = useAlertCount(isAdmin || role === 'crewing_officer')
+  const badges = { 'pending-accounts': pending ?? 0, 'open-alerts': openAlerts ?? 0 }
 
   const groups = NAV.map((group) => ({
     ...group,
@@ -105,7 +116,7 @@ export function Sidebar({ role, isOpen, onClose }: SidebarProps) {
               )}
               {group.items.map((item) => {
                 const Icon = item.icon
-                const count = item.badge === 'pending-accounts' ? (pending ?? 0) : 0
+                const count = item.badge ? badges[item.badge] : 0
                 return (
                   <NavLink
                     key={item.to}
@@ -126,7 +137,7 @@ export function Sidebar({ role, isOpen, onClose }: SidebarProps) {
                     {count > 0 && (
                       <span
                         className="rounded-full bg-status-expiring px-2 py-0.5 text-xs font-semibold text-navy-950"
-                        aria-label={`${count} pending`}
+                        aria-label={item.badge === 'open-alerts' ? `${count} open` : `${count} pending`}
                       >
                         {count}
                       </span>

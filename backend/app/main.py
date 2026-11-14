@@ -7,6 +7,7 @@ from app.db import lifespan
 from app.request_context import RequestIdMiddleware
 from app.routers import (
     accounts,
+    alerts,
     assignments,
     audit_log,
     auth,
@@ -52,6 +53,8 @@ def create_app() -> FastAPI:
     app.include_router(documents.router, prefix="/api")
     app.include_router(settings_router.router, prefix="/api")
     app.include_router(audit_log.router, prefix="/api")
+    app.include_router(alerts.router, prefix="/api")
+    app.include_router(alerts.admin, prefix="/api")
 
     return app
 

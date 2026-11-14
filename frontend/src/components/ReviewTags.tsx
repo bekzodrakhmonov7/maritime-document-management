@@ -2,7 +2,13 @@ import { Clock, ShieldCheck } from 'lucide-react'
 import { cn } from '../lib/cn'
 
 /** On a Current Version (or any Version) that no one has reviewed yet. */
-export function NotReviewedTag({ className }: { className?: string }) {
+export function NotReviewedTag({
+  className,
+  label = 'Not reviewed',
+}: {
+  className?: string
+  label?: string
+}) {
   return (
     <span
       className={cn(
@@ -11,7 +17,7 @@ export function NotReviewedTag({ className }: { className?: string }) {
       )}
     >
       <Clock className="h-3 w-3" aria-hidden="true" />
-      Not reviewed
+      {label}
     </span>
   )
 }
