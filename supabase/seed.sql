@@ -33,3 +33,19 @@ INSERT INTO public.document_type (name, expires, max_validity_months, renewable_
 INSERT INTO public.document_type (name, expires, renewable_at_sea, depends_on_id)
 SELECT 'Flag Endorsement of CoC', true, true, id
   FROM public.document_type WHERE name = 'Certificate of Competency';
+
+-- Seafarers (S5): personal details and a held Position; one Inactive.
+INSERT INTO public.seafarer (first_name, last_name, date_of_birth, nationality, position_id)
+SELECT f, l, d::date, n, (SELECT id FROM public.position WHERE name = p)
+  FROM (VALUES
+    ('Anna', 'Petrova', '1984-03-14', 'BG', 'Master'),
+    ('Ivan', 'Horvat', '1979-11-02', 'HR', 'Chief Engineer'),
+    ('Jose', 'Santos', '1991-06-21', 'PH', 'Able Seaman'),
+    ('Mykola', 'Shevchenko', '1988-01-30', 'UA', 'Chief Officer'),
+    ('Rahul', 'Mehta', '1993-09-08', 'IN', 'Second Engineer'),
+    ('Elena', 'Popescu', '1995-04-17', 'RO', 'Cook')
+  ) AS s (f, l, d, n, p);
+
+UPDATE public.seafarer
+   SET inactive_since = now(), inactive_reason = 'Left the company'
+ WHERE first_name = 'Elena' AND last_name = 'Popescu';

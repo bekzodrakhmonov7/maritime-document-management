@@ -132,12 +132,13 @@ async def app():
         db_module._pool = None
 
 
-REFERENCE_TABLES = ("vessel", "position", "document_type")
+# Seafarers reference Positions, so they go with the reference data.
+REFERENCE_TABLES = ("vessel", "position", "document_type", "seafarer")
 
 
 @pytest_asyncio.fixture
 async def reference_cleanup(owner_db):
-    """Empty the reference-data tables before and after the test.
+    """Empty the reference-data and seafarer tables before and after the test.
 
     Tests never depend on the seed, so its demo rows go too (a local
     `sandbox-db reset` brings them back).

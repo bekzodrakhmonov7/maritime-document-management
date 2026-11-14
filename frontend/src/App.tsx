@@ -13,6 +13,8 @@ import { VesselsPage } from './pages/VesselsPage'
 import { VesselPage } from './pages/VesselPage'
 import { PositionsPage } from './pages/PositionsPage'
 import { DocumentTypesPage } from './pages/DocumentTypesPage'
+import { SeafarersPage } from './pages/SeafarersPage'
+import { SeafarerPage } from './pages/SeafarerPage'
 
 const queryClient = new QueryClient()
 
@@ -33,6 +35,22 @@ export default function App() {
               }
             >
               <Route index element={<HomePage />} />
+              <Route
+                path="seafarers"
+                element={
+                  <RoleGate roles={['administrator', 'crewing_officer']}>
+                    <SeafarersPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="seafarers/:id"
+                element={
+                  <RoleGate roles={['administrator', 'crewing_officer']}>
+                    <SeafarerPage />
+                  </RoleGate>
+                }
+              />
               <Route
                 path="vessels"
                 element={

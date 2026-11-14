@@ -16,18 +16,7 @@ import asyncpg
 
 from app import audit
 from app.audit import AuditAction, AuditContext
-
-
-class NotFound(Exception):
-    pass
-
-
-class Conflict(Exception):
-    """The change clashes with existing data or the row's current state."""
-
-
-class Invalid(Exception):
-    """The change breaks a rule of the data itself (e.g. depends-on)."""
+from app.services.errors import Conflict, Invalid, NotFound
 
 
 @dataclass(frozen=True)

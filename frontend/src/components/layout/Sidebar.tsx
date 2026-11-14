@@ -1,5 +1,14 @@
 import { NavLink } from 'react-router-dom'
-import { Anchor, Briefcase, FileText, Home, Ship, UserCheck, type LucideIcon } from 'lucide-react'
+import {
+  Anchor,
+  Briefcase,
+  FileText,
+  Home,
+  Ship,
+  UserCheck,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { usePendingCount } from '../../hooks/useAccounts'
 import type { UserRole } from '../../types'
@@ -17,14 +26,14 @@ interface NavGroup {
   items: NavItem[]
 }
 
-const ALL: UserRole[] = ['administrator', 'crewing_officer', 'manager']
-
 // Built up slice by slice (see the build plan's Navigation table).
 const NAV: NavGroup[] = [
   {
     label: null,
     items: [
-      { to: '/', label: 'Home', icon: Home, roles: ALL },
+      // Managers have no seafarer view; their Dashboard (totals only) comes in S11.
+      { to: '/', label: 'Home', icon: Home, roles: ['manager'] },
+      { to: '/seafarers', label: 'Seafarers', icon: Users, roles: ['administrator', 'crewing_officer'] },
       { to: '/vessels', label: 'Vessels', icon: Ship, roles: ['administrator', 'crewing_officer'] },
     ],
   },

@@ -1,10 +1,15 @@
-import { Link } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { ROLE_LABELS } from '../types'
 
-/** Landing page until the Seafarers list (S5) and the dashboard (S11) land. */
+/** The landing page. Administrators and crewing officers land on the Seafarers
+ * list; managers see this page until their Dashboard (S11) lands. */
 export function HomePage() {
   const { user, role } = useAuth()
+
+  if (role === 'administrator' || role === 'crewing_officer') {
+    return <Navigate to="/seafarers" replace />
+  }
 
   return (
     <div className="max-w-2xl space-y-3">
@@ -13,15 +18,7 @@ export function HomePage() {
         You are signed in as <strong>{user?.email}</strong>
         {role ? ` (${ROLE_LABELS[role]})` : ''}.
       </p>
-      {role === 'administrator' && (
-        <p className="text-sm text-navy-300">
-          New sign-ups wait for you on the{' '}
-          <Link to="/admin/accounts" className="font-medium text-navy-100 underline">
-            Accounts
-          </Link>{' '}
-          page.
-        </p>
-      )}
+      <p className="text-sm text-navy-300">Fleet totals arrive with the Dashboard.</p>
     </div>
   )
 }

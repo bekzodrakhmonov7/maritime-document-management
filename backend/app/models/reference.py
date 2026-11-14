@@ -17,13 +17,14 @@ def _assigned_country_code(value: str) -> str:
     return code
 
 
-Flag = Annotated[str, AfterValidator(_assigned_country_code)]
+# A country, e.g. a vessel's flag or a seafarer's nationality.
+CountryCode = Annotated[str, AfterValidator(_assigned_country_code)]
 
 
 class VesselWrite(BaseModel):
     name: Name
     imo_number: str = Field(..., pattern=r"^[0-9]{7}$")
-    flag: Flag
+    flag: CountryCode
 
 
 class VesselRead(BaseModel):

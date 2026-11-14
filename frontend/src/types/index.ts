@@ -74,3 +74,28 @@ export type DocumentTypeWrite = Pick<
   DocumentType,
   'name' | 'expires' | 'max_validity_months' | 'renewable_at_sea' | 'depends_on_id'
 >
+
+/** A Seafarer's record (S5). Set Inactive instead of being deleted. */
+export interface Seafarer {
+  id: number
+  first_name: string
+  last_name: string
+  /** ISO date (YYYY-MM-DD). */
+  date_of_birth: string | null
+  /** ISO 3166-1 alpha-2 country code. */
+  nationality: string | null
+  /** The held Position, from the managed list. */
+  position_id: number
+  position_name: string
+  position_retired: boolean
+  /** Set while the seafarer is Inactive. */
+  inactive_since: string | null
+  inactive_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SeafarerWrite = Pick<
+  Seafarer,
+  'first_name' | 'last_name' | 'date_of_birth' | 'nationality' | 'position_id'
+>

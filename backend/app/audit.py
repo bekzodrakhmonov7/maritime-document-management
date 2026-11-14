@@ -38,6 +38,10 @@ class AuditAction(StrEnum):
     DOCUMENT_TYPE_RETIRED = "document_type_retired"
     DOCUMENT_TYPE_UNRETIRED = "document_type_unretired"
     DOCUMENT_TYPE_DELETED = "document_type_deleted"
+    SEAFARER_CREATED = "seafarer_created"
+    SEAFARER_EDITED = "seafarer_edited"
+    SEAFARER_SET_INACTIVE = "seafarer_set_inactive"
+    SEAFARER_REACTIVATED = "seafarer_reactivated"
     # Written by the auth.audit_log_entries trigger, not by the API.
     LOGIN_SUCCEEDED = "login_succeeded"
     LOGIN_FAILED = "login_failed"
