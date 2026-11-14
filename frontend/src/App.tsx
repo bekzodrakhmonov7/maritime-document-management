@@ -15,6 +15,7 @@ import { PositionsPage } from './pages/PositionsPage'
 import { DocumentTypesPage } from './pages/DocumentTypesPage'
 import { SeafarersPage } from './pages/SeafarersPage'
 import { SeafarerPage } from './pages/SeafarerPage'
+import { DocumentPage } from './pages/DocumentPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RequirementsPage } from './pages/RequirementsPage'
 
@@ -50,6 +51,14 @@ export default function App() {
                 element={
                   <RoleGate roles={['administrator', 'crewing_officer']}>
                     <SeafarerPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="documents/:id"
+                element={
+                  <RoleGate roles={['administrator', 'crewing_officer']}>
+                    <DocumentPage />
                   </RoleGate>
                 }
               />

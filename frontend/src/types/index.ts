@@ -1,10 +1,12 @@
-export type DocumentStatus =
-  | 'valid'
-  | 'expiring_soon'
-  | 'expired'
-  | 'pending'
-  | 'verified'
-  | 'rejected'
+/** Where a document's Current Version stands against its expiry date (S7). */
+export type ExpiryStatus = 'unexpired' | 'expiring_soon' | 'expired' | 'no_expiry_date'
+
+export const EXPIRY_STATUS_LABELS: Record<ExpiryStatus, string> = {
+  unexpired: 'Unexpired',
+  expiring_soon: 'Expiring soon',
+  expired: 'Expired',
+  no_expiry_date: 'No expiry date',
+}
 
 export type AccountStatus = 'pending' | 'active' | 'deactivated'
 
@@ -204,4 +206,60 @@ export interface RequirementEvaluation {
   required: { id: number; name: string; exception_id: number | null }[]
   /** The exceptions that decide a type for this pair (the most specific one wins). */
   applied_exceptions: RequirementException[]
+}
+
+/** A Version's key details: sent with an upload, or alone for a details-only Version. */
+export interface VersionDetails {
+  document_number: string
+  issuing_authority: string
+  /** ISO dates (YYYY-MM-DD); no expiry date for a type that doesn't expire. */
+  issue_date: string
+  expiry_date: string | null
+}
+
+/** One immutable snapshot of a document's file and key details. */
+export interface Version extends VersionDetails {
+  id: number
+  /** 1 for the first upload, counting up. */
+  number: number
+  original_filename: string
+  content_type: string
+  uploaded_by: string
+  uploaded_by_name: string
+  uploaded_at: string
+  is_current: boolean
+  /** Set on a details-only Version: the earlier Version whose file it reuses. */
+  file_from_version_number: number | null
+}
+
+/** One row of a seafarer's documents table. */
+export interface DocumentSummary {
+  id: number
+  seafarer_id: number
+  document_type_id: number
+  document_type_name: string
+  document_type_retired: boolean
+  expires: boolean
+  max_validity_months: number | null
+  created_at: string
+  version_count: number
+  /** Null when every Version is rejected: the document counts as missing. */
+  current_version: Pick<Version, 'id' | 'document_number' | 'issue_date' | 'expiry_date' | 'uploaded_at'> | null
+  expiry_status: ExpiryStatus | null
+}
+
+/** GET /api/documents/{id}: the document with its full history, newest first. */
+export interface DocumentDetail extends DocumentSummary {
+  seafarer_first_name: string
+  seafarer_last_name: string
+  seafarer_inactive: boolean
+  versions: Version[]
+}
+
+/** POST /api/versions/{id}/file-url */
+export interface FileUrl {
+  url: string
+  expires_in: number
+  filename: string
+  content_type: string
 }

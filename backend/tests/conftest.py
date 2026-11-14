@@ -143,6 +143,8 @@ REFERENCE_TABLES = (
     "seafarer",
     "assignment",
     "responsible_officer",
+    "document",
+    "version",
 )
 
 
@@ -228,3 +230,48 @@ async def crew(owner_db, reference_cleanup):
                 )
 
     return Crew()
+
+
+class FakeStorage:
+    """An in-memory stand-in for the private bucket (the Storage API isn't
+    available in tests). It keeps what was stored and every URL it signed."""
+
+    def __init__(self) -> None:
+        self.objects: dict[str, tuple[bytes, str]] = {}
+        self.signed: list[tuple[str, int, str]] = []
+
+    async def upload(self, path: str, content: bytes, content_type: str) -> None:
+        assert path not in self.objects, "Storage paths are never reused"
+        self.objects[path] = (content, content_type)
+
+    async def delete(self, path: str) -> None:
+        self.objects.pop(path, None)
+
+    async def signed_url(self, path: str, ttl_seconds: int, download_name: str) -> str:
+        assert path in self.objects
+        self.signed.append((path, ttl_seconds, download_name))
+        return f"https://storage.test/sign/{path}?token=t&download={download_name}"
+
+
+@pytest_asyncio.fixture
+async def storage(app):
+    from app.storage import get_storage
+
+    fake = FakeStorage()
+    app.dependency_overrides[get_storage] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_storage, None)
+
+
+@pytest_asyncio.fixture
+async def documents_cleanup(owner_db, make_account, reference_cleanup):
+    """Empty the Document and Version tables before and after the test.
+
+    Versions reference their uploader's Account, so this depends on
+    make_account and is torn down first. TRUNCATE doesn't fire the Version
+    immutability trigger (it blocks UPDATE and DELETE only).
+    """
+    statement = "TRUNCATE public.version, public.document"
+    await owner_db.execute(statement)
+    yield
+    await owner_db.execute(statement)

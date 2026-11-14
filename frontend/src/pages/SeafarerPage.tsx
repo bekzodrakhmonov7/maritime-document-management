@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Plus, Upload } from 'lucide-react'
 import { useSeafarerAssignments } from '../hooks/useAssignments'
+import { useSeafarerDocuments } from '../hooks/useDocuments'
 import { fullName, useSeafarer } from '../hooks/useSeafarers'
 import { flagLabel } from '../lib/flags'
 import { ActionButton } from '../components/ActionButton'
@@ -10,6 +11,7 @@ import {
   AssignmentsTable,
   type AssignmentDialogState,
 } from '../components/AssignmentDialogs'
+import { DocumentsTable, VersionDialog, type VersionDialogState } from '../components/DocumentDialogs'
 import { ErrorNote } from '../components/ErrorNote'
 import {
   SeafarerActions,
@@ -27,12 +29,14 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-/** One seafarer's record: personal details, held Position, Current Vessel and
- * Assignments. Later slices add documents (S7) and missing documents (S10). */
+/** One seafarer's record: personal details, held Position, Current Vessel,
+ * Assignments and documents. Missing documents arrive in S10. */
 export function SeafarerPage() {
   const { id } = useParams()
   const { data: seafarer, isLoading, error } = useSeafarer(Number(id))
   const assignments = useSeafarerAssignments(Number(id))
+  const documents = useSeafarerDocuments(Number(id))
+  const [versionDialog, setVersionDialog] = useState<VersionDialogState | null>(null)
   const [dialog, setDialog] = useState<SeafarerDialogState | null>(null)
   const [assignmentDialog, setAssignmentDialog] = useState<AssignmentDialogState | null>(null)
 
@@ -110,10 +114,43 @@ export function SeafarerPage() {
               onCancel={(assignment) => setAssignmentDialog({ kind: 'cancel', assignment })}
             />
           </section>
+
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-lg font-semibold text-navy-50">Documents</h3>
+              {!seafarer.inactive_since && (
+                <ActionButton
+                  tone="primary"
+                  onClick={() =>
+                    setVersionDialog({
+                      kind: 'new',
+                      seafarer,
+                      taken: (documents.data ?? []).map((d) => d.document_type_id),
+                    })
+                  }
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload document
+                </ActionButton>
+              )}
+            </div>
+            {documents.error && <ErrorNote message={documents.error.message} />}
+            <DocumentsTable
+              documents={documents.data}
+              onRenew={
+                seafarer.inactive_since
+                  ? undefined
+                  : (document) => setVersionDialog({ kind: 'renew', document })
+              }
+            />
+          </section>
         </>
       )}
 
       {dialog && <SeafarerDialog state={dialog} onClose={() => setDialog(null)} />}
+      {versionDialog && (
+        <VersionDialog state={versionDialog} onClose={() => setVersionDialog(null)} />
+      )}
       {assignmentDialog && (
         <AssignmentDialog state={assignmentDialog} onClose={() => setAssignmentDialog(null)} />
       )}

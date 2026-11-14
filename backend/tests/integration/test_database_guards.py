@@ -179,6 +179,8 @@ async def test_app_backend_cannot_delete_accounts_or_settings(make_account):
         "seafarer",
         "assignment",
         "responsible_officer",
+        "document",
+        "version",
     ],
 )
 async def test_every_table_denies_anon_and_authenticated(owner_db, make_account, role, table):

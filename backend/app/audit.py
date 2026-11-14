@@ -52,6 +52,9 @@ class AuditAction(StrEnum):
     ASSIGNMENT_CANCELLED = "assignment_cancelled"
     RESPONSIBLE_OFFICER_ADDED = "responsible_officer_added"
     RESPONSIBLE_OFFICER_REMOVED = "responsible_officer_removed"
+    VERSION_UPLOADED = "version_uploaded"
+    UPLOAD_REJECTED = "upload_rejected"
+    FILE_URL_ISSUED = "file_url_issued"
     SETTINGS_CHANGED = "settings_changed"
     # Written by the auth.audit_log_entries trigger, not by the API.
     LOGIN_SUCCEEDED = "login_succeeded"

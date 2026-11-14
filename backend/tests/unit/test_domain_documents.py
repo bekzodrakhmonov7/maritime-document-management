@@ -1,0 +1,123 @@
+"""Current Version, Expiry Status and the Version date rules (FR-10, FR-15; T1, T2)."""
+
+from datetime import date, datetime, timezone
+
+import pytest
+
+from app.domain import current_version, expiry_status, latest_allowed_expiry, version_dates_problem
+
+E = date(2026, 6, 30)
+
+
+def _v(version_id: int, minute: int = 0) -> dict:
+    return {"id": version_id, "uploaded_at": datetime(2026, 1, 1, 12, minute, tzinfo=timezone.utc)}
+
+
+def _review(version_id: int, decision: str, review_id: int) -> dict:
+    return {"id": review_id, "version_id": version_id, "decision": decision}
+
+
+# --- current_version -----------------------------------------------------------------
+
+
+def test_no_versions_means_no_current_version():
+    assert current_version([], []) is None
+
+
+def test_the_newest_version_is_current_reviewed_or_not():
+    assert current_version([_v(1, 0), _v(3, 2), _v(2, 1)], [])["id"] == 3
+
+
+def test_a_rejected_newest_version_falls_back_to_the_previous_one():
+    versions = [_v(1, 0), _v(2, 1)]
+    assert current_version(versions, [_review(2, "reject", 1)])["id"] == 1
+
+
+def test_the_latest_review_decides_so_an_overturned_rejection_is_current_again():
+    versions = [_v(1, 0), _v(2, 1)]
+    reviews = [_review(2, "reject", 1), _review(2, "accept", 2)]
+    assert current_version(versions, reviews)["id"] == 2
+    reviews.append(_review(2, "reject", 3))
+    assert current_version(versions, reviews)["id"] == 1
+
+
+def test_every_version_rejected_means_no_current_version():
+    versions = [_v(1, 0), _v(2, 1)]
+    reviews = [_review(1, "reject", 1), _review(2, "reject", 2)]
+    assert current_version(versions, reviews) is None
+
+
+def test_versions_uploaded_at_the_same_time_are_ordered_by_id():
+    assert current_version([_v(5, 0), _v(4, 0)], [])["id"] == 5
+
+
+# --- expiry_status -------------------------------------------------------------------
+
+
+def test_the_expiry_day_itself_is_expiring_soon_and_still_valid():
+    assert expiry_status(E, E, 90) == "expiring_soon"
+
+
+def test_the_day_after_expiry_is_expired():
+    assert expiry_status(E, date(2026, 7, 1), 90) == "expired"
+
+
+def test_no_expiry_date():
+    assert expiry_status(None, E, 90) == "no_expiry_date"
+
+
+def test_expiring_soon_starts_at_the_largest_alert_step():
+    assert expiry_status(E, date(2026, 4, 1), 90) == "expiring_soon"  # 90 days left
+    assert expiry_status(E, date(2026, 3, 31), 90) == "unexpired"  # 91 days left
+
+
+def test_a_smaller_largest_step_moves_the_boundary():
+    assert expiry_status(E, date(2026, 4, 1), 30) == "unexpired"
+    assert expiry_status(E, date(2026, 5, 31), 30) == "expiring_soon"
+
+
+def test_with_only_the_expiry_day_as_a_step_only_that_day_is_expiring_soon():
+    assert expiry_status(E, E, 0) == "expiring_soon"
+    assert expiry_status(E, date(2026, 6, 29), 0) == "unexpired"
+
+
+# --- Version date rules (T2) ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "issue, months, latest",
+    [
+        (date(2026, 1, 15), 12, date(2027, 1, 15)),
+        (date(2026, 1, 31), 1, date(2026, 2, 28)),
+        (date(2024, 1, 31), 1, date(2024, 2, 29)),
+        (date(2026, 11, 30), 3, date(2027, 2, 28)),
+    ],
+)
+def test_latest_allowed_expiry_adds_whole_months(issue, months, latest):
+    assert latest_allowed_expiry(issue, months) == latest
+
+
+def test_an_expiring_type_needs_an_expiry_date():
+    assert "expiry date" in version_dates_problem(date(2026, 1, 1), None, expires=True, max_validity_months=None)
+
+
+def test_a_non_expiring_type_takes_no_expiry_date():
+    assert "no expiry date" in version_dates_problem(
+        date(2026, 1, 1), date(2027, 1, 1), expires=False, max_validity_months=None
+    )
+    assert version_dates_problem(date(2026, 1, 1), None, expires=False, max_validity_months=None) is None
+
+
+@pytest.mark.parametrize("expiry", [date(2026, 1, 1), date(2025, 12, 31)])
+def test_the_expiry_must_be_after_the_issue_date(expiry):
+    assert "after the issue date" in version_dates_problem(
+        date(2026, 1, 1), expiry, expires=True, max_validity_months=None
+    )
+
+
+def test_maximum_validity_is_a_hard_limit():
+    issue = date(2026, 1, 15)
+    assert version_dates_problem(issue, date(2031, 1, 15), expires=True, max_validity_months=60) is None
+    assert "maximum validity" in version_dates_problem(
+        issue, date(2031, 1, 16), expires=True, max_validity_months=60
+    )

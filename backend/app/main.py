@@ -9,6 +9,7 @@ from app.routers import (
     accounts,
     assignments,
     auth,
+    documents,
     me,
     reference_data,
     requirements,
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(requirements.exceptions, prefix="/api")
     app.include_router(seafarers.router, prefix="/api")
     app.include_router(assignments.router, prefix="/api")
+    app.include_router(documents.router, prefix="/api")
     app.include_router(settings_router.router, prefix="/api")
 
     return app

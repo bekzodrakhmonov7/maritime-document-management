@@ -3,8 +3,6 @@ import { useDropzone, type FileRejection } from 'react-dropzone'
 import { UploadCloud, FileText, X, AlertCircle } from 'lucide-react'
 import { cn } from '../lib/cn'
 
-const MAX_SIZE = 10 * 1024 * 1024
-
 const ACCEPTED_TYPES = {
   'application/pdf': ['.pdf'],
   'image/jpeg': ['.jpg', '.jpeg'],
@@ -15,6 +13,10 @@ interface DocumentDropzoneProps {
   file: File | null
   onFileAccepted: (file: File) => void
   onClear: () => void
+  /** The file-size limit from Settings, in MB. */
+  maxSizeMb: number
+  /** The current limits, shown under the drop area. */
+  hint: string
   className?: string
 }
 
@@ -22,6 +24,8 @@ export function DocumentDropzone({
   file,
   onFileAccepted,
   onClear,
+  maxSizeMb,
+  hint,
   className,
 }: DocumentDropzoneProps) {
   const onDrop = useCallback(
@@ -45,7 +49,7 @@ export function DocumentDropzone({
   } = useDropzone({
     onDrop,
     accept: ACCEPTED_TYPES,
-    maxSize: MAX_SIZE,
+    maxSize: maxSizeMb * 1024 * 1024,
     multiple: false,
   })
 
@@ -100,7 +104,7 @@ export function DocumentDropzone({
         )}
         role="button"
         tabIndex={0}
-        aria-label="Upload document file. Drag and drop or click to browse. Accepted formats: PDF, JPEG, PNG. Maximum size: 10MB."
+        aria-label={`Upload document file. Drag and drop or click to browse. ${hint}`}
       >
         <input {...getInputProps()} />
         <UploadCloud
@@ -117,9 +121,7 @@ export function DocumentDropzone({
               : 'Drop the file here'
             : 'Drag and drop a file, or click to browse'}
         </p>
-        <p className="mt-1 text-xs text-navy-400">
-          PDF, JPEG, or PNG up to 10MB
-        </p>
+        <p className="mt-1 text-xs text-navy-400">{hint}</p>
       </div>
 
       {error && (
@@ -130,7 +132,7 @@ export function DocumentDropzone({
           <AlertCircle className="h-4 w-4 shrink-0 text-status-expired" aria-hidden="true" />
           <p className="text-xs text-status-expired">
             {error.code === 'file-too-large'
-              ? 'File exceeds maximum size of 10MB.'
+              ? `File exceeds the maximum size of ${maxSizeMb} MB.`
               : error.code === 'file-invalid-type'
                 ? 'Unsupported file type. Only PDF, JPEG, and PNG are allowed.'
                 : error.message}

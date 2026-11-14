@@ -2,9 +2,10 @@
 
 Queries fetch rows; these functions decide what they mean. Readiness, the
 dashboard, the daily check and the reports share these functions; later
-slices add Current Version, Expiry Status, coverage and the rest here.
+slices add coverage and the rest here.
 """
 
+import calendar
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -13,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 AssignmentState = Literal["upcoming", "under_way", "finished"]
 Effect = Literal["add", "remove"]
+ExpiryStatus = Literal["unexpired", "expiring_soon", "expired", "no_expiry_date"]
 
 
 def today_in(time_zone: str, now: datetime | None = None) -> date:
@@ -43,6 +45,77 @@ def current_assignment(
     return None
 
 
+# --- Documents and Versions (FR-10, FR-15; T1, T2) ------------------------------------
+
+
+def current_version(
+    versions: Iterable[Mapping[str, Any]], reviews: Iterable[Mapping[str, Any]]
+) -> Mapping[str, Any] | None:
+    """A Document's newest Version that is not rejected, reviewed or not.
+
+    Each Version's latest Review (the highest id) is its decision, so a later
+    Review overturns an earlier one. With every Version rejected (or none at
+    all) the Document has no Current Version and counts as missing.
+    """
+    latest_decision: dict[int, tuple[int, str]] = {}
+    for r in reviews:
+        held = latest_decision.get(r["version_id"])
+        if held is None or r["id"] > held[0]:
+            latest_decision[r["version_id"]] = (r["id"], r["decision"])
+    candidates = [
+        v for v in versions if latest_decision.get(v["id"], (0, None))[1] != "reject"
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda v: (v["uploaded_at"], v["id"]))
+
+
+def expiry_status(expiry: date | None, today: date, largest_step: int) -> ExpiryStatus:
+    """Where an expiry date stands today (company time zone). A document is
+    valid through its expiry date and expired from the next day; it is
+    expiring soon from the largest Alert Step down to the expiry day itself."""
+    if expiry is None:
+        return "no_expiry_date"
+    days_left = (expiry - today).days
+    if days_left < 0:
+        return "expired"
+    if days_left <= largest_step:
+        return "expiring_soon"
+    return "unexpired"
+
+
+def latest_allowed_expiry(issue: date, max_validity_months: int) -> date:
+    """Issue date plus whole months; a day the target month lacks becomes its last day."""
+    months = issue.month - 1 + max_validity_months
+    year, month = issue.year + months // 12, months % 12 + 1
+    return date(year, month, min(issue.day, calendar.monthrange(year, month)[1]))
+
+
+def version_dates_problem(
+    issue: date, expiry: date | None, *, expires: bool, max_validity_months: int | None
+) -> str | None:
+    """Why a new Version's dates break its Document Type's rules, or None.
+    Rules are checked only when a Version is created (T2)."""
+    if expires and expiry is None:
+        return "This document type expires, so the expiry date is required."
+    if not expires and expiry is not None:
+        return "This document type doesn't expire, so it takes no expiry date."
+    if expiry is None:
+        return None
+    if expiry <= issue:
+        return "The expiry date must be after the issue date."
+    if max_validity_months is not None:
+        latest = latest_allowed_expiry(issue, max_validity_months)
+        if expiry > latest:
+            return (
+                f"The expiry date is past this type's maximum validity of "
+                f"{max_validity_months} months (latest {latest.isoformat()})."
+            )
+    return None
+
+
+# --- Requirements (FR-08, T2) ---------------------------------------------------
+
 
 @dataclass(frozen=True)
 class VesselRef:
@@ -61,9 +134,6 @@ class RequirementException:
     flag: str | None = None
     position_id: int | None = None
     id: int | None = None
-
-
-# --- Requirements (FR-08, T2) ---------------------------------------------------
 
 
 def deciding_exceptions(
