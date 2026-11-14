@@ -460,3 +460,259 @@ def readiness(
         "counters": {b: len(buckets[b]) for b in READINESS_BUCKETS if b != "covers_all"},
         "buckets": buckets,
     }
+
+
+# --- The dashboard (FR-20, T10) --------------------------------------------------------
+
+DashboardQueue = Literal[
+    "missing", "expired", "expiring_soon", "waiting_for_review", "starting_soon", "in_order"
+]
+DASHBOARD_QUEUES: tuple[DashboardQueue, ...] = (
+    "missing", "expired", "expiring_soon", "waiting_for_review", "starting_soon", "in_order"
+)
+DOCUMENT_QUEUES: tuple[DashboardQueue, ...] = tuple(q for q in DASHBOARD_QUEUES if q != "starting_soon")
+ActionHint = Literal["upload", "review", "open"]
+_QUEUE_ACTIONS: dict[DashboardQueue, ActionHint] = {
+    "missing": "upload",
+    "expired": "upload",
+    "expiring_soon": "upload",
+    "waiting_for_review": "review",
+    "in_order": "open",
+}
+TotalsColumn = Literal["missing", "expired", "expiring_soon", "unexpired", "no_expiry_date"]
+TOTALS_COLUMNS: tuple[TotalsColumn, ...] = (
+    "missing", "expired", "expiring_soon", "unexpired", "no_expiry_date"
+)
+Breakdown = Literal["vessel", "position", "document_type"]
+ASHORE_UNASSIGNED = "Ashore / Unassigned"
+
+
+@dataclass(frozen=True)
+class DashboardSeafarer:
+    """A seafarer as the dashboard groups by: held Position and Current Vessel
+    (None: ashore)."""
+
+    id: int
+    first_name: str
+    last_name: str
+    position_id: int
+    position_name: str
+    current_vessel_id: int | None = None
+    current_vessel_name: str | None = None
+    inactive: bool = False
+
+
+@dataclass(frozen=True)
+class DocumentLine:
+    """One of a seafarer's dashboard lines: a Document with a Current Version,
+    or a required Document Type with none (`expiry_status` None: missing;
+    `document_id` is set when every Version of it is rejected)."""
+
+    seafarer_id: int
+    document_type_id: int
+    document_type_name: str
+    document_id: int | None = None
+    expiry_date: date | None = None
+    expiry_status: ExpiryStatus | None = None
+    review_state: ReviewState | None = None
+
+
+@dataclass(frozen=True)
+class StartingSoon:
+    """An Assignment that may start soon, with its readiness counters."""
+
+    assignment_id: int
+    seafarer_id: int
+    vessel_id: int
+    vessel_name: str
+    position_id: int
+    position_name: str
+    start_date: date
+    end_date: date
+    cancelled: bool
+    counters: Mapping[str, int]
+
+
+@dataclass(frozen=True)
+class DashboardFilters:
+    """The name text and click-to-add tags. Tags of one kind widen (any of
+    them), kinds narrow each other. `ashore` is the "Ashore / Unassigned"
+    vessel value: no Current Vessel."""
+
+    name: str = ""
+    position_ids: Set[int] = frozenset()
+    vessel_ids: Set[int] = frozenset()
+    ashore: bool = False
+    document_type_ids: Set[int] = frozenset()
+    show_inactive: bool = False
+
+    def _person(self, s: DashboardSeafarer) -> bool:
+        if s.inactive and not self.show_inactive:
+            return False
+        full_name = f"{s.first_name} {s.last_name}".lower()
+        return all(word in full_name for word in self.name.lower().split())
+
+    def _vessel(self, vessel_id: int | None, ashore_today: bool) -> bool:
+        if not self.vessel_ids and not self.ashore:
+            return True
+        return vessel_id in self.vessel_ids or (self.ashore and ashore_today)
+
+    def _position(self, position_id: int) -> bool:
+        return not self.position_ids or position_id in self.position_ids
+
+    def keeps_line(self, s: DashboardSeafarer, line: DocumentLine) -> bool:
+        """A document line, by its seafarer's held Position and Current Vessel."""
+        return (
+            self._person(s)
+            and self._position(s.position_id)
+            and self._vessel(s.current_vessel_id, s.current_vessel_id is None)
+            and (not self.document_type_ids or line.document_type_id in self.document_type_ids)
+        )
+
+    def keeps_joiner(self, s: DashboardSeafarer, a: StartingSoon) -> bool:
+        """A starting-soon Assignment, by its own Position and vessel; "Ashore /
+        Unassigned" keeps a joiner who is ashore today. Document Type tags
+        don't apply: the counters are about the whole required set."""
+        return (
+            self._person(s)
+            and self._position(a.position_id)
+            and self._vessel(a.vessel_id, s.current_vessel_id is None)
+        )
+
+
+def document_queues(line: DocumentLine) -> tuple[DashboardQueue, ...]:
+    """The work queues a line is in: missing, or its Expiry Status's queue
+    (expired, expiring soon, or in order for unexpired and no expiry date),
+    plus waiting for review when its Current Version has no Review yet."""
+    if line.expiry_status is None:
+        return ("missing",)
+    expiry_queue: DashboardQueue = {
+        "expired": "expired", "expiring_soon": "expiring_soon",
+    }.get(line.expiry_status, "in_order")
+    if line.review_state == "not_reviewed":
+        return expiry_queue, "waiting_for_review"
+    return (expiry_queue,)
+
+
+def starts_soon(start: date, today: date, horizon_days: int) -> bool:
+    """Upcoming (starts after today) and within the Planning Horizon."""
+    return 0 < (start - today).days <= horizon_days
+
+
+def _by_name(s: DashboardSeafarer) -> tuple[str, str, int]:
+    return s.last_name.lower(), s.first_name.lower(), s.id
+
+
+def _seafarer_fields(s: DashboardSeafarer) -> dict:
+    return {
+        "id": s.id,
+        "first_name": s.first_name,
+        "last_name": s.last_name,
+        "position_id": s.position_id,
+        "position_name": s.position_name,
+        "current_vessel_id": s.current_vessel_id,
+        "current_vessel_name": s.current_vessel_name,
+        "inactive": s.inactive,
+    }
+
+
+def dashboard(
+    seafarers: Iterable[DashboardSeafarer],
+    lines: Iterable[DocumentLine],
+    starting: Iterable[StartingSoon],
+    filters: DashboardFilters,
+    today: date,
+    horizon_days: int,
+) -> dict:
+    """The work queues for the seafarers given (already the caller's Scope),
+    each a list of seafarers by name with their entries, and their counts
+    (entries, after the filters). Starting soon lists non-cancelled upcoming
+    Assignments within the Planning Horizon by start date instead."""
+    people = {s.id: s for s in seafarers}
+    grouped: dict[DashboardQueue, dict[int, list[dict]]] = {q: {} for q in DOCUMENT_QUEUES}
+    for line in sorted(lines, key=lambda l: (l.document_type_name.lower(), l.document_type_id)):
+        s = people[line.seafarer_id]
+        if not filters.keeps_line(s, line):
+            continue
+        for queue in document_queues(line):
+            grouped[queue].setdefault(s.id, []).append({
+                "document_type_id": line.document_type_id,
+                "document_type_name": line.document_type_name,
+                "document_id": line.document_id,
+                "expiry_date": line.expiry_date,
+                "expiry_status": line.expiry_status,
+                "review_state": line.review_state,
+                "action": _QUEUE_ACTIONS[queue],
+            })
+
+    queues: dict[str, list[dict]] = {
+        queue: [
+            {"seafarer": _seafarer_fields(people[sid]), "entries": entries}
+            for sid, entries in sorted(by_seafarer.items(), key=lambda i: _by_name(people[i[0]]))
+        ]
+        for queue, by_seafarer in grouped.items()
+    }
+    joiners = sorted(
+        (
+            a for a in starting
+            if not a.cancelled
+            and starts_soon(a.start_date, today, horizon_days)
+            and filters.keeps_joiner(people[a.seafarer_id], a)
+        ),
+        key=lambda a: (a.start_date, *_by_name(people[a.seafarer_id]), a.assignment_id),
+    )
+    queues["starting_soon"] = [
+        {
+            "assignment_id": a.assignment_id,
+            "seafarer": _seafarer_fields(people[a.seafarer_id]),
+            "vessel_id": a.vessel_id,
+            "vessel_name": a.vessel_name,
+            "position_id": a.position_id,
+            "position_name": a.position_name,
+            "start_date": a.start_date,
+            "end_date": a.end_date,
+            "counters": dict(a.counters),
+        }
+        for a in joiners
+    ]
+    counts = {q: sum(len(g["entries"]) for g in queues[q]) for q in DOCUMENT_QUEUES}
+    counts["starting_soon"] = len(joiners)
+    return {"counts": {q: counts[q] for q in DASHBOARD_QUEUES}, "queues": queues}
+
+
+def fleet_totals(
+    seafarers: Iterable[DashboardSeafarer], lines: Iterable[DocumentLine], breakdown: Breakdown
+) -> dict:
+    """The managers' view: lines per Expiry Status plus Missing for the fleet
+    (Inactive seafarers left out), and one breakdown table by Current Vessel
+    ("Ashore / Unassigned" last), held Position or Document Type. No names
+    of people, no review or starting-soon counts, no small-count suppression."""
+    people = {s.id: s for s in seafarers}
+
+    def row_key(s: DashboardSeafarer, line: DocumentLine) -> tuple[int | None, str]:
+        if breakdown == "vessel":
+            if s.current_vessel_id is None:
+                return None, ASHORE_UNASSIGNED
+            return s.current_vessel_id, s.current_vessel_name or ""
+        if breakdown == "position":
+            return s.position_id, s.position_name
+        return line.document_type_id, line.document_type_name
+
+    def empty() -> dict[str, int]:
+        return dict.fromkeys(TOTALS_COLUMNS, 0)
+
+    totals = empty()
+    rows: dict[tuple[int | None, str], dict[str, int]] = {}
+    for line in lines:
+        s = people[line.seafarer_id]
+        if s.inactive:
+            continue
+        column = line.expiry_status or "missing"
+        totals[column] += 1
+        rows.setdefault(row_key(s, line), empty())[column] += 1
+    ordered = sorted(rows.items(), key=lambda r: (r[0][0] is None, r[0][1].lower(), r[0][0] or 0))
+    return {
+        "totals": totals,
+        "breakdown": breakdown,
+        "rows": [{"id": key[0], "name": key[1], "counts": counts} for key, counts in ordered],
+    }

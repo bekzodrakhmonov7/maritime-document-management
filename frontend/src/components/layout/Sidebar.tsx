@@ -5,7 +5,7 @@ import {
   Briefcase,
   FileText,
   History,
-  Home,
+  LayoutDashboard,
   ListChecks,
   Settings,
   Ship,
@@ -36,8 +36,8 @@ const NAV: NavGroup[] = [
   {
     label: null,
     items: [
-      // Managers have no seafarer view; their Dashboard (totals only) comes in S11.
-      { to: '/', label: 'Home', icon: Home, roles: ['manager'] },
+      // Managers see the Dashboard only, as fleet totals.
+      { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['administrator', 'crewing_officer', 'manager'] },
       { to: '/seafarers', label: 'Seafarers', icon: Users, roles: ['administrator', 'crewing_officer'] },
       {
         to: '/alerts',

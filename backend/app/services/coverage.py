@@ -11,7 +11,9 @@ nothing is recorded except refused access.
   exists only for non-cancelled, unfinished Assignments within Scope.
 """
 
+from collections.abc import Iterable, Mapping
 from datetime import date
+from typing import Any
 
 import asyncpg
 
@@ -28,18 +30,13 @@ async def _held_documents(conn: asyncpg.Connection, seafarer_id: int, today: dat
     return {d["document_type_id"]: d for d in summaries}
 
 
-async def _required_documents(
-    conn: asyncpg.Connection,
-    seafarer_id: int,
-    position_id: int,
-    vessel: VesselRef | None,
-    today: date,
+def required_documents(
+    types: Iterable[Mapping[str, Any]], held: Mapping[int, Mapping[str, Any]]
 ) -> list[RequiredDocument]:
-    """The required Document Types for the pair, each with what the seafarer holds."""
-    rows = await requirements.requirement_rows(conn, position_id, vessel)
-    held = await _held_documents(conn, seafarer_id, today)
+    """Each required Document Type (id, name, renewable at sea) with what the
+    seafarer holds of it, from their document summaries by type."""
     required = []
-    for t in await requirements.document_types(conn, rows.required(position_id, vessel)):
+    for t in types:
         doc = held.get(t["id"])
         current = None if doc is None else doc["current_version"]
         required.append(
@@ -54,6 +51,20 @@ async def _required_documents(
             )
         )
     return required
+
+
+async def _required_documents(
+    conn: asyncpg.Connection,
+    seafarer_id: int,
+    position_id: int,
+    vessel: VesselRef | None,
+    today: date,
+) -> list[RequiredDocument]:
+    """The required Document Types for the pair, each with what the seafarer holds."""
+    rows = await requirements.requirement_rows(conn, position_id, vessel)
+    held = await _held_documents(conn, seafarer_id, today)
+    types = await requirements.document_types(conn, rows.required(position_id, vessel))
+    return required_documents(types, held)
 
 
 async def missing_documents(conn: asyncpg.Connection, seafarer: dict, today: date) -> list[dict]:

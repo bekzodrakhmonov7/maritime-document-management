@@ -71,6 +71,7 @@ export function useAssignmentAction() {
         queryClient.invalidateQueries({ queryKey: ['assignments'] }),
         queryClient.invalidateQueries({ queryKey: ['seafarers'] }),
         queryClient.invalidateQueries({ queryKey: ['readiness'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
       ]),
   })
 }
