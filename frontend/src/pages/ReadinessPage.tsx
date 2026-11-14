@@ -111,6 +111,7 @@ export function ReadinessPage() {
   const { data: view, isLoading, error } = useReadiness(Number(id))
   const a = view?.assignment
   const underWay = view?.state === 'under_way'
+  const seafarerName = a && fullName({ first_name: a.seafarer_first_name, last_name: a.seafarer_last_name })
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -120,7 +121,7 @@ export function ReadinessPage() {
           className="inline-flex items-center gap-1 text-sm text-navy-300 hover:text-navy-100"
         >
           <ArrowLeft className="h-4 w-4" />
-          {fullName({ first_name: a.seafarer_first_name, last_name: a.seafarer_last_name })}
+          {seafarerName}
         </Link>
       ) : (
         <Link to="/seafarers" className="inline-flex items-center gap-1 text-sm text-navy-300 hover:text-navy-100">
@@ -137,7 +138,7 @@ export function ReadinessPage() {
           <header className="space-y-2">
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-2xl font-semibold text-navy-50">
-                Readiness: {fullName({ first_name: a.seafarer_first_name, last_name: a.seafarer_last_name })}
+                Readiness: {seafarerName}
               </h2>
               <AssignmentStateBadge state={view.state} />
             </div>

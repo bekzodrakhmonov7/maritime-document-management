@@ -65,7 +65,6 @@ export function AssignmentsTable({
   onCancel?: (assignment: Assignment) => void
   empty: string
 }) {
-  const columns = 6
   return (
     <div className="overflow-x-auto rounded-xl border border-navy-800 bg-navy-900">
       <table className="w-full text-left text-sm">
@@ -82,7 +81,7 @@ export function AssignmentsTable({
         <tbody className="divide-y divide-navy-800">
           {assignments?.length === 0 && (
             <tr>
-              <td colSpan={columns} className="px-4 py-6 text-center text-navy-400">
+              <td colSpan={6} className="px-4 py-6 text-center text-navy-400">
                 {empty}
               </td>
             </tr>

@@ -374,11 +374,12 @@ def readiness(
             "review_state": doc.review_state,
             "verified": doc.verified,
         }
+        awaiting_review = doc.review_state == "not_reviewed"
         if bucket is not None:
             buckets[bucket].append(entry)
-        if doc.review_state == "not_reviewed":
+        if awaiting_review:
             buckets["not_reviewed"].append(entry)
-        if bucket is None and doc.review_state != "not_reviewed":
+        if bucket is None and not awaiting_review:
             buckets["covers_all"].append(entry)
 
     position_notice = None
