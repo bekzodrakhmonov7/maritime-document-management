@@ -59,8 +59,13 @@ class DummyRequest:
 
 
 class MockConn:
+    """An active administrator's users row, whatever the token says."""
+
+    def __init__(self, email: str = "row@example.com"):
+        self.email = email
+
     async def fetchrow(self, query, *args):
-        return None
+        return {"email": self.email, "full_name": "Row", "status": "active", "role": "administrator"}
 
 
 @pytest.mark.asyncio
@@ -68,8 +73,9 @@ async def test_valid_token_decodes(valid_token: str) -> None:
     request = DummyRequest(valid_token)
     user = await get_signed_in_user(request, MockConn())
     assert isinstance(user, UserPayload)
-    assert user.email == "test@example.com"
-    assert user.role == "admin"
+    assert user.email == "row@example.com"
+    # The role comes from the users row; the token's role claim is ignored.
+    assert user.role == "administrator"
 
 
 @pytest.mark.asyncio
@@ -162,10 +168,10 @@ async def test_es256_token_decodes(es256_keypair, monkeypatch) -> None:
     monkeypatch.setattr(app.deps, "_jwks_client", lambda: _FakeJWKSClient(public_key))
 
     request = DummyRequest(token)
-    user = await get_signed_in_user(request, MockConn())
+    user = await get_signed_in_user(request, MockConn("es256@test.com"))
     assert isinstance(user, UserPayload)
     assert user.email == "es256@test.com"
-    assert user.role == "authenticated"
+    assert user.role == "administrator"
     assert str(user.sub) == sub
 
 
@@ -230,35 +236,50 @@ async def test_unsupported_alg_rejected() -> None:
 
 
 class _RowConn:
-    def __init__(self, row: dict):
+    def __init__(self, row: dict | None):
         self._row = row
 
     async def fetchrow(self, query, *args):
         return self._row
 
 
+def _row(status: str, role: str | None) -> dict:
+    return {"email": "a@example.com", "full_name": "A", "status": status, "role": role}
+
+
 @pytest.mark.asyncio
-async def test_unapproved_account_is_refused(valid_token: str) -> None:
+async def test_token_without_an_account_is_refused(valid_token: str) -> None:
+    from fastapi import HTTPException
+
+    request = DummyRequest(valid_token)
+    with pytest.raises(HTTPException) as exc_info:
+        await get_signed_in_user(request, _RowConn(None))
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "no_account"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status, role, code",
+    [("pending", None, "account_pending"), ("deactivated", "manager", "account_deactivated")],
+)
+async def test_inactive_account_is_refused(valid_token: str, status, role, code) -> None:
     from fastapi import HTTPException
 
     from app.deps import get_current_user
 
-    request = DummyRequest(valid_token)
-    user = await get_signed_in_user(
-        request, _RowConn({"role": "crewing_officer", "is_approved": False})
-    )
-    assert user.is_approved is False
+    user = await get_signed_in_user(DummyRequest(valid_token), _RowConn(_row(status, role)))
     with pytest.raises(HTTPException) as exc_info:
         await get_current_user(user)
     assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == code
 
 
 @pytest.mark.asyncio
-async def test_approved_account_passes(valid_token: str) -> None:
+async def test_active_account_passes(valid_token: str) -> None:
     from app.deps import get_current_user
 
-    request = DummyRequest(valid_token)
     user = await get_signed_in_user(
-        request, _RowConn({"role": "administrator", "is_approved": True})
+        DummyRequest(valid_token), _RowConn(_row("active", "administrator"))
     )
     assert (await get_current_user(user)).role == "administrator"

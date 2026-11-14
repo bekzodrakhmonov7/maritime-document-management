@@ -6,8 +6,7 @@ A full-stack application for tracking maritime crew document expirations across 
 
 - **Backend**: FastAPI + asyncpg + Supabase local (PostgreSQL + Auth + Storage)
 - **Frontend**: React 19 + Vite + Tailwind CSS v4 + shadcn/ui
-- **Worker**: APScheduler for daily expiry scans
-- **SMTP**: fastapi-mail + Mailhog (local dev)
+- **E-mail**: Resend HTTP API
 
 ## Prerequisites
 
@@ -47,9 +46,27 @@ npx supabase@latest db reset   # Applies migrations in supabase/migrations/
 
 > **Note:** `supabase db reset` is destructive — it drops and recreates the
 > local database, which **wipes all registered auth users** (`auth.users` and
-> `public.users`). Only the seed data (vessels, seafarers, document types) is
-> restored. After every reset you must re-register your account. Use a hosted
-> Supabase project for durable data.
+> `public.users`). Only the seed data is restored. After every reset you must
+> re-register your account and make it an administrator again (below).
+
+The app connects as the restricted `app_backend` database role, never as the
+table owner, so it can only add to and read the Audit Log. `seed.sql` gives it
+the local password `app_backend_dev` (see `DATABASE_URL` in `.env.example`).
+
+### First administrator
+
+New accounts start **pending** with no role and see only a "waiting for
+approval" page. Sign up in the app, then make that account the first
+administrator:
+
+```bash
+cd backend
+uv run python -m app.scripts.make_admin you@company.com
+```
+
+After that, administrators approve new sign-ups on the **Accounts** page,
+choosing a role (administrator, crewing officer or manager) and giving a
+reason. Every approval, role change and switch-off/on is audited.
 
 Start the FastAPI server:
 
@@ -67,23 +84,6 @@ npm run dev
 
 The UI will be available at `http://localhost:5173`.
 
-### 4. Worker (optional — runs scheduled scans)
-
-```bash
-cd backend
-uv run python -m app.worker.run_expiry_scan --once
-```
-
-For continuous scheduling:
-
-```bash
-uv run python -m app.worker.run_expiry_scan
-```
-
-### 5. Mailhog (view emails locally)
-
-Mailhog is available at `http://localhost:8025` when running via docker-compose.
-
 ## Running Tests
 
 ### Backend
@@ -93,11 +93,9 @@ cd backend
 uv run pytest tests/ -v
 ```
 
-All 68 tests should pass:
-
-- 4 E2E tests
-- 38 integration tests
-- 26 unit tests
+Integration tests need the local database. The app under test connects as
+`app_backend` (derived from `OWNER_DATABASE_URL`, or set `APP_DATABASE_URL`);
+fixtures arrange rows through `OWNER_DATABASE_URL` and never use the seed.
 
 ### Frontend
 
@@ -112,14 +110,12 @@ Key variables in `.env` (project root):
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@127.0.0.1:54322/postgres` |
+| `DATABASE_URL` | The app's connection, as `app_backend` | `postgresql://app_backend:app_backend_dev@127.0.0.1:54322/postgres` |
+| `OWNER_DATABASE_URL` | The table owner, for tooling and test fixtures only | `postgresql://postgres:postgres@127.0.0.1:54322/postgres` |
 | `SUPABASE_URL` | Supabase local API URL | `http://127.0.0.1:54321` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | `eyJhbG...` |
 | `SUPABASE_JWT_SECRET` | JWT signing secret | `super-secret-jwt-token-with-at-least-32-characters-long` |
-| `SMTP_HOST` | SMTP server | `localhost` |
-| `SMTP_PORT` | SMTP port | `1025` |
-| `SMTP_USER` | SMTP username | `mailhog` |
-| `SMTP_PASS` | SMTP password | `mailhog` |
+| `RESEND_API_KEY` | Resend API key for e-mail | `re_...` |
 | `MAIL_FROM` | Sender email | `noreply@maritime.local` |
 
 Frontend variables in `frontend/.env`:
@@ -139,13 +135,13 @@ Frontend variables in `frontend/.env`:
 │   │   ├── main.py              # FastAPI app factory
 │   │   ├── config.py            # Pydantic settings
 │   │   ├── db.py                # asyncpg pool
-│   │   ├── deps.py              # JWT auth dependency
-│   │   ├── routers/             # API endpoints
+│   │   ├── deps.py              # JWT + per-request account check
+│   │   ├── audit.py             # The audit helper (Audit Log writes)
+│   │   ├── routers/             # API endpoints (under /api)
 │   │   ├── services/            # Business logic
-│   │   └── worker/              # Expiry scan scheduler
+│   │   └── scripts/             # make_admin
 │   ├── tests/
-│   │   ├── e2e/                 # End-to-end tests
-│   │   ├── integration/         # Integration tests
+│   │   ├── integration/         # Integration tests (app runs as app_backend)
 │   │   └── unit/                # Unit tests
 ├── supabase/
 │   └── migrations/              # Database migrations
@@ -168,7 +164,11 @@ With the backend running, visit:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
-## Default Roles
+## Roles
 
-- **Administrator**: Full access to vessels, seafarers, documents, reports, and configuration.
-- **Crewing Officer**: Can manage seafarers and documents, read-only on vessels and reports.
+- **Administrator**: approves accounts and changes their roles and status; maintains the fleet and the rules.
+- **Crewing Officer**: manages the seafarers and documents of their vessels.
+- **Manager**: sees fleet-level totals only.
+
+Accounts are never deleted. The last active administrator can't be deactivated
+or demoted, and no administrator can change their own role or status.

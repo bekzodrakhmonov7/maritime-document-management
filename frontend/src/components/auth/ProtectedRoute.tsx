@@ -1,10 +1,11 @@
 import { Navigate } from 'react-router-dom'
-import { Clock } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { WaitingForApprovalPage } from '../../pages/WaitingForApprovalPage'
 import type { ReactNode } from 'react'
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, loading, isApproved, signOut } = useAuth()
+  const { user, loading, status, signOut } = useAuth()
 
   if (loading) {
     return (
@@ -18,20 +19,23 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
-  // FR-01: a new account can do nothing until an administrator approves it.
-  if (!isApproved) {
+  // FR-01: a pending account sees only the waiting page.
+  if (status === 'pending') {
+    return <WaitingForApprovalPage />
+  }
+
+  if (status !== 'active') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-navy-950 px-4">
-        <div className="w-full max-w-md rounded-xl border border-navy-800 bg-navy-900 p-8 text-center shadow-2xl">
-          <Clock className="mx-auto mb-4 h-10 w-10 text-navy-300" aria-hidden="true" />
-          <h1 className="text-xl font-semibold text-navy-50">Awaiting approval</h1>
+        <div className="w-full max-w-md rounded-xl border border-navy-800 bg-navy-900 p-8 text-center">
+          <AlertCircle className="mx-auto mb-4 h-10 w-10 text-status-expired" aria-hidden="true" />
+          <h1 className="text-xl font-semibold text-navy-50">Your account can't be loaded</h1>
           <p className="mt-2 text-sm text-navy-300">
-            Your account has been created. An administrator must approve it and assign your role
-            before you can use the system.
+            The server didn't recognise this sign-in. Try again later or sign out.
           </p>
           <button
             type="button"
-            onClick={() => signOut()}
+            onClick={() => void signOut()}
             className="mt-6 rounded-lg bg-navy-700 px-4 py-2 text-sm font-medium text-navy-50 hover:bg-navy-600 focus:outline-none focus:ring-2 focus:ring-navy-400/40"
           >
             Sign out

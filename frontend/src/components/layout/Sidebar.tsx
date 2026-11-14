@@ -1,43 +1,58 @@
 import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard,
-  Ship,
-  Users,
-  FileText,
-  Bell,
-  BarChart3,
-  Settings,
-  Anchor,
-} from 'lucide-react'
+import { Anchor, Home, UserCheck, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/cn'
+import { usePendingCount } from '../../hooks/useAccounts'
+import type { UserRole } from '../../types'
 
 interface NavItem {
   to: string
   label: string
-  icon: typeof LayoutDashboard
-  adminOnly?: boolean
+  icon: LucideIcon
+  roles: UserRole[]
+  badge?: 'pending-accounts'
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/vessels', label: 'Vessels', icon: Ship },
-  { to: '/seafarers', label: 'Seafarers', icon: Users },
-  { to: '/documents', label: 'Documents', icon: FileText },
-  { to: '/alerts', label: 'Alerts', icon: Bell },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/admin/config', label: 'Admin Config', icon: Settings, adminOnly: true },
+interface NavGroup {
+  label: string | null
+  items: NavItem[]
+}
+
+const ALL: UserRole[] = ['administrator', 'crewing_officer', 'manager']
+
+// Built up slice by slice (see the build plan's Navigation table).
+const NAV: NavGroup[] = [
+  {
+    label: null,
+    items: [{ to: '/', label: 'Home', icon: Home, roles: ALL }],
+  },
+  {
+    label: 'Admin',
+    items: [
+      {
+        to: '/admin/accounts',
+        label: 'Accounts',
+        icon: UserCheck,
+        roles: ['administrator'],
+        badge: 'pending-accounts',
+      },
+    ],
+  },
 ]
 
 interface SidebarProps {
-  role: string | null
+  role: UserRole | null
   isOpen: boolean
   onClose: () => void
 }
 
 export function Sidebar({ role, isOpen, onClose }: SidebarProps) {
   const isAdmin = role === 'administrator'
+  const { data: pending } = usePendingCount(isAdmin)
 
-  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin)
+  const groups = NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => role !== null && item.roles.includes(role)),
+  })).filter((group) => group.items.length > 0)
 
   return (
     <>
@@ -57,41 +72,54 @@ export function Sidebar({ role, isOpen, onClose }: SidebarProps) {
       >
         <div className="flex h-16 items-center gap-3 border-b border-navy-800 px-6">
           <Anchor className="h-6 w-6 text-navy-300" />
-          <span className="text-sm font-semibold tracking-wide text-navy-100">
-            Crew Monitor
-          </span>
+          <span className="text-sm font-semibold tracking-wide text-navy-100">Crew Monitor</span>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto p-4" aria-label="Main navigation">
-          {visibleItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-navy-700 text-navy-50'
-                      : 'text-navy-300 hover:bg-navy-800 hover:text-navy-100',
-                  )
-                }
-              >
-                <Icon className="h-5 w-5 shrink-0" />
-                {item.label}
-              </NavLink>
-            )
-          })}
+        <nav className="flex-1 space-y-6 overflow-y-auto p-4" aria-label="Main navigation">
+          {groups.map((group) => (
+            <div key={group.label ?? 'main'} className="space-y-1">
+              {group.label && (
+                <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-navy-500">
+                  {group.label}
+                </p>
+              )}
+              {group.items.map((item) => {
+                const Icon = item.icon
+                const count = item.badge === 'pending-accounts' ? (pending ?? 0) : 0
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-navy-700 text-navy-50'
+                          : 'text-navy-300 hover:bg-navy-800 hover:text-navy-100',
+                      )
+                    }
+                  >
+                    <Icon className="h-5 w-5 shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                    {count > 0 && (
+                      <span
+                        className="rounded-full bg-status-expiring px-2 py-0.5 text-xs font-semibold text-navy-950"
+                        aria-label={`${count} pending`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </NavLink>
+                )
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="border-t border-navy-800 p-4">
-          <p className="text-xs text-navy-500">
-            Maritime Crew Document
-            <br />
-            Expiry Monitoring System
-          </p>
+          <p className="text-xs text-navy-500">Crew Document Management</p>
         </div>
       </aside>
     </>

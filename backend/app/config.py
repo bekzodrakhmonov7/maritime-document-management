@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     supabase_service_role_key: str
     supabase_jwt_secret: str = ""
 
+    # The app's connection, as the restricted app_backend role (ADR 0002).
     database_url: str
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
@@ -24,8 +25,6 @@ class Settings(BaseSettings):
 
     resend_api_key: str = ""
     mail_from: str
-
-    enable_daily_scan: bool = True
 
 
 settings = Settings()

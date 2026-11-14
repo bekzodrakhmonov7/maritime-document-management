@@ -1,14 +1,15 @@
 import { Navigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
+import type { UserRole } from '../types'
 
 interface RoleGateProps {
   children: ReactNode
-  roles: string[]
+  roles: UserRole[]
   redirectTo?: string
 }
 
-export function RoleGate({ children, roles, redirectTo = '/dashboard' }: RoleGateProps) {
+export function RoleGate({ children, roles, redirectTo = '/' }: RoleGateProps) {
   const { role, loading } = useAuth()
 
   if (loading) {
