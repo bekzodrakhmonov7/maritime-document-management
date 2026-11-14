@@ -28,7 +28,7 @@ async def get_db() -> AsyncGenerator[asyncpg.Connection, None]:
         yield conn
 
 
-async def get_current_user(
+async def get_signed_in_user(
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
 ) -> UserPayload:
@@ -96,14 +96,32 @@ async def get_current_user(
         )
 
     sub = UUID(payload["sub"])
-    row = await db.fetchrow("SELECT role FROM public.users WHERE id = $1", sub)
+    row = await db.fetchrow(
+        "SELECT role, is_approved FROM public.users WHERE id = $1", sub
+    )
+    # NOTE: the no-row fallback to the token's role claim only exists for the
+    # test fixtures; real Supabase users always have a public.users row.
     role = row["role"] if row else payload.get("role", "")
+    is_approved = row["is_approved"] if row else True
 
     return UserPayload(
         sub=sub,
         email=payload.get("email", ""),
         role=role,
+        is_approved=is_approved,
     )
+
+
+async def get_current_user(
+    user: UserPayload = Depends(get_signed_in_user),
+) -> UserPayload:
+    """A signed-in user whose account an administrator has approved (FR-01)."""
+    if not user.is_approved:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account awaiting administrator approval",
+        )
+    return user
 
 
 def require_role(*roles: str):

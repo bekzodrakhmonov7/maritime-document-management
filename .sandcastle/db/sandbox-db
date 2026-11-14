@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Private Postgres 17 for one Sandcastle sandbox, standing in for the local
+# Supabase database. Listens on 127.0.0.1:5432 inside the container only.
+#
+#   sandbox-db start   start the server (creating the cluster if needed)
+#   sandbox-db reset   like `supabase db reset`: brand-new cluster, then the
+#                      Supabase stand-in, supabase/migrations/*.sql and
+#                      supabase/seed.sql, each migration in its own transaction
+#   sandbox-db stop    stop the server
+#   sandbox-db psql    open psql as postgres (extra args are passed through)
+#
+# Every reset starts from a new cluster because roles are cluster-wide: a
+# migration that does CREATE ROLE would otherwise fail the second time.
+set -euo pipefail
+
+PGDATA="${SANDBOX_PGDATA:-$HOME/pgdata}"
+SHIM="${SANDBOX_DB_SHIM:-/opt/sandbox-db/supabase-shim.sql}"
+export PGHOST=127.0.0.1 PGPORT=5432 PGPASSWORD=postgres PGDATABASE=postgres
+
+running() { pg_ctl -D "$PGDATA" status >/dev/null 2>&1; }
+
+init_cluster() {
+  local pwfile
+  pwfile="$(mktemp)"
+  printf 'postgres' >"$pwfile"
+  # supabase_admin is the bootstrap superuser, as on Supabase.
+  initdb -D "$PGDATA" -U supabase_admin --pwfile="$pwfile" \
+    --auth=scram-sha-256 --encoding=UTF8 --locale=C.UTF-8 >/dev/null
+  rm -f "$pwfile"
+}
+
+start() {
+  [ -s "$PGDATA/PG_VERSION" ] || init_cluster
+  if ! running; then
+    pg_ctl -D "$PGDATA" -l "$PGDATA/server.log" -w \
+      -o "-c listen_addresses=127.0.0.1 -c port=5432 -k /tmp" start >/dev/null
+  fi
+}
+
+stop() {
+  if [ -s "$PGDATA/PG_VERSION" ] && running; then
+    pg_ctl -D "$PGDATA" -m fast -w stop >/dev/null
+  fi
+}
+
+apply() { # apply <role> <file>
+  PGUSER="$1" psql -X -q -v ON_ERROR_STOP=1 --single-transaction -f "$2" >/dev/null
+}
+
+reset() {
+  local root
+  root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  stop
+  rm -rf "$PGDATA"
+  start
+  apply supabase_admin "$SHIM"
+  shopt -s nullglob
+  local f
+  for f in "$root"/supabase/migrations/*.sql; do
+    echo "sandbox-db: applying ${f#"$root"/}"
+    apply postgres "$f"
+  done
+  if [ -f "$root/supabase/seed.sql" ]; then
+    echo "sandbox-db: applying supabase/seed.sql"
+    apply postgres "$root/supabase/seed.sql"
+  fi
+  echo "sandbox-db: database reset at postgresql://postgres:postgres@127.0.0.1:5432/postgres"
+}
+
+case "${1:-}" in
+  start) start ;;
+  stop) stop ;;
+  reset) reset ;;
+  psql) shift; start; PGUSER=postgres exec psql -X "$@" ;;
+  *) echo "usage: sandbox-db start|reset|stop|psql" >&2; exit 2 ;;
+esac

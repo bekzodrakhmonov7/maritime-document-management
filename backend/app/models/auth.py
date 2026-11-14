@@ -7,3 +7,4 @@ class UserPayload(BaseModel):
     sub: UUID
     email: str
     role: str
+    is_approved: bool = True

@@ -2,25 +2,26 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { supabase } from '../lib/supabase'
 import { apiFetch } from '../lib/api'
 import type { Session, User } from '@supabase/supabase-js'
-import type { UserRole } from '../types'
 
 interface AuthUser {
   sub: string
   email: string
   role: string
+  is_approved: boolean
 }
 
 interface AuthContextValue {
   user: User | null
   session: Session | null
   role: string | null
+  /** false while an administrator has not yet approved the account (FR-01) */
+  isApproved: boolean
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error?: Error }>
   signUp: (
     email: string,
     password: string,
     fullName: string,
-    role: UserRole,
   ) => Promise<{ error?: Error; needsEmailConfirmation?: boolean }>
   signOut: () => Promise<void>
 }
@@ -31,14 +32,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [role, setRole] = useState<string | null>(null)
+  const [isApproved, setIsApproved] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const fetchRole = useCallback(async () => {
     try {
       const data = await apiFetch('/auth/me') as AuthUser
       setRole(data.role)
+      setIsApproved(data.is_approved)
     } catch {
       setRole(null)
+      setIsApproved(false)
     }
   }, [])
 
@@ -81,13 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     fullName: string,
-    role: UserRole,
   ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: fullName, role },
+        data: { full_name: fullName },
       },
     })
     if (error) {
@@ -100,10 +103,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut()
     setRole(null)
+    setIsApproved(false)
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, role, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, isApproved, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   )

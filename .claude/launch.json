@@ -1,0 +1,33 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5176"
+      ],
+      "port": 5176
+    },
+    {
+      "name": "t10-proto",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../mdm-t10-proto/frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5177"
+      ],
+      "port": 5177
+    }
+  ]
+}

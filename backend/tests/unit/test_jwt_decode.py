@@ -5,7 +5,7 @@ import jwt
 import pytest
 
 from app.config import settings
-from app.deps import get_current_user
+from app.deps import get_signed_in_user
 from app.models.auth import UserPayload
 
 
@@ -66,7 +66,7 @@ class MockConn:
 @pytest.mark.asyncio
 async def test_valid_token_decodes(valid_token: str) -> None:
     request = DummyRequest(valid_token)
-    user = await get_current_user(request, MockConn())
+    user = await get_signed_in_user(request, MockConn())
     assert isinstance(user, UserPayload)
     assert user.email == "test@example.com"
     assert user.role == "admin"
@@ -78,7 +78,7 @@ async def test_expired_token_rejected(expired_token: str) -> None:
 
     request = DummyRequest(expired_token)
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(request, MockConn())
+        await get_signed_in_user(request, MockConn())
     assert exc_info.value.status_code == 401
     assert "expired" in str(exc_info.value.detail).lower()
 
@@ -89,7 +89,7 @@ async def test_wrong_audience_rejected(wrong_audience_token: str) -> None:
 
     request = DummyRequest(wrong_audience_token)
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(request, MockConn())
+        await get_signed_in_user(request, MockConn())
     assert exc_info.value.status_code == 401
 
 
@@ -99,7 +99,7 @@ async def test_malformed_token_rejected() -> None:
 
     request = DummyRequest("not-a-valid-jwt")
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(request, MockConn())
+        await get_signed_in_user(request, MockConn())
     assert exc_info.value.status_code == 401
 
 
@@ -109,7 +109,7 @@ async def test_missing_header_rejected() -> None:
 
     request = DummyRequest(None)
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(request, MockConn())
+        await get_signed_in_user(request, MockConn())
     assert exc_info.value.status_code == 401
 
 
@@ -162,7 +162,7 @@ async def test_es256_token_decodes(es256_keypair, monkeypatch) -> None:
     monkeypatch.setattr(app.deps, "_jwks_client", lambda: _FakeJWKSClient(public_key))
 
     request = DummyRequest(token)
-    user = await get_current_user(request, MockConn())
+    user = await get_signed_in_user(request, MockConn())
     assert isinstance(user, UserPayload)
     assert user.email == "es256@test.com"
     assert user.role == "authenticated"
@@ -186,7 +186,7 @@ async def test_es256_expired_token_rejected(es256_keypair, monkeypatch) -> None:
 
     request = DummyRequest(token)
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(request, MockConn())
+        await get_signed_in_user(request, MockConn())
     assert exc_info.value.status_code == 401
     assert "expired" in str(exc_info.value.detail).lower()
 
@@ -204,7 +204,7 @@ async def test_es256_wrong_audience_rejected(es256_keypair, monkeypatch) -> None
 
     request = DummyRequest(token)
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(request, MockConn())
+        await get_signed_in_user(request, MockConn())
     assert exc_info.value.status_code == 401
 
 
@@ -225,5 +225,40 @@ async def test_unsupported_alg_rejected() -> None:
 
     request = DummyRequest(token)
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(request, MockConn())
+        await get_signed_in_user(request, MockConn())
     assert exc_info.value.status_code == 401
+
+
+class _RowConn:
+    def __init__(self, row: dict):
+        self._row = row
+
+    async def fetchrow(self, query, *args):
+        return self._row
+
+
+@pytest.mark.asyncio
+async def test_unapproved_account_is_refused(valid_token: str) -> None:
+    from fastapi import HTTPException
+
+    from app.deps import get_current_user
+
+    request = DummyRequest(valid_token)
+    user = await get_signed_in_user(
+        request, _RowConn({"role": "crewing_officer", "is_approved": False})
+    )
+    assert user.is_approved is False
+    with pytest.raises(HTTPException) as exc_info:
+        await get_current_user(user)
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_approved_account_passes(valid_token: str) -> None:
+    from app.deps import get_current_user
+
+    request = DummyRequest(valid_token)
+    user = await get_signed_in_user(
+        request, _RowConn({"role": "administrator", "is_approved": True})
+    )
+    assert (await get_current_user(user)).role == "administrator"
