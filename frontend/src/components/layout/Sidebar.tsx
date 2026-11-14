@@ -1,5 +1,14 @@
 import { NavLink } from 'react-router-dom'
-import { Anchor, Briefcase, FileText, Home, Ship, UserCheck, type LucideIcon } from 'lucide-react'
+import {
+  Anchor,
+  Briefcase,
+  FileText,
+  Home,
+  Settings,
+  Ship,
+  UserCheck,
+  type LucideIcon,
+} from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { usePendingCount } from '../../hooks/useAccounts'
 import type { UserRole } from '../../types'
@@ -40,6 +49,7 @@ const NAV: NavGroup[] = [
       },
       { to: '/admin/document-types', label: 'Document Types', icon: FileText, roles: ['administrator'] },
       { to: '/admin/positions', label: 'Positions', icon: Briefcase, roles: ['administrator'] },
+      { to: '/admin/settings', label: 'Settings', icon: Settings, roles: ['administrator'] },
     ],
   },
 ]
