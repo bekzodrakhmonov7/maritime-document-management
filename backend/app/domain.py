@@ -59,9 +59,14 @@ def _latest_by_version(rows: Iterable[Mapping[str, Any]]) -> dict[int, Mapping[s
     return latest
 
 
+def _latest_for(version_id: int, rows: Iterable[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    """One Version's latest row (the highest id), or None when it has none."""
+    return _latest_by_version(r for r in rows if r["version_id"] == version_id).get(version_id)
+
+
 def review_state(version_id: int, reviews: Iterable[Mapping[str, Any]]) -> ReviewState:
     """A Version's latest Review decides: accepted, rejected, or not reviewed yet."""
-    latest = _latest_by_version(r for r in reviews if r["version_id"] == version_id).get(version_id)
+    latest = _latest_for(version_id, reviews)
     if latest is None:
         return "not_reviewed"
     return "accepted" if latest["decision"] == "accept" else "rejected"
@@ -94,9 +99,7 @@ def is_verified(
     checked again."""
     if current is None:
         return False
-    latest = _latest_by_version(
-        v for v in verifications if v["version_id"] == current["id"]
-    ).get(current["id"])
+    latest = _latest_for(current["id"], verifications)
     return latest is not None and latest["result"] == "confirmed"
 
 
