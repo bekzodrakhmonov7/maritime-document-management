@@ -65,10 +65,7 @@ async def add(
 ) -> list[dict]:
     """Link an active crewing officer to an active vessel; returns the vessel's officers."""
     async with conn.transaction():
-        if not await conn.fetchval(
-            "SELECT EXISTS (SELECT 1 FROM public.vessel WHERE id = $1)", vessel_id
-        ):
-            raise NotFound()
+        await reference_data.get_row(conn, reference_data.VESSEL, vessel_id)
         await link(conn, ctx, account_id, vessel_id)
     return await list_for_vessel(conn, vessel_id)
 

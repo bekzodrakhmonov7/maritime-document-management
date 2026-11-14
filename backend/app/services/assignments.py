@@ -12,12 +12,15 @@ planning needs the new vessel, editing the old and the new one, cancelling
 the Assignment's own. Administrators are unrestricted.
 """
 
+from collections.abc import Mapping
+from datetime import date
 from typing import Any
 
 import asyncpg
 
 from app import audit, domain
 from app.audit import AuditAction, AuditContext
+from app.models.assignment import AssignmentStatus
 from app.models.auth import UserPayload
 from app.scope import Scope
 from app.services import reference_data, responsible_officers, seafarers
@@ -44,15 +47,17 @@ def _select(scope: Scope | None = None) -> str:
     return f"SELECT {in_scope} {_FIELDS}"
 
 
+def _state(row: Mapping[str, Any], today: date) -> AssignmentStatus:
+    if row["cancelled_at"] is not None:
+        return "cancelled"
+    return domain.assignment_state(row["start_date"], row["end_date"], today)
+
+
 def _read(row: asyncpg.Record, scope: Scope) -> dict:
     found = dict(row)
     found.pop("in_scope", None)
     found["position_differs"] = found["position_id"] != found.pop("held_position_id")
-    found["state"] = (
-        "cancelled"
-        if found["cancelled_at"] is not None
-        else domain.assignment_state(found["start_date"], found["end_date"], scope.today)
-    )
+    found["state"] = _state(found, scope.today)
     return found
 
 
@@ -68,8 +73,7 @@ async def list_for_seafarer(conn: asyncpg.Connection, scope: Scope, seafarer_id:
 
 async def list_for_vessel(conn: asyncpg.Connection, scope: Scope, vessel_id: int) -> list[dict]:
     """A vessel's crew under way and upcoming, limited to the caller's Scope."""
-    if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM public.vessel WHERE id = $1)", vessel_id):
-        raise NotFound()
+    await reference_data.get_row(conn, reference_data.VESSEL, vessel_id)
     rows = await conn.fetch(
         f"""
         {_select()}
@@ -158,10 +162,10 @@ async def edit(
             await reference_data.check_pickable(conn, reference_data.VESSEL, after["vessel_id"])
         if "position_id" in after:
             await reference_data.check_pickable(conn, reference_data.POSITION, after["position_id"])
-        assignments = ", ".join(f"{c} = ${i}" for i, c in enumerate(after, start=2))
+        set_clause = ", ".join(f"{c} = ${i}" for i, c in enumerate(after, start=2))
         await _write(
             conn,
-            f"UPDATE public.assignment SET {assignments}, updated_at = now() WHERE id = $1",
+            f"UPDATE public.assignment SET {set_clause}, updated_at = now() WHERE id = $1",
             assignment_id,
             *after.values(),
         )

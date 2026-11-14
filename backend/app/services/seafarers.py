@@ -10,6 +10,7 @@ Each record carries its Current Vessel, derived from the Assignment under way
 on the Scope's "today" (None: ashore).
 """
 
+from collections.abc import Mapping
 from datetime import date
 from typing import Any
 
@@ -192,10 +193,13 @@ async def reactivate(
         return await get_seafarer(conn, scope, seafarer_id)
 
 
-def _current_vessel_fields(assignment: Any) -> dict:
+def _current_vessel_fields(assignment: Mapping[str, Any] | None) -> dict:
+    """The Current Vessel of `assignment`, the one under way (None: ashore)."""
+    if assignment is None:
+        return {"current_vessel_id": None, "current_vessel_name": None}
     return {
-        "current_vessel_id": assignment["vessel_id"] if assignment else None,
-        "current_vessel_name": assignment["vessel_name"] if assignment else None,
+        "current_vessel_id": assignment["vessel_id"],
+        "current_vessel_name": assignment["vessel_name"],
     }
 
 
