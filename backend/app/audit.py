@@ -24,6 +24,11 @@ class AuditAction(StrEnum):
     ACCOUNT_ROLE_CHANGED = "account_role_changed"
     ACCOUNT_DEACTIVATED = "account_deactivated"
     ACCOUNT_REACTIVATED = "account_reactivated"
+    # Written by the auth.audit_log_entries trigger, not by the API.
+    LOGIN_SUCCEEDED = "login_succeeded"
+    LOGIN_FAILED = "login_failed"
+    LOGOUT = "logout"
+    ACCESS_REFUSED = "access_refused"
 
 
 Outcome = Literal["succeeded", "refused"]
@@ -48,16 +53,27 @@ class AuditContext:
 
 
 def audit_context_for(request: Request, user: UserPayload) -> AuditContext:
+    return request_audit_context(request, user.sub, user.email, user.role)
+
+
+def request_audit_context(
+    request: Request,
+    actor_id: UUID | None,
+    actor_email: str | None,
+    actor_role: str | None,
+) -> AuditContext:
+    """The actor as given, plus the request's IP and id."""
     return AuditContext(
-        actor_id=user.sub,
-        actor_email=user.email,
-        actor_role=user.role,
-        ip=_ip(request.client.host if request.client else None),
+        actor_id=actor_id,
+        actor_email=actor_email,
+        actor_role=actor_role,
+        ip=client_ip(request),
         request_id=getattr(request.state, "request_id", None),
     )
 
 
-def _ip(host: str | None) -> str | None:
+def client_ip(request: Request) -> str | None:
+    host = request.client.host if request.client else None
     try:
         return str(ipaddress.ip_address(host)) if host else None
     except ValueError:

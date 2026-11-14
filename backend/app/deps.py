@@ -103,6 +103,9 @@ async def get_signed_in_user(
             detail="Invalid token",
         )
 
+    # Remembered for the refused-access record (app/refused_access.py).
+    request.state.token_sub = sub
+
     # The Account row is the only source of status and role: the token's role
     # claim is never trusted, and a token with no row is refused.
     row = await db.fetchrow(
@@ -111,13 +114,14 @@ async def get_signed_in_user(
     if row is None:
         raise account_refused("no_account", "There is no account for this sign-in.")
 
-    return UserPayload(
+    request.state.account = UserPayload(
         sub=sub,
         email=row["email"],
         full_name=row["full_name"],
         status=row["status"],
         role=row["role"],
     )
+    return request.state.account
 
 
 def account_refused(code: str, message: str) -> HTTPException:

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import jwt
@@ -54,6 +55,7 @@ def wrong_audience_token() -> str:
 class DummyRequest:
     def __init__(self, token: str | None = None):
         self.headers = {}
+        self.state = SimpleNamespace()
         if token:
             self.headers["authorization"] = f"Bearer {token}"
 

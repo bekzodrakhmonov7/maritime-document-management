@@ -119,17 +119,22 @@ async def make_account(owner_db):
 
 
 @pytest_asyncio.fixture
-async def client():
-    """The app driven in-process over HTTP, connected as app_backend."""
+async def app():
+    """The app with a real pool, connected as app_backend."""
     import app.db as db_module
 
     pool = await db_module.create_pool()
     db_module._pool = pool
-    app = create_app()
-    transport = ASGITransport(app=app)
     try:
-        async with AsyncClient(transport=transport, base_url="http://test") as c:
-            yield c
+        yield create_app()
     finally:
         await pool.close()
         db_module._pool = None
+
+
+@pytest_asyncio.fixture
+async def client(app):
+    """The app driven in-process over HTTP."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c

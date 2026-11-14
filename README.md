@@ -68,6 +68,14 @@ After that, administrators approve new sign-ups on the **Accounts** page,
 choosing a role (administrator, crewing officer or manager) and giving a
 reason. Every approval, role change and switch-off/on is audited.
 
+Sign-in goes through the backend (`POST /api/auth/login`, a proxy to Supabase
+Auth) so failed attempts are recorded, including ones on unknown e-mails; the
+frontend then calls `setSession`. Successful logins are copied into the Audit
+Log by a trigger on `auth.audit_log_entries`, logouts by
+`POST /api/auth/logout`, and every refused request (403, or a 404 on a record
+outside the caller's Scope) by one exception handler. Stated limit: a direct
+call to Supabase Auth with the public key skips the failed-login record.
+
 Start the FastAPI server:
 
 ```bash
@@ -137,6 +145,8 @@ Frontend variables in `frontend/.env`:
 │   │   ├── db.py                # asyncpg pool
 │   │   ├── deps.py              # JWT + per-request account check
 │   │   ├── audit.py             # The audit helper (Audit Log writes)
+│   │   ├── refused_access.py    # Records every refused request
+│   │   ├── supabase_auth.py     # Password sign-in against Supabase Auth
 │   │   ├── routers/             # API endpoints (under /api)
 │   │   ├── services/            # Business logic
 │   │   └── scripts/             # make_admin
