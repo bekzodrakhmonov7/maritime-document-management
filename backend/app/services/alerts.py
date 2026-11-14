@@ -33,8 +33,10 @@ async def list_open(conn: asyncpg.Connection, scope: Scope) -> list[dict]:
     currents = await documents.current_versions(conn, sorted({r["document_id"] for r in rows}))
     listed: dict[int, dict] = {}
     for row in rows:
+        if row["document_id"] in listed:
+            continue  # Already listed with a more urgent step.
         current = currents[row["document_id"]]
-        if row["document_id"] in listed or not domain.alert_is_open(
+        if not domain.alert_is_open(
             row["expiry_date"],
             current_expiry=None if current is None else current["expiry_date"],
             seafarer_inactive=row["seafarer_inactive"],

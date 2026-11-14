@@ -9,8 +9,8 @@ from app.domain import (
     StepToRaise,
     alert_is_open,
     alert_recipients,
-    daily_check_due,
     current_version,
+    daily_check_due,
     step_to_raise,
 )
 

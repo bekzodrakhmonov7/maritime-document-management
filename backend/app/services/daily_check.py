@@ -308,7 +308,7 @@ def _subject(entries: list[dict]) -> str:
 
 
 def _step_label(step: int, expiry: date, today: date) -> str:
-    """How far a document is from expiry, in the digest and on the Alerts page."""
+    """How far a document is from expiry, as shown in the digest."""
     days_left = (expiry - today).days
     if days_left < 0:
         return f"Expired {-days_left} day{'s' if days_left != -1 else ''} ago"

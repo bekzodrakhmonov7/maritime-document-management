@@ -275,9 +275,9 @@ def alert_recipients(
     Assignment on. A Pool seafarer (no such vessel), or a vessel with no
     active officer, brings in the active administrators."""
     vessel_ids = list(vessel_ids)
-    recipients: set[Recipient] = set()
     if not vessel_ids:
         return set(administrators)
+    recipients: set[Recipient] = set()
     for vessel_id in vessel_ids:
         recipients |= active_officers.get(vessel_id) or administrators
     return recipients
