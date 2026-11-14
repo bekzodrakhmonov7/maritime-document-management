@@ -165,7 +165,9 @@ async def test_app_backend_cannot_delete_accounts_or_settings(make_account):
 
 
 @pytest.mark.parametrize("role", ["anon", "authenticated"])
-@pytest.mark.parametrize("table", ["users", "settings", "audit_log"])
+@pytest.mark.parametrize(
+    "table", ["users", "settings", "audit_log", "vessel", "position", "document_type"]
+)
 async def test_every_table_denies_anon_and_authenticated(owner_db, make_account, role, table):
     await make_account()
     async with owner_db.transaction():

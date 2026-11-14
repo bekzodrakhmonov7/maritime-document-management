@@ -133,3 +133,19 @@ async def client():
     finally:
         await pool.close()
         db_module._pool = None
+
+
+REFERENCE_TABLES = ("vessel", "position", "document_type")
+
+
+@pytest_asyncio.fixture
+async def reference_cleanup(owner_db):
+    """Empty the reference-data tables before and after the test.
+
+    Tests never depend on the seed, so its demo rows go too (a local
+    `sandbox-db reset` brings them back).
+    """
+    statement = f"TRUNCATE {', '.join(f'public.{t}' for t in REFERENCE_TABLES)} CASCADE"
+    await owner_db.execute(statement)
+    yield
+    await owner_db.execute(statement)

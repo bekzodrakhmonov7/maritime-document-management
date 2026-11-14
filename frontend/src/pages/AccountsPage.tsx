@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react'
-import { AlertCircle, Loader2, X } from 'lucide-react'
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useAccountAction, useAccounts, usePendingCount, type AccountAction } from '../hooks/useAccounts'
 import { cn } from '../lib/cn'
+import { ErrorNote } from '../components/ErrorNote'
+import { FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
 import { ROLE_LABELS, type Account, type AccountStatus, type UserRole } from '../types'
 
 type Filter = AccountStatus | 'all'
@@ -209,131 +210,72 @@ function AccountForm({
   const [role, setRole] = useState<UserRole | ''>(kind === 'role' ? '' : (account.role ?? ''))
   const [reason, setReason] = useState('')
   const action = useAccountAction()
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault()
-    const trimmed = reason.trim()
-    if (!trimmed || (needsRole && !role)) return
-    const payload = buildAction(kind, trimmed, needsRole && role ? role : undefined)
-    if (!payload) return
-    action.mutate({ id: account.id, action: payload }, { onSuccess: onClose })
-  }
+  const payload = buildAction(kind, reason.trim(), needsRole && role ? role : undefined)
+  const canSubmit = !!reason.trim() && (!needsRole || !!role) && payload !== null
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/70 px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="account-form-title"
+    <FormDialog
+      title={FORM_TITLE[kind]}
+      subtitle={`${account.full_name} · ${account.email}`}
+      submitLabel={FORM_TITLE[kind]}
+      onSubmit={() => payload && action.mutate({ id: account.id, action: payload }, { onSuccess: onClose })}
+      onClose={onClose}
+      pending={action.isPending}
+      canSubmit={canSubmit}
+      error={action.error}
     >
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md space-y-4 rounded-xl border border-navy-800 bg-navy-900 p-6 shadow-2xl"
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 id="account-form-title" className="text-lg font-semibold text-navy-50">
-              {FORM_TITLE[kind]}
-            </h3>
-            <p className="text-sm text-navy-400">
-              {account.full_name} · {account.email}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-navy-400 hover:text-navy-100"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {needsRole && (
-          <div>
-            <label htmlFor="account-role" className="mb-1 block text-sm font-medium text-navy-100">
-              Role
-            </label>
-            <select
-              id="account-role"
-              required
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className="w-full rounded-lg border border-navy-700 bg-navy-950 px-3 py-2 text-navy-50 focus:border-navy-400 focus:outline-none"
-            >
-              <option value="" disabled>
-                Pick a role
-              </option>
-              {ROLES.filter((r) => kind !== 'role' || r !== account.role).map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r]}
-                </option>
-              ))}
-            </select>
-            {kind === 'role' && account.role === 'crewing_officer' && (
-              <p className="mt-1 text-xs text-status-expiring">
-                Changing a crewing officer's role removes their vessel links.
-              </p>
-            )}
-          </div>
-        )}
-
-        {kind === 'deactivate' && (
-          <p className="text-sm text-navy-300">
-            {account.status === 'pending'
-              ? 'The sign-up is kept as a deactivated account. It can be switched on later.'
-              : 'They are refused and signed out on their next request.'}
-          </p>
-        )}
-
+      {needsRole && (
         <div>
-          <label htmlFor="account-reason" className="mb-1 block text-sm font-medium text-navy-100">
-            Reason
+          <label htmlFor="account-role" className={LABEL_CLASS}>
+            Role
           </label>
-          <textarea
-            id="account-reason"
+          <select
+            id="account-role"
             required
-            rows={3}
-            maxLength={1000}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded-lg border border-navy-700 bg-navy-950 px-3 py-2 text-navy-50 focus:border-navy-400 focus:outline-none"
-            placeholder="Recorded in the Audit Log"
-          />
-        </div>
-
-        {action.error && <ErrorNote message={action.error.message} />}
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-navy-300 hover:bg-navy-800"
+            value={role}
+            onChange={(e) => setRole(e.target.value as UserRole)}
+            className={FIELD_CLASS}
           >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={action.isPending || !reason.trim() || (needsRole && !role)}
-            className="flex items-center gap-2 rounded-lg bg-navy-600 px-4 py-2 text-sm font-medium text-navy-50 hover:bg-navy-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {action.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {FORM_TITLE[kind]}
-          </button>
+            <option value="" disabled>
+              Pick a role
+            </option>
+            {ROLES.filter((r) => kind !== 'role' || r !== account.role).map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r]}
+              </option>
+            ))}
+          </select>
+          {kind === 'role' && account.role === 'crewing_officer' && (
+            <p className="mt-1 text-xs text-status-expiring">
+              Changing a crewing officer's role removes their vessel links.
+            </p>
+          )}
         </div>
-      </form>
-    </div>
-  )
-}
+      )}
 
-function ErrorNote({ message }: { message: string }) {
-  return (
-    <div
-      role="alert"
-      className="flex items-start gap-2 rounded-lg border border-status-expired/40 bg-status-expired-bg/10 p-3"
-    >
-      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-status-expired" />
-      <p className="text-sm text-status-expired">{message}</p>
-    </div>
+      {kind === 'deactivate' && (
+        <p className="text-sm text-navy-300">
+          {account.status === 'pending'
+            ? 'The sign-up is kept as a deactivated account. It can be switched on later.'
+            : 'They are refused and signed out on their next request.'}
+        </p>
+      )}
+
+      <div>
+        <label htmlFor="account-reason" className={LABEL_CLASS}>
+          Reason
+        </label>
+        <textarea
+          id="account-reason"
+          required
+          rows={3}
+          maxLength={1000}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          className={FIELD_CLASS}
+          placeholder="Recorded in the Audit Log"
+        />
+      </div>
+    </FormDialog>
   )
 }

@@ -24,6 +24,20 @@ class AuditAction(StrEnum):
     ACCOUNT_ROLE_CHANGED = "account_role_changed"
     ACCOUNT_DEACTIVATED = "account_deactivated"
     ACCOUNT_REACTIVATED = "account_reactivated"
+    VESSEL_CREATED = "vessel_created"
+    VESSEL_EDITED = "vessel_edited"
+    VESSEL_DEACTIVATED = "vessel_deactivated"
+    VESSEL_REACTIVATED = "vessel_reactivated"
+    POSITION_CREATED = "position_created"
+    POSITION_EDITED = "position_edited"
+    POSITION_RETIRED = "position_retired"
+    POSITION_UNRETIRED = "position_unretired"
+    POSITION_DELETED = "position_deleted"
+    DOCUMENT_TYPE_CREATED = "document_type_created"
+    DOCUMENT_TYPE_EDITED = "document_type_edited"
+    DOCUMENT_TYPE_RETIRED = "document_type_retired"
+    DOCUMENT_TYPE_UNRETIRED = "document_type_unretired"
+    DOCUMENT_TYPE_DELETED = "document_type_deleted"
 
 
 Outcome = Literal["succeeded", "refused"]

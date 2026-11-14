@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db import lifespan
 from app.request_context import RequestIdMiddleware
-from app.routers import accounts, me
+from app.routers import accounts, me, reference_data
 
 
 def create_app() -> FastAPI:
@@ -26,6 +26,9 @@ def create_app() -> FastAPI:
 
     app.include_router(me.router, prefix="/api")
     app.include_router(accounts.router, prefix="/api")
+    app.include_router(reference_data.vessels, prefix="/api")
+    app.include_router(reference_data.positions, prefix="/api")
+    app.include_router(reference_data.document_types, prefix="/api")
 
     return app
 

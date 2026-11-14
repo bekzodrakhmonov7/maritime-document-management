@@ -9,6 +9,10 @@ import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { HomePage } from './pages/HomePage'
 import { AccountsPage } from './pages/AccountsPage'
+import { VesselsPage } from './pages/VesselsPage'
+import { VesselPage } from './pages/VesselPage'
+import { PositionsPage } from './pages/PositionsPage'
+import { DocumentTypesPage } from './pages/DocumentTypesPage'
 
 const queryClient = new QueryClient()
 
@@ -30,10 +34,42 @@ export default function App() {
             >
               <Route index element={<HomePage />} />
               <Route
+                path="vessels"
+                element={
+                  <RoleGate roles={['administrator', 'crewing_officer']}>
+                    <VesselsPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="vessels/:id"
+                element={
+                  <RoleGate roles={['administrator', 'crewing_officer']}>
+                    <VesselPage />
+                  </RoleGate>
+                }
+              />
+              <Route
                 path="admin/accounts"
                 element={
                   <RoleGate roles={['administrator']}>
                     <AccountsPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="admin/document-types"
+                element={
+                  <RoleGate roles={['administrator']}>
+                    <DocumentTypesPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="admin/positions"
+                element={
+                  <RoleGate roles={['administrator']}>
+                    <PositionsPage />
                   </RoleGate>
                 }
               />

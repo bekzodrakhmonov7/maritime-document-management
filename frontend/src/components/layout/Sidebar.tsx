@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Anchor, Home, UserCheck, type LucideIcon } from 'lucide-react'
+import { Anchor, Briefcase, FileText, Home, Ship, UserCheck, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { usePendingCount } from '../../hooks/useAccounts'
 import type { UserRole } from '../../types'
@@ -23,7 +23,10 @@ const ALL: UserRole[] = ['administrator', 'crewing_officer', 'manager']
 const NAV: NavGroup[] = [
   {
     label: null,
-    items: [{ to: '/', label: 'Home', icon: Home, roles: ALL }],
+    items: [
+      { to: '/', label: 'Home', icon: Home, roles: ALL },
+      { to: '/vessels', label: 'Vessels', icon: Ship, roles: ['administrator', 'crewing_officer'] },
+    ],
   },
   {
     label: 'Admin',
@@ -35,6 +38,8 @@ const NAV: NavGroup[] = [
         roles: ['administrator'],
         badge: 'pending-accounts',
       },
+      { to: '/admin/document-types', label: 'Document Types', icon: FileText, roles: ['administrator'] },
+      { to: '/admin/positions', label: 'Positions', icon: Briefcase, roles: ['administrator'] },
     ],
   },
 ]

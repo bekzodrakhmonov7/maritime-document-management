@@ -31,3 +31,46 @@ export interface Account extends Me {
   status_changed_at: string | null
   created_at: string
 }
+
+/** A ship in the fleet (S3). Vessels are deactivated, never deleted. */
+export interface Vessel {
+  id: number
+  name: string
+  imo_number: string
+  /** ISO 3166-1 alpha-2 country code. */
+  flag: string
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type VesselWrite = Pick<Vessel, 'name' | 'imo_number' | 'flag'>
+
+/** A managed Position. A retired one disappears from pickers. */
+export interface Position {
+  id: number
+  name: string
+  retired: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type PositionWrite = Pick<Position, 'name'>
+
+/** A Document Type and its rules. `depends_on_id` set makes it an Endorsement. */
+export interface DocumentType {
+  id: number
+  name: string
+  expires: boolean
+  max_validity_months: number | null
+  renewable_at_sea: boolean
+  depends_on_id: number | null
+  retired: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type DocumentTypeWrite = Pick<
+  DocumentType,
+  'name' | 'expires' | 'max_validity_months' | 'renewable_at_sea' | 'depends_on_id'
+>
