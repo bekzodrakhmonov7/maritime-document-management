@@ -134,6 +134,47 @@ Frontend variables in `frontend/.env`:
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key | `eyJhbG...` |
 | `VITE_API_BASE` | Backend API base URL | `http://localhost:8000` |
 
+## Hosted cutover (one time)
+
+The rebuilt app does not migrate the old hosted data. The hosted Supabase
+project is reset once and everyone registers again. Run these steps in order,
+from the repository root, after the rebuild is merged into `main`:
+
+1. **Link** the hosted project:
+   `npx supabase@latest link --project-ref <project-ref>`
+2. **Reset** the hosted database. This drops the old schema and applies
+   `supabase/migrations/`. `--no-seed` keeps the local demo data, and the
+   `app_backend_dev` password that the seed sets, off hosted:
+   `npx supabase@latest db reset --linked --no-seed`
+3. **Clear the old accounts and files.** In the Supabase Dashboard SQL editor,
+   run `DELETE FROM auth.users;`. Then empty the `crew-documents` bucket in
+   **Storage** (use the Dashboard, not SQL: Storage objects must be removed
+   through the Storage API).
+4. **Push** the migrations: `npx supabase@latest db push`. Right after the
+   reset it should report that the remote database is up to date. Run it
+   anyway, as the check that hosted matches the repository.
+5. **Set the `app_backend` password** to a generated secret, for example from
+   `openssl rand -base64 32`. Run this in the SQL editor:
+   `ALTER ROLE app_backend PASSWORD '<generated-secret>';`
+   Keep the secret out of git.
+6. **Set `DATABASE_URL` on Railway** to the hosted connection string with user
+   `app_backend` and that password. Use the pooler URL from **Project Settings
+   → Database**; the pooler user is `app_backend.<project-ref>`. Redeploy.
+   `OWNER_DATABASE_URL` is not set on Railway.
+7. **Sign up** on the deployed app with the first administrator's e-mail. The
+   account starts pending.
+8. **Make it an administrator**. Run this with `DATABASE_URL` pointing at
+   hosted as `app_backend`, for example through `railway run`:
+   `cd backend && uv run python -m app.scripts.make_admin <email>`
+   Then sign in and check that the dashboard loads.
+
+### Migrations are frozen after the cutover
+
+From the cutover on, **a migration that has been pushed to hosted is never
+edited**. Any schema change goes into a new migration file with a later
+timestamp, and that file is pushed with `supabase db push`. Do not run
+`db reset --linked` again: it would wipe production data.
+
 ## Project Structure
 
 ```
