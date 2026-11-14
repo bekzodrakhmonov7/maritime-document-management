@@ -4,6 +4,7 @@ import {
   Briefcase,
   FileText,
   Home,
+  Settings,
   Ship,
   UserCheck,
   Users,
@@ -49,6 +50,7 @@ const NAV: NavGroup[] = [
       },
       { to: '/admin/document-types', label: 'Document Types', icon: FileText, roles: ['administrator'] },
       { to: '/admin/positions', label: 'Positions', icon: Briefcase, roles: ['administrator'] },
+      { to: '/admin/settings', label: 'Settings', icon: Settings, roles: ['administrator'] },
     ],
   },
 ]

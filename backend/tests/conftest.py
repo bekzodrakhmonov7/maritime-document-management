@@ -149,6 +149,26 @@ async def reference_cleanup(owner_db):
     await owner_db.execute(statement)
 
 
+_RESET_SETTINGS = """
+    UPDATE public.settings
+       SET alert_steps = DEFAULT, planning_horizon_days = DEFAULT, max_file_size_mb = DEFAULT,
+           max_pdf_pages = DEFAULT, time_zone = DEFAULT, daily_check_time = DEFAULT,
+           version = DEFAULT, updated_at = now(), updated_by = NULL
+"""
+
+
+@pytest_asyncio.fixture
+async def settings_reset(owner_db, make_account):
+    """Put the Settings row back to its defaults before and after the test.
+
+    It depends on make_account so it is torn down first: `updated_by` must be
+    cleared before the accounts it may point to are deleted.
+    """
+    await owner_db.execute(_RESET_SETTINGS)
+    yield
+    await owner_db.execute(_RESET_SETTINGS)
+
+
 @pytest_asyncio.fixture
 async def client(app):
     """The app driven in-process over HTTP."""

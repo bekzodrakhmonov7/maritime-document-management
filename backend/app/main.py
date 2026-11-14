@@ -5,7 +5,7 @@ from app.config import settings
 from app import refused_access
 from app.db import lifespan
 from app.request_context import RequestIdMiddleware
-from app.routers import accounts, auth, me, reference_data, seafarers
+from app.routers import accounts, auth, me, reference_data, seafarers, settings as settings_router
 
 
 def create_app() -> FastAPI:
@@ -33,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(reference_data.positions, prefix="/api")
     app.include_router(reference_data.document_types, prefix="/api")
     app.include_router(seafarers.router, prefix="/api")
+    app.include_router(settings_router.router, prefix="/api")
 
     return app
 

@@ -15,6 +15,7 @@ import { PositionsPage } from './pages/PositionsPage'
 import { DocumentTypesPage } from './pages/DocumentTypesPage'
 import { SeafarersPage } from './pages/SeafarersPage'
 import { SeafarerPage } from './pages/SeafarerPage'
+import { SettingsPage } from './pages/SettingsPage'
 
 const queryClient = new QueryClient()
 
@@ -88,6 +89,14 @@ export default function App() {
                 element={
                   <RoleGate roles={['administrator']}>
                     <PositionsPage />
+                  </RoleGate>
+                }
+              />
+              <Route
+                path="admin/settings"
+                element={
+                  <RoleGate roles={['administrator']}>
+                    <SettingsPage />
                   </RoleGate>
                 }
               />

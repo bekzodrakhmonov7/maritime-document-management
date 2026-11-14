@@ -99,3 +99,21 @@ export type SeafarerWrite = Pick<
   Seafarer,
   'first_name' | 'last_name' | 'date_of_birth' | 'nationality' | 'position_id'
 >
+
+/** GET /api/settings: the one Settings row (S9). */
+export interface Settings {
+  /** Days before expiry, largest first; 0 (the expiry day) is always there. */
+  alert_steps: number[]
+  planning_horizon_days: number
+  max_file_size_mb: number
+  max_pdf_pages: number
+  /** IANA time zone, e.g. Europe/Malta. */
+  time_zone: string
+  /** "HH:MM" in the company time zone, on a 15-minute step. */
+  daily_check_time: string
+  version: number
+  updated_at: string
+}
+
+/** PUT /api/settings: the values plus the version the editor started from. */
+export type SettingsWrite = Omit<Settings, 'updated_at'>

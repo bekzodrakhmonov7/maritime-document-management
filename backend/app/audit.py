@@ -42,6 +42,7 @@ class AuditAction(StrEnum):
     SEAFARER_EDITED = "seafarer_edited"
     SEAFARER_SET_INACTIVE = "seafarer_set_inactive"
     SEAFARER_REACTIVATED = "seafarer_reactivated"
+    SETTINGS_CHANGED = "settings_changed"
     # Written by the auth.audit_log_entries trigger, not by the API.
     LOGIN_SUCCEEDED = "login_succeeded"
     LOGIN_FAILED = "login_failed"
