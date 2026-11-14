@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { NO_FILTERS, useDashboard, useFleetTotals, type DashboardFilters } from '../hooks/useDashboard'
+import { useDashboard, useFleetTotals, type DashboardFilters } from '../hooks/useDashboard'
 import { fullName } from '../hooks/useSeafarers'
 import { cn } from '../lib/cn'
 import { ErrorNote } from '../components/ErrorNote'
@@ -19,6 +19,7 @@ import {
   type SeafarerGroup,
   type StartingSoonEntry,
   type TotalsColumn,
+  type UserRole,
 } from '../types'
 
 const QUEUES: DashboardQueue[] = [
@@ -57,7 +58,6 @@ function toFilters(name: string, tags: Tag[], showInactive: boolean): DashboardF
   const ids = (kind: TagKind) =>
     tags.filter((t) => t.kind === kind && t.id !== null).map((t) => t.id as number)
   return {
-    ...NO_FILTERS,
     name,
     positionIds: ids('position'),
     vesselIds: ids('vessel'),
@@ -401,6 +401,14 @@ function FleetTotalsView() {
   )
 }
 
+function subtitle(shown: 'queues' | 'totals', role: UserRole | null): string {
+  if (shown === 'totals') {
+    return 'Fleet totals per expiry status plus missing documents. Inactive seafarers are not counted.'
+  }
+  if (role === 'crewing_officer') return 'Your work queues, for the seafarers in your scope.'
+  return 'Work queues for the whole fleet.'
+}
+
 /** The landing page (FR-20). Administrators and crewing officers get the work
  * queues (administrators can switch to the fleet totals); managers get the
  * fleet totals only. */
@@ -416,11 +424,7 @@ export function DashboardPage() {
         <div>
           <h2 className="text-2xl font-semibold text-navy-50">Dashboard</h2>
           <p className="mt-1 text-sm text-navy-400">
-            {shown === 'totals'
-              ? 'Fleet totals per expiry status plus missing documents. Inactive seafarers are not counted.'
-              : role === 'crewing_officer'
-                ? 'Your work queues, for the seafarers in your scope.'
-                : 'Work queues for the whole fleet.'}
+            {subtitle(shown, role)}
           </p>
         </div>
         {role === 'administrator' && (

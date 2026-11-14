@@ -37,7 +37,9 @@ from app.services.coverage import required_documents
 
 @dataclass(frozen=True)
 class _Crew:
-    """The seafarers read, their document lines and their unfinished Assignments."""
+    """The seafarers read and their document lines, plus what the starting-soon
+    readiness counters need: their unfinished Assignments, their document
+    summaries by type, the fleet's requirement rows and the Document Types."""
 
     seafarers: list[DashboardSeafarer]
     lines: list[DocumentLine]
@@ -45,7 +47,6 @@ class _Crew:
     held: dict[int, dict[int, dict]]
     requirements: RequirementRows
     types: dict[int, dict]
-    rows: dict[int, asyncpg.Record]
 
 
 async def _read_crew(conn: asyncpg.Connection, scope: Scope, *, include_inactive: bool) -> _Crew:
@@ -114,7 +115,7 @@ async def _read_crew(conn: asyncpg.Connection, scope: Scope, *, include_inactive
             )
             for type_id in missing
         ]
-    return _Crew(seafarers, lines, assignments, held, rules, types, {r["id"]: r for r in rows})
+    return _Crew(seafarers, lines, assignments, held, rules, types)
 
 
 def _held_line(seafarer_id: int, doc: Mapping[str, Any]) -> DocumentLine:
@@ -133,9 +134,10 @@ def _held_line(seafarer_id: int, doc: Mapping[str, Any]) -> DocumentLine:
 def _starting_soon(crew: _Crew, today: date, horizon_days: int) -> list[StartingSoon]:
     """The non-cancelled upcoming Assignments within the horizon, each with the
     readiness counters for its own Position and vessel."""
+    people = {s.id: s for s in crew.seafarers}
     found = []
     for seafarer_id, own in crew.assignments.items():
-        seafarer = crew.rows[seafarer_id]
+        seafarer = people[seafarer_id]
         for a in own:
             if not domain.starts_soon(a["start_date"], today, horizon_days):
                 continue
@@ -144,8 +146,8 @@ def _starting_soon(crew: _Crew, today: date, horizon_days: int) -> list[Starting
             view = domain.readiness(
                 {
                     **a,
-                    "held_position_id": seafarer["position_id"],
-                    "held_position_name": seafarer["position_name"],
+                    "held_position_id": seafarer.position_id,
+                    "held_position_name": seafarer.position_name,
                 },
                 required_documents(types, crew.held.get(seafarer_id, {})),
                 today,

@@ -13,15 +13,6 @@ export interface DashboardFilters {
   showInactive: boolean
 }
 
-export const NO_FILTERS: DashboardFilters = {
-  name: '',
-  positionIds: [],
-  vesselIds: [],
-  ashore: false,
-  documentTypeIds: [],
-  showInactive: false,
-}
-
 function params(filters: DashboardFilters): string {
   const p = new URLSearchParams()
   if (filters.name.trim()) p.set('name', filters.name.trim())
