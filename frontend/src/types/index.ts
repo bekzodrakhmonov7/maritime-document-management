@@ -137,6 +137,58 @@ export interface Assignment {
   updated_at: string
 }
 
+/** A required Document Type the seafarer has no Current Version of (S10). */
+export interface MissingDocument {
+  document_type_id: number
+  name: string
+  /** Set when the Document exists but every Version of it is rejected. */
+  document_id: number | null
+}
+
+/** GET /api/seafarers/{id}: the record with its missing documents. Missing
+ * documents use the Assignment under way, or the held Position when ashore. */
+export interface SeafarerRecord extends Seafarer {
+  missing_documents: MissingDocument[]
+}
+
+/** How one required document stands against an Assignment's dates (T3). */
+export type CoverageClass = 'missing' | 'runs_out_before_start' | 'runs_out_during' | 'covers_all'
+
+export const COVERAGE_LABELS: Record<CoverageClass, string> = {
+  missing: 'Missing',
+  runs_out_before_start: 'Runs out before start',
+  runs_out_during: 'Runs out during',
+  covers_all: 'Covers all',
+}
+
+export interface ReadinessEntry {
+  document_type_id: number
+  name: string
+  document_id: number | null
+  expiry_date: string | null
+  coverage: CoverageClass
+  /** The advisory renewal suggestion; null when it covers all. */
+  suggestion: string | null
+  review_state: ReviewState | null
+  /** A badge only: Verified has no bucket and no suggestion. */
+  verified: boolean
+}
+
+export type ReadinessBucket = 'before_joining' | 'renewable_at_sea' | 'not_reviewed' | 'covers_all'
+
+/** GET /api/assignments/{id}/readiness (T4 variant B). Advice only: it approves
+ * and blocks nothing, and gives no overall verdict. */
+export interface Readiness {
+  assignment: Assignment & { vessel_flag: string; held_position_name: string }
+  state: 'upcoming' | 'under_way'
+  /** Set when the Assignment's Position differs from the held one. */
+  position_notice: string | null
+  /** "Before joining", or "Act now" when under way. */
+  before_joining_label: string
+  counters: Record<Exclude<ReadinessBucket, 'covers_all'>, number>
+  buckets: Record<ReadinessBucket, ReadinessEntry[]>
+}
+
 /** PUT /api/assignments/{id}: the seafarer can't be changed. */
 export type AssignmentEdit = Pick<Assignment, 'vessel_id' | 'position_id' | 'start_date' | 'end_date'>
 

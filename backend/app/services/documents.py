@@ -148,6 +148,11 @@ async def list_for_seafarer(conn: asyncpg.Connection, scope: Scope, seafarer_id:
     """A seafarer's documents, by type name, each with its Current Version
     and Expiry Status."""
     await seafarers.fetch_in_scope(conn, scope, seafarer_id)
+    return await summaries_for(conn, seafarer_id, scope.today)
+
+
+async def summaries_for(conn: asyncpg.Connection, seafarer_id: int, today: date) -> list[dict]:
+    """The document summaries of a seafarer the caller already checked is in Scope."""
     documents = await conn.fetch(
         f"SELECT {_DOCUMENT_FIELDS} WHERE d.seafarer_id = $1 ORDER BY lower(t.name), d.id",
         seafarer_id,
@@ -156,7 +161,7 @@ async def list_for_seafarer(conn: asyncpg.Connection, scope: Scope, seafarer_id:
     checks = await _Checks.of(conn, [v for vs in versions.values() for v in vs])
     largest_step = await _largest_alert_step(conn)
     return [
-        _summary(dict(d), versions.get(d["id"], []), checks, scope.today, largest_step)
+        _summary(dict(d), versions.get(d["id"], []), checks, today, largest_step)
         for d in documents
     ]
 

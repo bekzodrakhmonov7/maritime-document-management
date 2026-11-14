@@ -65,8 +65,7 @@ export function AssignmentsTable({
   onCancel?: (assignment: Assignment) => void
   empty: string
 }) {
-  const hasActions = !!(onEdit || onCancel)
-  const columns = hasActions ? 6 : 5
+  const columns = 6
   return (
     <div className="overflow-x-auto rounded-xl border border-navy-800 bg-navy-900">
       <table className="w-full text-left text-sm">
@@ -77,7 +76,7 @@ export function AssignmentsTable({
             <th scope="col" className="px-4 py-3">From</th>
             <th scope="col" className="px-4 py-3">To</th>
             <th scope="col" className="px-4 py-3">State</th>
-            {hasActions && <th scope="col" className="px-4 py-3 text-right">Actions</th>}
+            <th scope="col" className="px-4 py-3 text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-navy-800">
@@ -119,20 +118,24 @@ export function AssignmentsTable({
                   <AssignmentStateBadge state={a.state} />
                 </span>
               </td>
-              {hasActions && (
-                <td className="px-4 py-3">
-                  {isChangeable(a) && (
-                    <div className="flex justify-end gap-2">
-                      {onEdit && <ActionButton onClick={() => onEdit(a)}>Edit</ActionButton>}
-                      {onCancel && (
-                        <ActionButton tone="danger" onClick={() => onCancel(a)}>
-                          Cancel
-                        </ActionButton>
-                      )}
-                    </div>
-                  )}
-                </td>
-              )}
+              <td className="px-4 py-3">
+                {isChangeable(a) && (
+                  <div className="flex items-center justify-end gap-2">
+                    <Link
+                      to={`/assignments/${a.id}/readiness`}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600 focus:outline-none focus:ring-2 focus:ring-navy-400/40"
+                    >
+                      Readiness
+                    </Link>
+                    {onEdit && <ActionButton onClick={() => onEdit(a)}>Edit</ActionButton>}
+                    {onCancel && (
+                      <ActionButton tone="danger" onClick={() => onCancel(a)}>
+                        Cancel
+                      </ActionButton>
+                    )}
+                  </div>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

@@ -55,14 +55,19 @@ function request(action: VersionAction) {
   )
 }
 
-/** A change that answers with the whole document: keep it, and refresh the seafarer's table. */
+/** A change that answers with the whole document: keep it, and refresh the
+ * seafarer's table, their missing documents and any readiness view. */
 function useDocumentChange<T>(mutationFn: (args: T) => Promise<DocumentDetail>) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn,
     onSuccess: (document) => {
       queryClient.setQueryData(['documents', document.id], document)
-      return queryClient.invalidateQueries({ queryKey: ['documents', 'seafarer', document.seafarer_id] })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['documents', 'seafarer', document.seafarer_id] }),
+        queryClient.invalidateQueries({ queryKey: ['seafarers', document.seafarer_id] }),
+        queryClient.invalidateQueries({ queryKey: ['readiness'] }),
+      ])
     },
   })
 }
