@@ -56,6 +56,19 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 # Add Claude (and uv, below) to PATH
 ENV PATH="/home/agent/.local/bin:$PATH"
 
+# The worktree is checked out by Windows git with CRLF line endings. Without
+# this, git in the container reports every such file as modified.
+RUN git config --global core.autocrlf true
+
+# Keep uv's virtualenv out of the worktree: its Linux symlinks can't be
+# deleted by Windows git when the worktree is removed.
+ENV UV_PROJECT_ENVIRONMENT=/home/agent/venv
+
+# Claude Code's own setting: no "Co-Authored-By: Claude" trailer on commits.
+RUN mkdir -p /home/agent/.claude \
+  && printf '%s\n' '{"includeCoAuthoredBy": false, "attribution": {"commit": "", "pr": ""}}' \
+     > /home/agent/.claude/settings.json
+
 # Python backend: uv plus the Python version pyproject.toml requires
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
   && uv python install 3.13

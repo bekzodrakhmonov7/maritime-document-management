@@ -26,7 +26,23 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { z } from "zod";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { closeIssue, readyIssues } from "./tracker.mts";
+
+// Sandcastle copies copyToWorktree paths with the Unix `cp`, which Windows
+// lacks. Git for Windows ships one in <git>/usr/bin; append that folder to
+// PATH (appended, so Windows' own commands still win) so this script also
+// works from PowerShell, not only Git Bash.
+if (process.platform === "win32") {
+  const gitCore = execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
+  const usrBin = join(resolve(gitCore, "..", "..", ".."), "usr", "bin");
+  if (existsSync(join(usrBin, "cp.exe"))) {
+    process.env.PATH = `${process.env.PATH};${usrBin}`;
+  } else {
+    console.warn(`cp.exe not found in ${usrBin}; copyToWorktree may fail`);
+  }
+}
 import { agentLog, describeCommits, errorText, note, RUN_DIR, ticket } from "./runlog.mts";
 
 // Model for every phase. Swap to "claude-sonnet-5-5" to cut cost.
@@ -58,6 +74,23 @@ const MAX_PARALLEL = 2;
 // Every ticket's work goes on `faet/<ticket-id>`, e.g. faet/fr-build-plan-01.
 const BRANCH_PREFIX = "faet/";
 
+// Identifies this run in merge-branch names, e.g. 20261114-193849.
+const RUN_ID = new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+
+const git = (...args: string[]) =>
+  execFileSync("git", args, { encoding: "utf8" }).trim();
+
+// Linux-only folders the hooks create in the worktree. Their symlinks can't
+// be deleted by Windows git, so remove them from inside the container first.
+async function closeSandbox(sandbox: sandcastle.Sandbox): Promise<void> {
+  try {
+    await sandbox.exec("rm -rf .venv frontend/node_modules");
+  } catch {
+    // The container may already be gone; close() still tries to clean up.
+  }
+  await sandbox.close();
+}
+
 // Hooks run inside the sandbox before the agent starts. Dependencies are
 // installed fresh in Linux; the host's .venv and node_modules are Windows
 // builds and wouldn't work in the container.
@@ -65,12 +98,16 @@ const BRANCH_PREFIX = "faet/";
 // .sandcastle/db/sandbox-db) with the migrations and seed applied. A failing
 // migration mustn't stop the sandbox from starting: the agent sees the error
 // when it runs the reset itself.
+//
+// Sandcastle kills a hook after 60 s by default; a cold `npm ci` or `uv sync`
+// in a fresh container can take several minutes, so each gets its own limit.
+const MINUTE = 60_000;
 const hooks = {
   sandbox: {
     onSandboxReady: [
-      { command: "sandbox-db reset || echo 'sandbox-db reset failed'" },
-      { command: "uv sync" },
-      { command: "npm --prefix frontend ci" },
+      { command: "sandbox-db reset || echo 'sandbox-db reset failed'", timeoutMs: 5 * MINUTE },
+      { command: "uv sync", timeoutMs: 10 * MINUTE },
+      { command: "npm --prefix frontend ci", timeoutMs: 15 * MINUTE },
     ],
   },
 };
@@ -235,7 +272,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         ticket(issue.id, "No commits, so nothing to review or merge this round");
         return implement;
       } finally {
-        await sandbox.close();
+        await closeSandbox(sandbox);
       }
     }),
   );
@@ -273,34 +310,58 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   // -------------------------------------------------------------------------
   // Phase 3: Merge
   //
-  // One agent merges all completed branches into the current branch,
-  // resolving any conflicts and running tests to confirm everything works.
+  // One agent merges all completed branches, resolving any conflicts and
+  // running tests to confirm everything works. It works on its own branch
+  // (faet/merge/<run>-round-NN, forked from your current branch) in its own
+  // sandbox; afterwards your branch is fast-forwarded to it here on the host.
   //
-  // The {{BRANCHES}} and {{ISSUES}} prompt arguments are lists that the agent
-  // uses to know which branches to merge and which issues to close.
+  // Why not sandcastle.run() with merge-to-head: it crashes the whole loop
+  // when Windows git can't delete the worktree's Linux symlinks, whereas
+  // createSandbox + closeSandbox clean those up from inside the container.
   // -------------------------------------------------------------------------
   const mergeLog = agentLog(iteration, "merger", "merger");
-  for (const issue of completedIssues) ticket(issue.id, `Merging (transcript: ${mergeLog.path})`);
-  await sandcastle.run({
-    hooks,
-    sandbox: docker(),
-    name: "merger",
-    logging: mergeLog,
-    // In a worktree, not your project folder: otherwise its hooks (uv sync,
-    // npm ci) would replace your Windows .venv and node_modules with Linux
-    // builds. The merges are brought back onto your current branch at the end.
-    branchStrategy: { type: "merge-to-head" },
-    copyToWorktree,
-    maxIterations: 1,
-    agent: sandcastle.claudeCode(MODEL),
-    promptFile: "./.sandcastle/merge-prompt.md",
-    promptArgs: {
-      // A markdown list of branch names, one per line.
-      BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
-      // A markdown list of issue IDs and titles, one per line.
-      ISSUES: completedIssues.map((i) => `- ${i.id}: ${i.title}`).join("\n"),
-    },
-  });
+  const targetBranch = git("rev-parse", "--abbrev-ref", "HEAD");
+  const mergeBranch = `${BRANCH_PREFIX}merge/${RUN_ID}-round-${String(iteration).padStart(2, "0")}`;
+  for (const issue of completedIssues) {
+    ticket(issue.id, `Merging on ${mergeBranch} (transcript: ${mergeLog.path})`);
+  }
+  try {
+    const mergeSandbox = await sandcastle.createSandbox({
+      branch: mergeBranch,
+      baseBranch: targetBranch,
+      sandbox: docker(),
+      hooks,
+      copyToWorktree,
+    });
+    try {
+      await mergeSandbox.run({
+        name: "merger",
+        logging: mergeLog,
+        maxIterations: 1,
+        agent: sandcastle.claudeCode(MODEL),
+        promptFile: "./.sandcastle/merge-prompt.md",
+        promptArgs: {
+          // A markdown list of branch names, one per line.
+          BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
+          // A markdown list of issue IDs and titles, one per line.
+          ISSUES: completedIssues.map((i) => `- ${i.id}: ${i.title}`).join("\n"),
+        },
+      });
+    } finally {
+      await closeSandbox(mergeSandbox);
+    }
+
+    // Bring the merges onto your branch. --ff-only: if your branch moved
+    // during the round, nothing is overwritten and the round is left for you.
+    git("merge", "--ff-only", mergeBranch);
+    git("branch", "-d", mergeBranch);
+    note(`Fast-forwarded ${targetBranch} to the merge.`);
+  } catch (e) {
+    note(
+      `Merge step failed: ${errorText(e)}. ` +
+        `Its work (if any) is on ${mergeBranch}; affected tickets stay open.`,
+    );
+  }
 
   // Close (Status: done) only the issues whose branch really landed on HEAD,
   // so a merge the agent gave up on leaves its issue open for the next round.
