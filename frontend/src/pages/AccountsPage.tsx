@@ -210,8 +210,9 @@ function AccountForm({
   const [role, setRole] = useState<UserRole | ''>(kind === 'role' ? '' : (account.role ?? ''))
   const [reason, setReason] = useState('')
   const action = useAccountAction()
-  const payload = buildAction(kind, reason.trim(), needsRole && role ? role : undefined)
-  const canSubmit = !!reason.trim() && (!needsRole || !!role) && payload !== null
+  const trimmedReason = reason.trim()
+  const payload = buildAction(kind, trimmedReason, needsRole && role ? role : undefined)
+  const canSubmit = !!trimmedReason && (!needsRole || !!role) && payload !== null
 
   return (
     <FormDialog

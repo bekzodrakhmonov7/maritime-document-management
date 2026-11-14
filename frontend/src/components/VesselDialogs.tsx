@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useVesselAction } from '../hooks/useReferenceData'
 import { FLAG_OPTIONS, flagLabel } from '../lib/flags'
 import type { Vessel } from '../types'
+import { ActionButton } from './ActionButton'
 import { ConfirmDialog } from './ConfirmDialog'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
 
@@ -22,6 +23,27 @@ export function VesselDialog({
     <ToggleVessel vessel={state.vessel} onClose={onClose} />
   ) : (
     <VesselForm vessel={state.kind === 'edit' ? state.vessel : null} onClose={onClose} />
+  )
+}
+
+/** The administrator's Edit and Deactivate/Reactivate buttons for one vessel. */
+export function VesselActions({
+  vessel,
+  onOpen,
+}: {
+  vessel: Vessel
+  onOpen: (dialog: VesselDialogState) => void
+}) {
+  return (
+    <div className="flex justify-end gap-2">
+      <ActionButton onClick={() => onOpen({ kind: 'edit', vessel })}>Edit</ActionButton>
+      <ActionButton
+        tone={vessel.active ? 'danger' : 'default'}
+        onClick={() => onOpen({ kind: 'toggle', vessel })}
+      >
+        {vessel.active ? 'Deactivate' : 'Reactivate'}
+      </ActionButton>
+    </div>
   )
 }
 

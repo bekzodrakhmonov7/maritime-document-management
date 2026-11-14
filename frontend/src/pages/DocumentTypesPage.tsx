@@ -5,7 +5,7 @@ import type { DocumentType, DocumentTypeWrite } from '../types'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
-import { RetireDialog, type RetireKind } from '../components/RetireDialog'
+import { RetirableActions, RetireDialog, type RetireKind } from '../components/RetireDialog'
 import { StateBadge } from '../components/StateBadge'
 
 type Dialog =
@@ -80,17 +80,11 @@ export function DocumentTypesPage() {
                   <StateBadge on={!t.retired} label={t.retired ? 'Retired' : 'In use'} />
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    <ActionButton onClick={() => setDialog({ kind: 'edit', docType: t })}>Edit</ActionButton>
-                    <ActionButton
-                      onClick={() => setDialog({ kind: t.retired ? 'unretire' : 'retire', docType: t })}
-                    >
-                      {t.retired ? 'Bring back' : 'Retire'}
-                    </ActionButton>
-                    <ActionButton tone="danger" onClick={() => setDialog({ kind: 'delete', docType: t })}>
-                      Delete
-                    </ActionButton>
-                  </div>
+                  <RetirableActions
+                    retired={t.retired}
+                    onEdit={() => setDialog({ kind: 'edit', docType: t })}
+                    onRetire={(kind) => setDialog({ kind, docType: t })}
+                  />
                 </td>
               </tr>
             ))}

@@ -1,4 +1,5 @@
 import { useReferenceAction } from '../hooks/useReferenceData'
+import { ActionButton } from './ActionButton'
 import { ConfirmDialog } from './ConfirmDialog'
 
 export type RetireKind = 'retire' | 'unretire' | 'delete'
@@ -44,5 +45,28 @@ export function RetireDialog({
     >
       {EXPLANATION[kind]}
     </ConfirmDialog>
+  )
+}
+
+/** A Position or Document Type row's Edit, Retire/Bring back and Delete buttons. */
+export function RetirableActions({
+  retired,
+  onEdit,
+  onRetire,
+}: {
+  retired: boolean
+  onEdit: () => void
+  onRetire: (kind: RetireKind) => void
+}) {
+  return (
+    <div className="flex justify-end gap-2">
+      <ActionButton onClick={onEdit}>Edit</ActionButton>
+      <ActionButton onClick={() => onRetire(retired ? 'unretire' : 'retire')}>
+        {retired ? TITLE.unretire : TITLE.retire}
+      </ActionButton>
+      <ActionButton tone="danger" onClick={() => onRetire('delete')}>
+        {TITLE.delete}
+      </ActionButton>
+    </div>
   )
 }

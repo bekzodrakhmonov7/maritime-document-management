@@ -4,10 +4,9 @@ import { ArrowLeft } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useVessel } from '../hooks/useReferenceData'
 import { flagLabel } from '../lib/flags'
-import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
 import { StateBadge } from '../components/StateBadge'
-import { VesselDialog, type VesselDialogState } from '../components/VesselDialogs'
+import { VesselActions, VesselDialog, type VesselDialogState } from '../components/VesselDialogs'
 
 /** One vessel's details; read-only for crewing officers. */
 export function VesselPage() {
@@ -34,17 +33,7 @@ export function VesselPage() {
               <h2 className="text-2xl font-semibold text-navy-50">{vessel.name}</h2>
               <StateBadge on={vessel.active} label={vessel.active ? 'Active' : 'Deactivated'} />
             </div>
-            {isAdmin && (
-              <div className="flex gap-2">
-                <ActionButton onClick={() => setDialog({ kind: 'edit', vessel })}>Edit</ActionButton>
-                <ActionButton
-                  tone={vessel.active ? 'danger' : 'default'}
-                  onClick={() => setDialog({ kind: 'toggle', vessel })}
-                >
-                  {vessel.active ? 'Deactivate' : 'Reactivate'}
-                </ActionButton>
-              </div>
-            )}
+            {isAdmin && <VesselActions vessel={vessel} onOpen={setDialog} />}
           </div>
 
           <dl className="grid gap-4 rounded-xl border border-navy-800 bg-navy-900 p-6 sm:grid-cols-2">

@@ -7,7 +7,7 @@ import { flagLabel } from '../lib/flags'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
 import { StateBadge } from '../components/StateBadge'
-import { VesselDialog, type VesselDialogState } from '../components/VesselDialogs'
+import { VesselActions, VesselDialog, type VesselDialogState } from '../components/VesselDialogs'
 
 /** The fleet (FR-05). Administrators maintain it; crewing officers read it. */
 export function VesselsPage() {
@@ -83,15 +83,7 @@ export function VesselsPage() {
                 </td>
                 {isAdmin && (
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <ActionButton onClick={() => setDialog({ kind: 'edit', vessel })}>Edit</ActionButton>
-                      <ActionButton
-                        tone={vessel.active ? 'danger' : 'default'}
-                        onClick={() => setDialog({ kind: 'toggle', vessel })}
-                      >
-                        {vessel.active ? 'Deactivate' : 'Reactivate'}
-                      </ActionButton>
-                    </div>
+                    <VesselActions vessel={vessel} onOpen={setDialog} />
                   </td>
                 )}
               </tr>

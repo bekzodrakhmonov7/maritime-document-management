@@ -35,25 +35,23 @@ class Table:
     name: str  # SQL table, Audit Record target_type and action prefix
     label: str  # for messages
     writable: tuple[str, ...]
+    flag: str  # the boolean set_flag switches: "active" or "retired"
 
     @property
     def columns(self) -> str:
         return ", ".join(("id", *self.writable, self.flag, "created_at", "updated_at"))
 
-    @property
-    def flag(self) -> str:
-        return "active" if self.name == "vessel" else "retired"
-
     def action(self, verb: str) -> AuditAction:
         return AuditAction(f"{self.name}_{verb}")
 
 
-VESSEL = Table("vessel", "vessel", ("name", "imo_number", "flag"))
-POSITION = Table("position", "Position", ("name",))
+VESSEL = Table("vessel", "vessel", ("name", "imo_number", "flag"), flag="active")
+POSITION = Table("position", "Position", ("name",), flag="retired")
 DOCUMENT_TYPE = Table(
     "document_type",
     "Document Type",
     ("name", "expires", "max_validity_months", "renewable_at_sea", "depends_on_id"),
+    flag="retired",
 )
 
 # Messages for the constraints a caller can trip; the depends-on trigger
@@ -68,7 +66,6 @@ _CONSTRAINT_MESSAGES = {
     ),
     "document_type_depends_on_id_fkey": "The Document Type it depends on doesn't exist.",
 }
-
 
 _ALREADY = {
     "deactivated": "already deactivated",

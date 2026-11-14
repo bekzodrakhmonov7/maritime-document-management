@@ -5,7 +5,7 @@ import type { Position } from '../types'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
-import { RetireDialog, type RetireKind } from '../components/RetireDialog'
+import { RetirableActions, RetireDialog, type RetireKind } from '../components/RetireDialog'
 import { StateBadge } from '../components/StateBadge'
 
 type Dialog =
@@ -66,19 +66,11 @@ export function PositionsPage() {
                   <StateBadge on={!position.retired} label={position.retired ? 'Retired' : 'In use'} />
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    <ActionButton onClick={() => setDialog({ kind: 'edit', position })}>Edit</ActionButton>
-                    <ActionButton
-                      onClick={() =>
-                        setDialog({ kind: position.retired ? 'unretire' : 'retire', position })
-                      }
-                    >
-                      {position.retired ? 'Bring back' : 'Retire'}
-                    </ActionButton>
-                    <ActionButton tone="danger" onClick={() => setDialog({ kind: 'delete', position })}>
-                      Delete
-                    </ActionButton>
-                  </div>
+                  <RetirableActions
+                    retired={position.retired}
+                    onEdit={() => setDialog({ kind: 'edit', position })}
+                    onRetire={(kind) => setDialog({ kind, position })}
+                  />
                 </td>
               </tr>
             ))}
@@ -86,9 +78,11 @@ export function PositionsPage() {
         </table>
       </div>
 
-      {dialog?.kind === 'create' && <PositionForm position={null} onClose={() => setDialog(null)} />}
-      {dialog?.kind === 'edit' && (
-        <PositionForm position={dialog.position} onClose={() => setDialog(null)} />
+      {(dialog?.kind === 'create' || dialog?.kind === 'edit') && (
+        <PositionForm
+          position={dialog.kind === 'edit' ? dialog.position : null}
+          onClose={() => setDialog(null)}
+        />
       )}
       {dialog && dialog.kind !== 'create' && dialog.kind !== 'edit' && (
         <RetireDialog
