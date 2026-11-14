@@ -7,6 +7,7 @@ import { useSettings } from '../hooks/useSettings'
 import type { DocumentDetail, DocumentSummary, DocumentType, Seafarer, VersionDetails } from '../types'
 import { DocumentDropzone } from './DocumentDropzone'
 import { ExpiryStatusBadge } from './ExpiryStatusBadge'
+import { NotReviewedTag, VerifiedShield } from './ReviewTags'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
 
 /** Which Version dialog is open: a first upload (pick the type), a new file
@@ -187,7 +188,8 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
   )
 }
 
-/** A seafarer's documents with their Current Version and Expiry Status. */
+/** A seafarer's documents with their Current Version, Expiry Status,
+ * Not-reviewed tag and Verified shield. */
 export function DocumentsTable({
   documents,
   onRenew,
@@ -228,7 +230,11 @@ export function DocumentsTable({
               <td className="px-4 py-3 text-navy-200">{d.current_version?.document_number ?? '—'}</td>
               <td className="px-4 py-3 text-navy-200">{d.current_version?.expiry_date ?? '—'}</td>
               <td className="px-4 py-3">
-                <ExpiryStatusBadge status={d.expiry_status} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <ExpiryStatusBadge status={d.expiry_status} />
+                  {d.current_version?.review_state === 'not_reviewed' && <NotReviewedTag />}
+                  {d.verified && <VerifiedShield />}
+                </div>
               </td>
               <td className="px-4 py-3 text-navy-300">{d.version_count}</td>
               {onRenew && (

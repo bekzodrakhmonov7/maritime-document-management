@@ -80,23 +80,67 @@ async def _versions_of(conn: asyncpg.Connection, document_ids: list[int]) -> dic
     return by_document
 
 
-def _reviews_of(_versions: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-    # Reviews arrive in S8; until then every Version awaits review.
-    return []
+async def _reviews_of(conn: asyncpg.Connection, versions: Iterable[Mapping[str, Any]]) -> list[dict]:
+    rows = await conn.fetch(
+        """
+        SELECT r.id, r.version_id, r.decision, r.comment, r.reviewed_by,
+               u.full_name AS reviewed_by_name, r.reviewed_at
+          FROM public.review r
+          JOIN public.users u ON u.id = r.reviewed_by
+         WHERE r.version_id = ANY($1::bigint[])
+         ORDER BY r.id
+        """,
+        [v["id"] for v in versions],
+    )
+    return [dict(r) for r in rows]
+
+
+async def _verifications_of(
+    conn: asyncpg.Connection, versions: Iterable[Mapping[str, Any]]
+) -> list[dict]:
+    rows = await conn.fetch(
+        """
+        SELECT c.id, c.version_id, c.checked_on, c.source, c.result, c.reference,
+               c.proof_original_filename, c.proof_content_type, c.recorded_by,
+               u.full_name AS recorded_by_name, c.recorded_at
+          FROM public.verification c
+          JOIN public.users u ON u.id = c.recorded_by
+         WHERE c.version_id = ANY($1::bigint[])
+         ORDER BY c.id
+        """,
+        [v["id"] for v in versions],
+    )
+    return [dict(r) for r in rows]
+
+
+@dataclass(frozen=True)
+class _Checks:
+    """The Reviews and Verifications of a set of Versions, oldest first."""
+
+    reviews: list[dict]
+    verifications: list[dict]
+
+    @classmethod
+    async def of(cls, conn: asyncpg.Connection, versions: list[dict]) -> "_Checks":
+        return cls(await _reviews_of(conn, versions), await _verifications_of(conn, versions))
 
 
 def _summary(
-    document: Mapping[str, Any], versions: list[dict], today: date, largest_step: int
+    document: Mapping[str, Any], versions: list[dict], checks: _Checks, today: date, largest_step: int
 ) -> dict:
-    current = domain.current_version(versions, _reviews_of(versions))
+    current = domain.current_version(versions, checks.reviews)
     return {
         **document,
         "version_count": len(versions),
-        "current_version": current,
+        "current_version": (
+            None if current is None
+            else {**current, "review_state": domain.review_state(current["id"], checks.reviews)}
+        ),
         "expiry_status": (
             None if current is None
             else domain.expiry_status(current["expiry_date"], today, largest_step)
         ),
+        "verified": domain.is_verified(current, checks.verifications),
     }
 
 
@@ -109,9 +153,11 @@ async def list_for_seafarer(conn: asyncpg.Connection, scope: Scope, seafarer_id:
         seafarer_id,
     )
     versions = await _versions_of(conn, [d["id"] for d in documents])
+    checks = await _Checks.of(conn, [v for vs in versions.values() for v in vs])
     largest_step = await _largest_alert_step(conn)
     return [
-        _summary(dict(d), versions.get(d["id"], []), scope.today, largest_step) for d in documents
+        _summary(dict(d), versions.get(d["id"], []), checks, scope.today, largest_step)
+        for d in documents
     ]
 
 
@@ -134,14 +180,18 @@ async def get(conn: asyncpg.Connection, scope: Scope, document_id: int) -> dict:
     document = dict(row)
     del document["in_scope"]
     versions = (await _versions_of(conn, [document_id])).get(document_id, [])
-    found = _summary(document, versions, scope.today, await _largest_alert_step(conn))
-    found["versions"] = _history(versions, found["current_version"])
+    checks = await _Checks.of(conn, versions)
+    found = _summary(document, versions, checks, scope.today, await _largest_alert_step(conn))
+    found["versions"] = _history(versions, checks, found["current_version"])
     return found
 
 
-def _history(versions: list[dict], current: Mapping[str, Any] | None) -> list[dict]:
-    """Every Version, numbered in upload order, newest first. A Version whose
-    file an earlier one already had is marked with that earlier number."""
+def _history(
+    versions: list[dict], checks: _Checks, current: Mapping[str, Any] | None
+) -> list[dict]:
+    """Every Version, numbered in upload order, newest first, each with its
+    Reviews and Verifications, newest first. A Version whose file an earlier
+    one already had is marked with that earlier number."""
     first_with_file: dict[str, int] = {}
     history = []
     for number, v in enumerate(versions, start=1):
@@ -152,6 +202,11 @@ def _history(versions: list[dict], current: Mapping[str, Any] | None) -> list[di
                 "number": number,
                 "is_current": current is not None and v["id"] == current["id"],
                 "file_from_version_number": reused_from if reused_from != number else None,
+                "review_state": domain.review_state(v["id"], checks.reviews),
+                "reviews": [r for r in reversed(checks.reviews) if r["version_id"] == v["id"]],
+                "verifications": [
+                    c for c in reversed(checks.verifications) if c["version_id"] == v["id"]
+                ],
             }
         )
     return history[::-1]
@@ -251,7 +306,7 @@ async def add_details_version(
             conn, reference_data.DOCUMENT_TYPE, document["document_type_id"]
         )
         versions = (await _versions_of(conn, [document_id])).get(document_id, [])
-        current = domain.current_version(versions, _reviews_of(versions))
+        current = domain.current_version(versions, await _reviews_of(conn, versions))
         if current is None:
             raise Conflict("The document has no Current Version: upload a file instead.")
         before, after = audit.changed_fields(
@@ -271,16 +326,12 @@ async def add_details_version(
         return await get(conn, scope, document_id)
 
 
-async def issue_file_url(
-    conn: asyncpg.Connection, ctx: AuditContext, scope: Scope, storage: FileStorage, version_id: int
-) -> dict:
-    """A short-lived signed URL for one Version's file, recorded as a download.
-    The record and the URL go together: no record, no URL."""
+async def version_in_scope(conn: asyncpg.Connection, scope: Scope, version_id: int) -> dict:
+    """A Version with its Document's seafarer; missing -> NotFound, outside the
+    Scope -> OutOfScope (recorded against the Version)."""
     row = await conn.fetchrow(
         f"""
-        SELECT {scope.where("s")} AS in_scope, d.seafarer_id,
-               v.file_path, v.original_filename, v.content_type
-          FROM public.version v
+        SELECT {scope.where("s")} AS in_scope, d.seafarer_id, {_VERSION_FIELDS}
           JOIN public.document d ON d.id = v.document_id
           JOIN public.seafarer s ON s.id = d.seafarer_id
          WHERE v.id = $1
@@ -291,19 +342,48 @@ async def issue_file_url(
         raise NotFound()
     if not row["in_scope"]:
         raise OutOfScope(VERSION, version_id, row["seafarer_id"])
-    filename = download_name(row["original_filename"], row["content_type"])
+    version = dict(row)
+    del version["in_scope"]
+    return version
+
+
+async def issue_file_url(
+    conn: asyncpg.Connection, ctx: AuditContext, scope: Scope, storage: FileStorage, version_id: int
+) -> dict:
+    """A short-lived signed URL for one Version's file, recorded as a download."""
+    version = await version_in_scope(conn, scope, version_id)
+    return await signed_file_url(
+        conn, ctx, storage,
+        target_type=VERSION, target_id=version_id, seafarer_id=version["seafarer_id"],
+        file=StoredFile(version["file_path"], version["original_filename"], version["content_type"]),
+    )
+
+
+async def signed_file_url(
+    conn: asyncpg.Connection,
+    ctx: AuditContext,
+    storage: FileStorage,
+    *,
+    target_type: str,
+    target_id: int,
+    seafarer_id: int,
+    file: StoredFile,
+) -> dict:
+    """A short-lived signed URL for a stored file, recorded as a download
+    (*file URL issued*). The record and the URL go together: no record, no URL."""
+    filename = download_name(file.original_filename, file.content_type)
     async with conn.transaction():
         await audit.record(
             conn, ctx, AuditAction.FILE_URL_ISSUED,
-            target_type=VERSION, target_id=version_id, seafarer_id=row["seafarer_id"],
+            target_type=target_type, target_id=target_id, seafarer_id=seafarer_id,
             after={"filename": filename},
         )
-        url = await storage.signed_url(row["file_path"], FILE_URL_TTL_SECONDS, filename)
+        url = await storage.signed_url(file.path, FILE_URL_TTL_SECONDS, filename)
     return {
         "url": url,
         "expires_in": FILE_URL_TTL_SECONDS,
         "filename": filename,
-        "content_type": row["content_type"],
+        "content_type": file.content_type,
     }
 
 
@@ -316,19 +396,32 @@ async def record_upload_rejected(
     size_bytes: int | None,
     filename: str | None,
 ) -> None:
-    """An *upload rejected* record: who, which seafarer and type, why, the
-    size and the cleaned name. Never the file's contents."""
+    """An *upload rejected* record for a document file: who, which seafarer
+    and type, why, the size and the cleaned name. Never the file's contents."""
+    await record_rejected_file(
+        conn, ctx, rejection,
+        target_type="document_type", target_id=document_type_id, seafarer_id=seafarer_id,
+        after={"document_type_id": document_type_id, "size_bytes": size_bytes, "filename": filename},
+    )
+
+
+async def record_rejected_file(
+    conn: asyncpg.Connection,
+    ctx: AuditContext,
+    rejection: Rejection,
+    *,
+    target_type: str,
+    target_id: int,
+    seafarer_id: int,
+    after: dict,
+) -> None:
+    """An *upload rejected* record (outcome refused, the reason code), in its
+    own transaction."""
     async with conn.transaction():
         await audit.record(
             conn, ctx, AuditAction.UPLOAD_REJECTED,
-            target_type="document_type", target_id=document_type_id, seafarer_id=seafarer_id,
-            after={
-                "document_type_id": document_type_id,
-                "size_bytes": size_bytes,
-                "filename": filename,
-            },
-            reason=rejection.code,
-            outcome="refused",
+            target_type=target_type, target_id=target_id, seafarer_id=seafarer_id,
+            after=after, reason=rejection.code, outcome="refused",
         )
 
 

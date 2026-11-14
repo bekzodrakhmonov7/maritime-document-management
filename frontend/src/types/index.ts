@@ -217,6 +217,42 @@ export interface VersionDetails {
   expiry_date: string | null
 }
 
+/** A Version's latest Review decides (S8). The Current Version is never rejected. */
+export type ReviewState = 'not_reviewed' | 'accepted' | 'rejected'
+
+export type ReviewDecision = 'accept' | 'reject'
+
+/** A second staff member's accept or reject, with a comment. Never the uploader's. */
+export interface Review {
+  id: number
+  decision: ReviewDecision
+  comment: string
+  reviewed_by: string
+  reviewed_by_name: string
+  reviewed_at: string
+}
+
+export type VerificationResult = 'confirmed' | 'not_confirmed'
+
+/** A check with the issuing authority: sent as form fields with an optional proof file. */
+export interface VerificationDetails {
+  /** ISO date (YYYY-MM-DD), not after today. */
+  checked_on: string
+  source: string
+  result: VerificationResult
+  reference: string
+}
+
+export interface Verification extends VerificationDetails {
+  id: number
+  recorded_by: string
+  recorded_by_name: string
+  recorded_at: string
+  /** Both null when no proof file was attached. */
+  proof_original_filename: string | null
+  proof_content_type: string | null
+}
+
 /** One immutable snapshot of a document's file and key details. */
 export interface Version extends VersionDetails {
   id: number
@@ -230,6 +266,10 @@ export interface Version extends VersionDetails {
   is_current: boolean
   /** Set on a details-only Version: the earlier Version whose file it reuses. */
   file_from_version_number: number | null
+  review_state: ReviewState
+  /** Newest first. */
+  reviews: Review[]
+  verifications: Verification[]
 }
 
 /** One row of a seafarer's documents table. */
@@ -244,8 +284,13 @@ export interface DocumentSummary {
   created_at: string
   version_count: number
   /** Null when every Version is rejected: the document counts as missing. */
-  current_version: Pick<Version, 'id' | 'document_number' | 'issue_date' | 'expiry_date' | 'uploaded_at'> | null
+  current_version: Pick<
+    Version,
+    'id' | 'document_number' | 'issue_date' | 'expiry_date' | 'uploaded_at' | 'review_state'
+  > | null
   expiry_status: ExpiryStatus | null
+  /** The Current Version's latest Verification is confirmed. Never the same as Reviewed. */
+  verified: boolean
 }
 
 /** GET /api/documents/{id}: the document with its full history, newest first. */
@@ -305,6 +350,8 @@ export const AUDIT_ACTION_LABELS = {
   version_uploaded: 'Version uploaded',
   upload_rejected: 'Upload rejected',
   file_url_issued: 'File URL issued',
+  version_reviewed: 'Version reviewed',
+  verification_recorded: 'Verification recorded',
   settings_changed: 'Settings changed',
   audit_searched: 'Audit Log searched',
   audit_exported: 'Audit Log exported',

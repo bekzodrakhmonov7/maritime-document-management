@@ -1,10 +1,18 @@
-"""Current Version, Expiry Status and the Version date rules (FR-10, FR-15; T1, T2)."""
+"""Current Version, Expiry Status and the Version date rules, Review state and
+Verified (FR-10, FR-11, FR-12, FR-15; T1, T2)."""
 
 from datetime import date, datetime, timezone
 
 import pytest
 
-from app.domain import current_version, expiry_status, latest_allowed_expiry, version_dates_problem
+from app.domain import (
+    current_version,
+    expiry_status,
+    is_verified,
+    latest_allowed_expiry,
+    review_state,
+    version_dates_problem,
+)
 
 E = date(2026, 6, 30)
 
@@ -121,3 +129,36 @@ def test_maximum_validity_is_a_hard_limit():
     assert "maximum validity" in version_dates_problem(
         issue, date(2031, 1, 16), expires=True, max_validity_months=60
     )
+
+
+# --- review_state and is_verified (FR-11, FR-12) --------------------------------------
+
+
+def _verification(version_id: int, result: str, verification_id: int) -> dict:
+    return {"id": verification_id, "version_id": version_id, "result": result}
+
+
+def test_a_version_without_reviews_is_not_reviewed():
+    assert review_state(1, [_review(2, "accept", 1)]) == "not_reviewed"
+
+
+def test_the_latest_review_is_the_review_state():
+    reviews = [_review(1, "accept", 4), _review(1, "reject", 2)]
+    assert review_state(1, reviews) == "accepted"
+    assert review_state(1, reviews + [_review(1, "reject", 5)]) == "rejected"
+
+
+def test_verified_when_the_current_versions_latest_verification_is_confirmed():
+    current = _v(2, 1)
+    assert is_verified(current, [_verification(2, "confirmed", 1)]) is True
+    overturned = [_verification(2, "confirmed", 1), _verification(2, "not_confirmed", 2)]
+    assert is_verified(current, overturned) is False
+    assert is_verified(current, overturned + [_verification(2, "confirmed", 3)]) is True
+
+
+def test_a_renewal_is_not_verified_by_the_previous_versions_verification():
+    assert is_verified(_v(2, 1), [_verification(1, "confirmed", 1)]) is False
+
+
+def test_no_current_version_is_never_verified():
+    assert is_verified(None, [_verification(1, "confirmed", 1)]) is False
