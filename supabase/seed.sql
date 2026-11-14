@@ -34,6 +34,26 @@ INSERT INTO public.document_type (name, expires, renewable_at_sea, depends_on_id
 SELECT 'Flag Endorsement of CoC', true, true, id
   FROM public.document_type WHERE name = 'Certificate of Competency';
 
+-- Requirements (S4): everyone needs the passport, seaman's book, medical and
+-- safety training; officers and engineers also the CoC and its endorsement.
+INSERT INTO public.position_requirement (position_id, document_type_id)
+SELECT p.id, t.id
+  FROM public.position p CROSS JOIN public.document_type t
+ WHERE t.name IN ('Passport', 'Seaman''s Book', 'Medical Certificate', 'Basic Safety Training')
+    OR (t.name IN ('Certificate of Competency', 'Flag Endorsement of CoC')
+        AND p.name IN ('Master', 'Chief Officer', 'Second Officer', 'Chief Engineer', 'Second Engineer'));
+
+-- Exceptions: Liberia wants the yellow fever vaccination from everyone, but
+-- MV Baltic Dawn (Liberian flag) only trades in Northern Europe.
+INSERT INTO public.requirement_exception (flag, document_type_id, effect, reason)
+SELECT 'LR', id, 'add', 'Liberian flag requires yellow fever vaccination'
+  FROM public.document_type WHERE name = 'Yellow Fever Vaccination';
+
+INSERT INTO public.requirement_exception (vessel_id, document_type_id, effect, reason)
+SELECT v.id, t.id, 'remove', 'Trades in Northern Europe only'
+  FROM public.vessel v, public.document_type t
+ WHERE v.name = 'MV Baltic Dawn' AND t.name = 'Yellow Fever Vaccination';
+
 -- Seafarers (S5): personal details and a held Position; one Inactive.
 INSERT INTO public.seafarer (first_name, last_name, date_of_birth, nationality, position_id)
 SELECT f, l, d::date, n, (SELECT id FROM public.position WHERE name = p)

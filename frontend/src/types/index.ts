@@ -117,3 +117,43 @@ export interface Settings {
 
 /** PUT /api/settings: the values plus the version the editor started from. */
 export type SettingsWrite = Omit<Settings, 'updated_at'>
+
+/** GET /api/requirements: one set cell of the Position Requirement matrix (S4). */
+export interface MatrixCell {
+  position_id: number
+  document_type_id: number
+}
+
+export type ExceptionEffect = 'add' | 'remove'
+
+/** An add/remove of one Document Type for one vessel or one flag (exactly one). */
+export interface RequirementException {
+  id: number
+  vessel_id: number | null
+  vessel_name: string | null
+  flag: string | null
+  /** null: every Position. */
+  position_id: number | null
+  position_name: string | null
+  document_type_id: number
+  document_type_name: string
+  effect: ExceptionEffect
+  reason: string
+  created_at: string
+  updated_at: string
+}
+
+export type RequirementExceptionWrite = Pick<
+  RequirementException,
+  'vessel_id' | 'flag' | 'position_id' | 'document_type_id' | 'effect' | 'reason'
+>
+
+/** GET /api/requirements/evaluate: the required set for (Position, Vessel or none). */
+export interface RequirementEvaluation {
+  position_id: number
+  vessel: { id: number; name: string; flag: string } | null
+  /** `exception_id` is set when an exception, not the matrix, makes it required. */
+  required: { id: number; name: string; exception_id: number | null }[]
+  /** The exceptions that decide a type for this pair (the most specific one wins). */
+  applied_exceptions: RequirementException[]
+}
