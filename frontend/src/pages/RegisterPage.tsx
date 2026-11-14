@@ -18,7 +18,7 @@ export function RegisterPage() {
   const [info, setInfo] = useState<string | null>(null)
 
   if (!authLoading && user) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to="/" replace />
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -57,7 +57,7 @@ export function RegisterPage() {
       return
     }
 
-    navigate('/dashboard')
+    navigate('/')
   }
 
   return (

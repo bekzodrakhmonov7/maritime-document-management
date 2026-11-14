@@ -95,31 +95,63 @@ async def get_signed_in_user(
             detail="Invalid token",
         )
 
-    sub = UUID(payload["sub"])
+    try:
+        sub = UUID(str(payload.get("sub")))
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    # The Account row is the only source of status and role: the token's role
+    # claim is never trusted, and a token with no row is refused.
     row = await db.fetchrow(
-        "SELECT role, is_approved FROM public.users WHERE id = $1", sub
+        "SELECT email, full_name, status, role FROM public.users WHERE id = $1", sub
     )
-    # NOTE: the no-row fallback to the token's role claim only exists for the
-    # test fixtures; real Supabase users always have a public.users row.
-    role = row["role"] if row else payload.get("role", "")
-    is_approved = row["is_approved"] if row else True
+    if row is None:
+        raise account_refused("no_account", "There is no account for this sign-in.")
 
     return UserPayload(
         sub=sub,
-        email=payload.get("email", ""),
-        role=role,
-        is_approved=is_approved,
+        email=row["email"],
+        full_name=row["full_name"],
+        status=row["status"],
+        role=row["role"],
     )
+
+
+def account_refused(code: str, message: str) -> HTTPException:
+    """A 403 whose `detail.code` the frontend can act on."""
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"code": code, "message": message},
+    )
+
+
+def _refuse_deactivated(user: UserPayload) -> None:
+    if user.status == "deactivated":
+        raise account_refused(
+            "account_deactivated", "Your account has been switched off."
+        )
+
+
+async def get_account(
+    user: UserPayload = Depends(get_signed_in_user),
+) -> UserPayload:
+    """Any Account that is not switched off, pending ones included (for /me)."""
+    _refuse_deactivated(user)
+    return user
 
 
 async def get_current_user(
     user: UserPayload = Depends(get_signed_in_user),
 ) -> UserPayload:
-    """A signed-in user whose account an administrator has approved (FR-01)."""
-    if not user.is_approved:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account awaiting administrator approval",
+    """An active Account. Pending and deactivated ones get 403 on every request,
+    so switching someone off takes effect on their next request (FR-02)."""
+    _refuse_deactivated(user)
+    if user.status != "active":
+        raise account_refused(
+            "account_pending", "Your account is waiting for administrator approval."
         )
     return user
 
@@ -127,10 +159,7 @@ async def get_current_user(
 def require_role(*roles: str):
     async def checker(user: UserPayload = Depends(get_current_user)) -> UserPayload:
         if user.role not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
-            )
+            raise account_refused("wrong_role", "You don't have permission to do this.")
         return user
 
     return checker

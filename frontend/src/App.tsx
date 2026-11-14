@@ -7,13 +7,8 @@ import { AppShell } from './components/layout/AppShell'
 import { RoleGate } from './components/RoleGate'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { DocumentsPage } from './pages/DocumentsPage'
-import { VesselsPage } from './pages/VesselsPage'
-import { SeafarersPage } from './pages/SeafarersPage'
-import { AlertsPage } from './pages/AlertsPage'
-import { ReportsPage } from './pages/ReportsPage'
-import { AdminConfigPage } from './pages/AdminConfigPage'
+import { HomePage } from './pages/HomePage'
+import { AccountsPage } from './pages/AccountsPage'
 
 const queryClient = new QueryClient()
 
@@ -33,41 +28,17 @@ export default function App() {
                 </ProtectedRoute>
               }
             >
-              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route index element={<HomePage />} />
               <Route
-                path="dashboard"
-                element={<DashboardPage />}
-              />
-              <Route
-                path="vessels"
-                element={<VesselsPage />}
-              />
-              <Route
-                path="seafarers"
-                element={<SeafarersPage />}
-              />
-              <Route
-                path="documents"
-                element={<DocumentsPage />}
-              />
-              <Route
-                path="alerts"
-                element={<AlertsPage />}
-              />
-              <Route
-                path="reports"
-                element={<ReportsPage />}
-              />
-              <Route
-                path="admin/config"
+                path="admin/accounts"
                 element={
                   <RoleGate roles={['administrator']}>
-                    <AdminConfigPage />
+                    <AccountsPage />
                   </RoleGate>
                 }
               />
             </Route>
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

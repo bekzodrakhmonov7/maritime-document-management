@@ -1,22 +1,30 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react'
 import { supabase } from '../lib/supabase'
-import { apiFetch } from '../lib/api'
+import { apiFetch, onAccountSwitchedOff } from '../lib/api'
 import type { Session, User } from '@supabase/supabase-js'
+import type { AccountStatus, Me, UserRole } from '../types'
 
-interface AuthUser {
-  sub: string
-  email: string
-  role: string
-  is_approved: boolean
-}
+const SWITCHED_OFF_KEY = 'account-switched-off'
 
 interface AuthContextValue {
   user: User | null
   session: Session | null
-  role: string | null
-  /** false while an administrator has not yet approved the account (FR-01) */
-  isApproved: boolean
+  /** The Account's role; null while pending (FR-01). */
+  role: UserRole | null
+  /** null until /api/me has answered (or when it failed). */
+  status: AccountStatus | null
   loading: boolean
+  /** Set when the app signed out because the account was switched off. */
+  switchedOff: boolean
+  clearSwitchedOff: () => void
+  refreshAccount: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error?: Error }>
   signUp: (
     email: string,
@@ -31,20 +39,41 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
-  const [role, setRole] = useState<string | null>(null)
-  const [isApproved, setIsApproved] = useState(false)
+  const [role, setRole] = useState<UserRole | null>(null)
+  const [status, setStatus] = useState<AccountStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  const [switchedOff, setSwitchedOff] = useState(
+    () => sessionStorage.getItem(SWITCHED_OFF_KEY) === '1',
+  )
 
-  const fetchRole = useCallback(async () => {
+  const fetchAccount = useCallback(async () => {
     try {
-      const data = await apiFetch('/auth/me') as AuthUser
-      setRole(data.role)
-      setIsApproved(data.is_approved)
+      const me = await apiFetch<Me>('/api/me')
+      setRole(me.role)
+      setStatus(me.status)
     } catch {
       setRole(null)
-      setIsApproved(false)
+      setStatus(null)
     }
   }, [])
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut()
+    setRole(null)
+    setStatus(null)
+  }, [])
+
+  // FR-02: a switched-off account is refused on its next request; sign out
+  // and tell the person why.
+  useEffect(
+    () =>
+      onAccountSwitchedOff(() => {
+        sessionStorage.setItem(SWITCHED_OFF_KEY, '1')
+        setSwitchedOff(true)
+        void signOut()
+      }),
+    [signOut],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -53,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session)
       setUser(data.session?.user ?? null)
       if (data.session) {
-        await fetchRole()
+        await fetchAccount()
       }
       if (!cancelled) {
         setLoading(false)
@@ -64,9 +93,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s)
       setUser(s?.user ?? null)
       if (s) {
-        fetchRole()
+        void fetchAccount()
       } else {
         setRole(null)
+        setStatus(null)
       }
     })
 
@@ -74,18 +104,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true
       listener.subscription.unsubscribe()
     }
-  }, [fetchRole])
+  }, [fetchAccount])
+
+  const clearSwitchedOff = useCallback(() => {
+    sessionStorage.removeItem(SWITCHED_OFF_KEY)
+    setSwitchedOff(false)
+  }, [])
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (!error) clearSwitchedOff()
     return { error: error ?? undefined }
   }
 
-  const signUp = async (
-    email: string,
-    password: string,
-    fullName: string,
-  ) => {
+  const signUp = async (email: string, password: string, fullName: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -100,19 +132,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { needsEmailConfirmation }
   }
 
-  const signOut = async () => {
-    await supabase.auth.signOut()
-    setRole(null)
-    setIsApproved(false)
-  }
-
   return (
-    <AuthContext.Provider value={{ user, session, role, isApproved, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        role,
+        status,
+        loading,
+        switchedOff,
+        clearSwitchedOff,
+        refreshAccount: fetchAccount,
+        signIn,
+        signUp,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')

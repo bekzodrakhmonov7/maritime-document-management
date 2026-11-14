@@ -4,7 +4,7 @@ import { Anchor, Loader2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export function LoginPage() {
-  const { signIn, user, loading: authLoading } = useAuth()
+  const { signIn, user, loading: authLoading, switchedOff } = useAuth()
   const navigate = useNavigate()
 
   const [email, setEmail] = useState('')
@@ -13,7 +13,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   if (!authLoading && user) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to="/" replace />
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -29,7 +29,7 @@ export function LoginPage() {
       return
     }
 
-    navigate('/dashboard')
+    navigate('/')
   }
 
   return (
@@ -49,6 +49,18 @@ export function LoginPage() {
 
         <div className="rounded-xl border border-navy-800 bg-navy-900 p-8 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+            {switchedOff && !error && (
+              <div
+                role="alert"
+                className="flex items-start gap-3 rounded-lg border border-status-expired/40 bg-status-expired-bg/10 p-4"
+              >
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-status-expired" />
+                <p className="text-sm text-status-expired">
+                  Your account has been switched off by an administrator, so you were signed out.
+                </p>
+              </div>
+            )}
+
             {error && (
               <div
                 role="alert"
