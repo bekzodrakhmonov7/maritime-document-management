@@ -5,6 +5,18 @@
 -- administrator sets a generated one). DATABASE_URL in .env.example uses it.
 ALTER ROLE app_backend PASSWORD 'app_backend_dev';
 
+-- The daily check's caller (the `daily-check` pg_cron job) reads these from
+-- Vault. Locally it calls the API on the host's port 8000 with the dev
+-- secret, the same value as CRON_SECRET in .env.example. Hosted sets its own.
+SELECT vault.create_secret(
+    'http://host.docker.internal:8000/api/internal/daily-check', 'daily_check_url',
+    'The endpoint the daily-check pg_cron job calls'
+);
+SELECT vault.create_secret(
+    'local-dev-cron-secret', 'cron_secret',
+    'Sent as X-Cron-Secret; matches the API''s CRON_SECRET'
+);
+
 -- Reference data (S3): a flagged fleet, Positions and typed Document Types.
 INSERT INTO public.vessel (name, imo_number, flag) VALUES
     ('MV Northern Star', '9312456', 'MT'),

@@ -30,12 +30,7 @@ async def get_pool() -> asyncpg.Pool:
 async def lifespan(app: FastAPI) -> None:
     global _pool
     _pool = await create_pool()
-    # The daily check's worker (app/worker.py) runs on the same pool.
-    from app import worker
-
-    scheduler = worker.start()
     try:
         yield
     finally:
-        scheduler.shutdown(wait=False)
         await _pool.close()

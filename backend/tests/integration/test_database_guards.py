@@ -221,3 +221,11 @@ async def test_app_backend_role_is_restricted(owner_db):
         "SELECT count(*) FROM pg_class WHERE relowner = 'app_backend'::regrole"
     )
     assert owned == 0
+
+
+async def test_the_database_calls_the_daily_check_every_5_minutes(owner_db):
+    job = await owner_db.fetchrow(
+        "SELECT schedule, active FROM cron.job WHERE jobname = 'daily-check'"
+    )
+    assert job is not None
+    assert (job["schedule"], job["active"]) == ("*/5 * * * *", True)
