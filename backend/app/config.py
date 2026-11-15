@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     # The app's connection, as the restricted app_backend role (ADR 0002).
     database_url: str
 
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Local development only (Vite on 5173 calling uvicorn on 8000). Hosted, the
+    # app and the API share one Vercel origin, so no cross-origin access is needed.
+    cors_origins: str ="http://localhost:5173,http://127.0.0.1:5173"
 
     frontend_url: str = "http://localhost:5173"
 

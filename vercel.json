@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --prefix frontend",
+  "buildCommand": "VITE_API_BASE= npm run build --prefix frontend",
+  "outputDirectory": "frontend/dist",
+  "regions": ["fra1"],
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "backend/app/**",
+      "excludeFiles": "{frontend/**,supabase/**,scripts/**,docs/**,backend/tests/**,node_modules/**,.sandcastle/**,.claude/**,.githooks/**}"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+import { resolveApiBase } from './apiBase'
+
+const API_BASE = resolveApiBase(import.meta.env.VITE_API_BASE)
 
 /** An error response from the API. `code` is set for refused accounts. */
 export class ApiError extends Error {
