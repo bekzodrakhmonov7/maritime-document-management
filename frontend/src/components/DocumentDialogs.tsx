@@ -9,6 +9,7 @@ import { DocumentDropzone } from './DocumentDropzone'
 import { ExpiryStatusBadge } from './ExpiryStatusBadge'
 import { NotReviewedTag, VerifiedShield } from './ReviewTags'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
+import { FILE_SIZE_CEILING_MB } from '../lib/fileSize'
 
 /** Which Version dialog is open: a first upload (pick the type), a new file
  * for an existing document (renewal), or corrected details only. */
@@ -180,7 +181,7 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
           file={file}
           onFileAccepted={setFile}
           onClear={() => setFile(null)}
-          maxSizeMb={settings?.max_file_size_mb ?? 4}
+          maxSizeMb={settings?.max_file_size_mb ?? FILE_SIZE_CEILING_MB}
           hint={hint}
         />
       )}

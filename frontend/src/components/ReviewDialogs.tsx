@@ -4,6 +4,7 @@ import { useSettings } from '../hooks/useSettings'
 import type { ReviewDecision, VerificationDetails, VerificationResult, Version } from '../types'
 import { DocumentDropzone } from './DocumentDropzone'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
+import { FILE_SIZE_CEILING_MB } from '../lib/fileSize'
 
 /** Accept or reject one Version, with a required comment. A later Review
  * overturns an earlier one; rejecting the Current Version hands "current"
@@ -159,7 +160,7 @@ export function VerificationDialog({ version, onClose }: { version: Version; onC
         file={proof}
         onFileAccepted={setProof}
         onClear={() => setProof(null)}
-        maxSizeMb={settings?.max_file_size_mb ?? 4}
+        maxSizeMb={settings?.max_file_size_mb ?? FILE_SIZE_CEILING_MB}
         hint={hint}
       />
     </FormDialog>

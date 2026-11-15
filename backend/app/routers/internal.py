@@ -1,11 +1,13 @@
-"""Calls from the database itself, not from staff (ADR 0003).
+"""The scheduled daily check: called by the database itself, not by staff
+(vercel-hosting 02, ADR 0003).
 
 Every 5 minutes `pg_cron` POSTs to `/api/internal/daily-check` through
 `pg_net`, with the shared secret from Supabase Vault in `X-Cron-Secret`. The
 call runs the daily check if it is due (`daily_check.run_if_due`: once per
 local date, from the check time on). Any other caller, a staff login
 included, gets a plain 404, as does every caller while `CRON_SECRET` is
-unset. Nothing here is a staff action, so nothing goes in the Audit Log.
+unset, and every other method on the path: nothing reveals that it exists.
+Nothing here is a staff action, so nothing goes in the Audit Log.
 """
 
 import hmac
@@ -35,8 +37,17 @@ def require_cron_secret(x_cron_secret: str | None = Header(default=None)) -> Non
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
 
 
+DAILY_CHECK = "/daily-check"
+
+
+@router.api_route(DAILY_CHECK, methods=["GET", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"])
+def other_methods_are_not_found() -> None:
+    """Any method but POST gets the same 404 as a wrong secret, not a 405."""
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+
+
 @router.post(
-    "/daily-check",
+    DAILY_CHECK,
     response_model=ScheduledCheckResult,
     dependencies=[Depends(require_cron_secret)],
 )
