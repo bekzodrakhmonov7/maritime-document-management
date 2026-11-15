@@ -132,7 +132,7 @@ Frontend variables in `frontend/.env`:
 |----------|-------------|---------|
 | `VITE_SUPABASE_URL` | Supabase local API URL | `http://127.0.0.1:54321` |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key | `eyJhbG...` |
-| `VITE_API_BASE` | Backend API base URL | `http://localhost:8000` |
+| `VITE_API_BASE` | Backend API base URL. Unset means `http://localhost:8000`; empty means the page's own origin (the Vercel build sets it empty) | `http://localhost:8000` |
 
 ## Hosted cutover (one time)
 
