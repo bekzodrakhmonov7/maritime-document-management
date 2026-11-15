@@ -28,5 +28,9 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     mail_from: str
 
+    # Shared with the database's pg_cron job (Vault `cron_secret`). Empty means
+    # POST /api/internal/daily-check always answers 404.
+    cron_secret: str = ""
+
 
 settings = Settings()

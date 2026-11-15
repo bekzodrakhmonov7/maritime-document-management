@@ -34,3 +34,10 @@ class DailyCheckResult(BaseModel):
     # Digests, one per recipient.
     sent: int
     failed: int
+
+
+class ScheduledCheckResult(BaseModel):
+    """The database's call: whether a scheduled run happened, and its result."""
+
+    ran: bool
+    result: DailyCheckResult | None = None

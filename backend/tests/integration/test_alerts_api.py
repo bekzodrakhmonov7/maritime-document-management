@@ -387,6 +387,84 @@ async def test_only_administrators_run_the_check(client, world, mailer, owner_db
     ) == 1
 
 
+# --- The database's call: pg_cron -> POST /api/internal/daily-check --------------------------
+
+CRON_SECRET = "test-cron-secret"
+
+
+@pytest.fixture
+def cron_secret(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "cron_secret", CRON_SECRET)
+    return CRON_SECRET
+
+
+async def _call(client, headers=None):
+    return await client.post("/api/internal/daily-check", headers=headers or {})
+
+
+async def _check_time_passed(owner_db):
+    await owner_db.execute(
+        "UPDATE public.settings SET time_zone = 'UTC', daily_check_time = '00:00'"
+    )
+
+
+async def test_the_database_call_runs_the_due_check_once_per_local_date(
+    client, world, mailer, owner_db, cron_secret
+):
+    await world.document(world.anna, 25)
+    await _check_time_passed(owner_db)
+
+    res = await _call(client, {"X-Cron-Secret": cron_secret})
+    assert res.status_code == 200, res.text
+    assert res.json()["ran"] is True
+    [run] = await owner_db.fetch("SELECT * FROM public.daily_check_run")
+    assert run["local_date"] == TODAY and run["manual"] is False
+    assert len(mailer.to(world.emails["officer_a"])) == 1
+
+    sent_before = len(mailer.sent)
+    res = await _call(client, {"X-Cron-Secret": cron_secret})
+    assert res.status_code == 200, res.text
+    assert res.json()["ran"] is False
+    assert await owner_db.fetchval("SELECT count(*) FROM public.daily_check_run") == 1
+    assert len(mailer.sent) == sent_before
+
+
+@pytest.mark.parametrize(
+    "caller", ["no header", "wrong secret", "empty secret", "admin", "officer_a"]
+)
+async def test_any_other_caller_of_the_database_call_gets_404_and_nothing_runs(
+    client, world, mailer, owner_db, cron_secret, caller
+):
+    await world.document(world.anna, 25)
+    await _check_time_passed(owner_db)
+    secrets = {"no header": None, "wrong secret": "wrong", "empty secret": ""}
+    if caller in secrets:
+        headers = {} if secrets[caller] is None else {"X-Cron-Secret": secrets[caller]}
+    else:
+        headers = world.headers[caller]
+    res = await _call(client, headers)
+    assert res.status_code == 404
+    assert await owner_db.fetchval("SELECT count(*) FROM public.daily_check_run") == 0
+    assert mailer.sent == []
+
+
+@pytest.mark.parametrize("presented", [None, "", "anything"])
+async def test_without_a_cron_secret_set_the_database_call_gets_404(
+    client, world, mailer, owner_db, monkeypatch, presented
+):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "cron_secret", "", raising=False)
+    await world.document(world.anna, 25)
+    await _check_time_passed(owner_db)
+    res = await _call(client, None if presented is None else {"X-Cron-Secret": presented})
+    assert res.status_code == 404
+    assert await owner_db.fetchval("SELECT count(*) FROM public.daily_check_run") == 0
+    assert mailer.sent == []
+
+
 # --- The Alerts page ---------------------------------------------------------------------
 
 
