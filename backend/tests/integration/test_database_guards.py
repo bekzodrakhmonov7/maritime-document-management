@@ -64,7 +64,7 @@ async def test_settings_is_one_row_with_the_defaults(owner_db):
     row = rows[0]
     assert row["alert_steps"] == [90, 60, 30, 0]
     assert row["planning_horizon_days"] == 90
-    assert row["max_file_size_mb"] == 10
+    assert row["max_file_size_mb"] == 4
     assert row["max_pdf_pages"] == 50
     assert row["time_zone"] == "UTC"
     assert row["daily_check_time"].strftime("%H:%M") == "07:00"
@@ -84,7 +84,7 @@ async def test_settings_refuses_a_second_row(owner_db):
         ("planning_horizon_days", 6),
         ("planning_horizon_days", 366),
         ("max_file_size_mb", 0),
-        ("max_file_size_mb", 26),
+        ("max_file_size_mb", 5),
         ("max_pdf_pages", 0),
         ("max_pdf_pages", 501),
         ("alert_steps", [90, 60]),  # 0 must be present
@@ -98,6 +98,12 @@ async def test_settings_ranges_are_checked(owner_db, column, value):
     async with owner_db.transaction():
         with pytest.raises(asyncpg.CheckViolationError):
             await owner_db.execute(f"UPDATE public.settings SET {column} = $1", value)
+
+
+async def test_the_file_size_ceiling_is_4_mb(owner_db):
+    # Vercel refuses request bodies over 4.5 MB (ADR-0003).
+    await owner_db.execute("UPDATE public.settings SET max_file_size_mb = 4")
+    assert await owner_db.fetchval("SELECT max_file_size_mb FROM public.settings") == 4
 
 
 async def test_settings_daily_check_time_is_in_15_minute_steps(owner_db):

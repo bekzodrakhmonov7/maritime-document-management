@@ -33,7 +33,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 # Fixed in code (T8): the pixel cap, the accepted formats and the size ceiling.
 MAX_IMAGE_PIXELS = 50_000_000
-SIZE_CEILING_BYTES = 25 * 1024 * 1024
+SIZE_CEILING_BYTES = 4 * 1024 * 1024  # Vercel refuses bodies over 4.5 MB (ADR-0003)
 JPEG_QUALITY = 90
 MAX_FILENAME_LENGTH = 255
 

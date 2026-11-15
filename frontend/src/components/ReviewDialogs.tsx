@@ -159,7 +159,7 @@ export function VerificationDialog({ version, onClose }: { version: Version; onC
         file={proof}
         onFileAccepted={setProof}
         onClear={() => setProof(null)}
-        maxSizeMb={settings?.max_file_size_mb ?? 25}
+        maxSizeMb={settings?.max_file_size_mb ?? 4}
         hint={hint}
       />
     </FormDialog>
