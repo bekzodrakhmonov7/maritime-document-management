@@ -218,7 +218,7 @@ For production and for staging:
    Staging's is the preview of a long-lived `staging` branch,
    `https://<project>-git-staging-<team>.vercel.app/api/internal/daily-check`.
    Previews sit behind Vercel Authentication by default, which also blocks the
-   database's call: either create a **Protection Bypass for Automation** secret
+   scheduled daily check: either create a **Protection Bypass for Automation** secret
    (Settings → Deployment Protection) and append
    `?x-vercel-protection-bypass=<secret>` to staging's URL, or turn protection
    off for previews.

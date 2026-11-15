@@ -37,7 +37,7 @@ class DailyCheckResult(BaseModel):
 
 
 class ScheduledCheckResult(BaseModel):
-    """The database's call: whether a scheduled run happened, and its result."""
+    """The scheduled daily check: whether it ran, and its result if it did."""
 
     ran: bool
     result: DailyCheckResult | None = None

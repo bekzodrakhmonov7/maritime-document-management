@@ -284,6 +284,6 @@ def test_long_filenames_are_cut_to_255_characters():
 
 
 def test_the_size_ceiling_is_4_mb_whatever_the_setting():
-    # Vercel refuses request bodies over 4.5 MB (ADR-0003).
+    # Vercel refuses request bodies over 4.5 MB (ADR 0003).
     assert Limits.from_settings(4, 50).max_bytes == 4 * 1024 * 1024
     assert Limits.from_settings(25, 50).max_bytes == 4 * 1024 * 1024

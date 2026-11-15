@@ -101,7 +101,7 @@ async def test_settings_ranges_are_checked(owner_db, column, value):
 
 
 async def test_the_file_size_ceiling_is_4_mb(owner_db):
-    # Vercel refuses request bodies over 4.5 MB (ADR-0003).
+    # Vercel refuses request bodies over 4.5 MB (ADR 0003).
     await owner_db.execute("UPDATE public.settings SET max_file_size_mb = 4")
     assert await owner_db.fetchval("SELECT max_file_size_mb FROM public.settings") == 4
 
