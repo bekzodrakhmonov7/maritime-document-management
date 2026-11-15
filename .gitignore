@@ -45,3 +45,4 @@ docs/
 .scratch/
 *.md
 !README.md
+.env.hosted
