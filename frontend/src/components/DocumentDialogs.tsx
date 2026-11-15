@@ -180,7 +180,7 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
           file={file}
           onFileAccepted={setFile}
           onClear={() => setFile(null)}
-          maxSizeMb={settings?.max_file_size_mb ?? 25}
+          maxSizeMb={settings?.max_file_size_mb ?? 4}
           hint={hint}
         />
       )}

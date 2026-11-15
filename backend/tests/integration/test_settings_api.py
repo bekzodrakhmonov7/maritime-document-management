@@ -14,7 +14,7 @@ from tests.conftest import auth_header
 DEFAULTS = {
     "alert_steps": [90, 60, 30, 0],
     "planning_horizon_days": 90,
-    "max_file_size_mb": 10,
+    "max_file_size_mb": 4,
     "max_pdf_pages": 50,
     "time_zone": "UTC",
     "daily_check_time": "07:00",
@@ -130,13 +130,13 @@ async def test_a_stale_save_is_a_conflict(client, admin, admin_id, owner_db):
 
     # A second editor still holding version 1.
     stale = await client.put(
-        "/api/settings", json={**DEFAULTS, "max_file_size_mb": 20, "version": 1}, headers=admin
+        "/api/settings", json={**DEFAULTS, "max_file_size_mb": 3, "version": 1}, headers=admin
     )
     assert stale.status_code == 409
     assert "reload" in stale.json()["detail"].lower()
 
     row = await owner_db.fetchrow("SELECT max_pdf_pages, max_file_size_mb, version FROM public.settings")
-    assert dict(row) == {"max_pdf_pages": 100, "max_file_size_mb": 10, "version": 2}
+    assert dict(row) == {"max_pdf_pages": 100, "max_file_size_mb": 4, "version": 2}
     assert len(await _settings_records(owner_db, admin_id)) == 1
 
 
@@ -145,7 +145,7 @@ async def test_a_stale_save_is_a_conflict(client, admin, admin_id, owner_db):
     [
         {"alert_steps": [90, 60]},
         {"planning_horizon_days": 366},
-        {"max_file_size_mb": 26},
+        {"max_file_size_mb": 5},
         {"max_pdf_pages": 0},
         {"time_zone": "Mars/Olympus"},
         {"daily_check_time": "07:10"},

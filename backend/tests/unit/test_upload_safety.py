@@ -117,7 +117,7 @@ def test_an_image_over_the_pixel_cap_is_too_large():
     # A 1-bit PNG keeps the file small while the pixel count is huge.
     buf = io.BytesIO()
     Image.new("1", (10_000, MAX_IMAGE_PIXELS // 10_000 + 1)).save(buf, format="PNG")
-    _rejected(validate(buf.getvalue(), Limits(25 * 1024 * 1024, 50)), "image_too_large", 422)
+    _rejected(validate(buf.getvalue(), Limits(4 * 1024 * 1024, 50)), "image_too_large", 422)
 
 
 def test_a_jpeg_is_re_encoded_upright_without_exif_gps_or_trailing_data():
@@ -281,3 +281,9 @@ def test_filenames_are_sanitised(raw, cleaned):
 
 def test_long_filenames_are_cut_to_255_characters():
     assert len(sanitise_filename("a" * 300 + ".pdf")) == 255
+
+
+def test_the_size_ceiling_is_4_mb_whatever_the_setting():
+    # Vercel refuses request bodies over 4.5 MB (ADR-0003).
+    assert Limits.from_settings(4, 50).max_bytes == 4 * 1024 * 1024
+    assert Limits.from_settings(25, 50).max_bytes == 4 * 1024 * 1024
