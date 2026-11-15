@@ -33,7 +33,7 @@ const NUMBER_FIELDS = [
     max: 365,
     hint: 'How far ahead an Assignment counts as starting soon.',
   },
-  { key: 'max_file_size_mb', label: 'Maximum file size', unit: 'MB', min: 1, max: 25, hint: null },
+  { key: 'max_file_size_mb', label: 'Maximum file size', unit: 'MB', min: 1, max: 4, hint: null },
   { key: 'max_pdf_pages', label: 'Maximum PDF pages', unit: 'pages', min: 1, max: 500, hint: null },
 ] as const
 

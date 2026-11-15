@@ -57,7 +57,7 @@ CheckTime = Annotated[str, AfterValidator(_check_time)]
 class SettingsValues(BaseModel):
     alert_steps: AlertSteps
     planning_horizon_days: StrictInt = Field(..., ge=7, le=365)
-    max_file_size_mb: StrictInt = Field(..., ge=1, le=25)
+    max_file_size_mb: StrictInt = Field(..., ge=1, le=4)
     max_pdf_pages: StrictInt = Field(..., ge=1, le=500)
     time_zone: TimeZone
     # "HH:MM" in the company time zone.

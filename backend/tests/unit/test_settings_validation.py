@@ -8,7 +8,7 @@ from app.models.settings import SettingsWrite
 VALID = {
     "alert_steps": [90, 60, 30, 0],
     "planning_horizon_days": 90,
-    "max_file_size_mb": 10,
+    "max_file_size_mb": 4,
     "max_pdf_pages": 50,
     "time_zone": "UTC",
     "daily_check_time": "07:00",
@@ -67,7 +67,7 @@ def test_alert_steps_refused(steps):
     "field, low, high",
     [
         ("planning_horizon_days", 7, 365),
-        ("max_file_size_mb", 1, 25),
+        ("max_file_size_mb", 1, 4),
         ("max_pdf_pages", 1, 500),
     ],
 )
