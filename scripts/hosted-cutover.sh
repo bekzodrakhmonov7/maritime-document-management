@@ -199,13 +199,18 @@ finish() {
 # ──────────────────────────────────────────────────────────────────────────
 
 
-# Hosted cutover (ticket 14). One run, then delete this script and .env.hosted.
-# Hosted values go to .env.hosted (gitignored), never to the local .env.
+
+# Hosted cutover to Vercel (vercel-hosting ticket 05, ADR 0003). One run, then
+# delete .env.hosted. Hosted values go to .env.hosted (gitignored), never to the
+# local .env. The order keeps Railway running until one scheduled daily check
+# has succeeded on Vercel, so there is never a window without Alerts.
 cd "$(dirname "$0")/.."
 ENV_FILE=".env.hosted"
 # Pinned: CLI v3 rejects this repo's config.toml ([inbucket] was renamed).
 SUPABASE="npx --yes supabase@2.122.1"
-TICKET=".scratch/fr-build-plan/issues/14-cutover.md"
+TICKET=".scratch/vercel-hosting/issues/05-run-the-cutover.md"
+RESET_TICKET=".scratch/fr-build-plan/issues/14-cutover.md"
+PROD_RESET="no"
 
 # copy TEXT puts TEXT on the clipboard if a clipboard tool exists.
 copy() {
@@ -219,146 +224,406 @@ copy() {
 # sql TEXT shows SQL to run in the Dashboard SQL editor and copies it.
 sql() { printf '\n    %s%s%s\n\n' "$BOLD" "$1" "$RESET"; copy "$1"; }
 
+# mark_done FILE sets a ticket's Status line to done.
+mark_done() {
+  [[ -f "$1" ]] || return 0
+  sed -i -E 's/^(\*\*Status:\*\*|Status:)[ \t]*.+$/\1 done/' "$1"
+  printf '  %s✓ marked%s %s done\n' "$GREEN" "$RESET" "$1"
+}
+
+# link REF links the Supabase CLI to project REF (asks for its db password).
+link() {
+  if ! $SUPABASE projects list >/dev/null 2>&1; then
+    say "You're not signed in to the Supabase CLI yet, so a browser will open."
+    $SUPABASE login
+  fi
+  say "Linking $1. The CLI asks for that project's database password (the"
+  note "postgres owner's, from Project Settings → Database; reset it there if needed)."
+  $SUPABASE link --project-ref "$1"
+}
+
+# app_backend_url PREFIX REF DASH: sets PREFIX_APP_BACKEND_PASSWORD (generated
+# once) and builds PREFIX_DATABASE_URL on the transaction pooler (port 6543).
+app_backend_url() {
+  local prefix="$1" ref="$2" dash="$3" pw_key="${1}_APP_BACKEND_PASSWORD" pw uri uri_key hostpart
+  pw=$(_existing "$pw_key" || true)
+  if [[ -z "$pw" ]]; then
+    # Hex, so it needs no escaping in a connection URL.
+    write_env "$pw_key" "$(openssl rand -hex 32)"; pw="${!pw_key}"
+  else
+    note "Reusing the app_backend password generated on an earlier run."
+  fi
+  open_url "$dash/sql/new"
+  step "Paste this into the SQL editor and click Run:"
+  sql "ALTER ROLE app_backend PASSWORD '$pw';"
+  pause "Ran it? Press Enter to continue"
+  open_url "$dash?showConnect=true"
+  step "In the Connect panel, pick 'Transaction pooler' and copy the URI."
+  note "It looks like postgresql://postgres.<ref>:[YOUR-PASSWORD]@<host>:6543/postgres"
+  ask "${prefix}_POOLER_URI" "Paste the transaction pooler URI:"
+  uri_key="${prefix}_POOLER_URI"; uri="${!uri_key}"
+  hostpart="${uri##*@}"
+  if [[ "$hostpart" == "$uri" || "$hostpart" != *pooler.supabase.com:6543* ]]; then
+    warn "That isn't a transaction pooler URI (host *.pooler.supabase.com, port 6543)."
+    warn "Check it before using the result: the session pooler (5432) runs out of connections."
+  fi
+  write_env "${prefix}_DATABASE_URL" "postgresql://app_backend.$ref:$pw@$hostpart"
+  note "The user is app_backend.<ref>: that's how the pooler names a custom role (ADR 0002)."
+  note "The postgres owner's connection string is never set on Vercel."
+}
+
+# vault_sql URL SECRET: SQL that (re)sets the two Vault values the
+# daily-check pg_cron job reads. Safe to re-run.
+vault_sql() {
+  printf "%s" "DELETE FROM vault.secrets WHERE name IN ('daily_check_url', 'cron_secret'); SELECT vault.create_secret('$1', 'daily_check_url', 'The endpoint the daily-check pg_cron job calls'); SELECT vault.create_secret('$2', 'cron_secret', 'Sent as X-Cron-Secret; matches the API''s CRON_SECRET');"
+}
+
+# cron_check_sql: the queries that show the pg_cron job and its HTTP calls.
+CRON_CHECK_SQL="SELECT status, return_message, start_time FROM cron.job_run_details WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'daily-check') ORDER BY start_time DESC LIMIT 5; SELECT status_code, timed_out, error_msg, created, content FROM net._http_response ORDER BY created DESC LIMIT 5;"
+
+# probe BASE [BYPASS]: checks a deployment from the terminal. GET /api/me must
+# be FastAPI's JSON 401 (it saw the original /api path, and backend/app was
+# bundled); x-vercel-id names the function region.
+probe() {
+  local base="$1" bypass="${2:-}" hdr=() code body
+  [[ -n "$bypass" ]] && hdr=(-H "x-vercel-protection-bypass: $bypass")
+  if ! command -v curl >/dev/null 2>&1; then
+    warn "curl isn't installed: run these checks in the browser's network tab."
+    return 0
+  fi
+  body=$(mktemp)
+  code=$(curl -s -o "$body" -D "$body.h" -w '%{http_code}' ${hdr[@]+"${hdr[@]}"} "$base/api/me" || true)
+  say "GET $base/api/me → $code $(head -c 120 "$body")"
+  if [[ "$code" == "401" ]] && grep -q '"detail"' "$body"; then
+    printf '  %s✓%s FastAPI answered on the original /api path\n' "$GREEN" "$RESET"
+  else
+    warn "Expected 401 with a JSON detail. HTML means the /api rewrite is missing;"
+    warn "{\"detail\":\"Not Found\"} (404) means FastAPI saw a rewritten path; a 500"
+    warn "with ModuleNotFoundError: app in the function logs means backend/app wasn't bundled."
+  fi
+  say "x-vercel-id: $(grep -i '^x-vercel-id' "$body.h" | cut -d' ' -f2- | tr -d '\r')"
+  note "The function region is the last region before the request id: it must be fra1"
+  note "(e.g. fra1::fra1::abcd-…). The Functions tab of the deployment also shows fra1."
+  rm -f "$body" "$body.h"
+}
+
 run_wizard() {
 
-TOTAL_STAGES=11
+TOTAL_STAGES=18
 
-banner "Hosted cutover: reset Supabase and go live on the rebuilt app"
-warn "This wipes the hosted database, its accounts and its files. There is no undo."
+banner "Hosted cutover: move the API from Railway to Vercel"
+say "Production stays on Railway until one scheduled daily check succeeds on Vercel."
+note "Have these open or ready: Supabase, Vercel, Resend, Namecheap, Railway."
 
 # ── 1 ─────────────────────────────────────────────────────────────────────
-stage "Link the hosted Supabase project"
-say "The project ref is the id in your Dashboard URL:"
-note "https://supabase.com/dashboard/project/<project-ref>"
-open_url "https://supabase.com/dashboard/projects"
-step "Open the project the deployed app uses, and copy the ref from the URL."
-ask SUPABASE_PROJECT_REF "Project ref:"
-write_env SUPABASE_PROJECT_REF "$SUPABASE_PROJECT_REF"
-DASH="https://supabase.com/dashboard/project/$SUPABASE_PROJECT_REF"
-if ! $SUPABASE projects list >/dev/null 2>&1; then
-  say "You're not signed in to the Supabase CLI yet, so a browser will open."
-  $SUPABASE login
-fi
-say "Linking. The CLI asks for the database password (the postgres owner's,"
-note "from Project Settings → Database; reset it there if you don't have it)."
-$SUPABASE link --project-ref "$SUPABASE_PROJECT_REF"
-pause "Linked. Press Enter to continue"
+stage "Create the staging Supabase project"
+say "Preview deployments use a separate staging project, so unmerged code never"
+say "touches real crew records."
+open_url "https://supabase.com/dashboard/new"
+step "Create a project, e.g. 'maritime-staging', in region Central EU (Frankfurt)"
+note "  (eu-central-1, next to Vercel's fra1). Save its database password somewhere safe."
+step "When it's ready, copy the ref from the URL: /dashboard/project/<ref>."
+ask STAGING_REF "Staging project ref:"
+write_env STAGING_REF "$STAGING_REF"
+STAGING_DASH="https://supabase.com/dashboard/project/$STAGING_REF"
+open_url "$STAGING_DASH/integrations/vault/overview"
+step "If Vault isn't enabled yet, enable it here (the daily-check job reads it)."
+pause "Done? Press Enter to continue"
 
 # ── 2 ─────────────────────────────────────────────────────────────────────
-stage "Reset the hosted database"
-say "This drops the old schema and applies supabase/migrations/ without the seed."
-warn "Every old table and row on hosted is deleted."
-if confirm "Reset hosted project $SUPABASE_PROJECT_REF now?"; then
-  $SUPABASE db reset --linked --no-seed
-  pause "Reset done. Press Enter to continue"
+stage "Push the migrations to staging"
+link "$STAGING_REF"
+say "Pushing supabase/migrations/ (no seed: the seed's dev passwords stay local)."
+note "Frozen-migrations rule: only push files from the repository, never edit a pushed one."
+$SUPABASE db push
+pause "Pushed. Press Enter to continue"
+
+# ── 3 ─────────────────────────────────────────────────────────────────────
+stage "Staging: app_backend password and DATABASE_URL"
+app_backend_url STAGING "$STAGING_REF" "$STAGING_DASH"
+pause
+
+# ── 4 ─────────────────────────────────────────────────────────────────────
+stage "Production Supabase: link and bring up to date"
+open_url "https://supabase.com/dashboard/projects"
+step "Open the production project and copy the ref from the URL."
+ask PROD_REF "Production project ref:"
+write_env PROD_REF "$PROD_REF"
+PROD_DASH="https://supabase.com/dashboard/project/$PROD_REF"
+link "$PROD_REF"
+say "Has the one-time hosted reset (README, fr-build-plan ticket 14) been run on"
+say "production already? If it has, the reset is never run again."
+if confirm "Run the one-time hosted reset now (wipes production data, no undo)?"; then
+  warn "Every table, row, account and file on production is deleted. The live app"
+  warn "is down from here until the domain switch in stage 15."
+  if confirm "Reset production project $PROD_REF now?"; then
+    $SUPABASE db reset --linked --no-seed
+    PROD_RESET="yes"
+  fi
+fi
+if [[ "$PROD_RESET" == "no" ]]; then
+  say "Pushing the new migrations (frozen-migrations rule: new files only)."
+  $SUPABASE db push
+fi
+open_url "$PROD_DASH/integrations/vault/overview"
+step "If Vault isn't enabled yet, enable it here."
+pause "Press Enter to continue"
+
+# ── 5 ─────────────────────────────────────────────────────────────────────
+stage "Production: clear the old accounts and files"
+if [[ "$PROD_RESET" == "yes" ]]; then
+  open_url "$PROD_DASH/sql/new"
+  step "Paste this into the SQL editor and click Run:"
+  sql "DELETE FROM auth.users;"
+  open_url "$PROD_DASH/storage/buckets"
+  step "Open the crew-documents bucket, select every file and folder, then Delete."
+  note "Keep the bucket itself: the migrations configured its limits."
+  pause "Accounts cleared and bucket empty? Press Enter to continue"
 else
-  SKIPPED+=("db reset --linked --no-seed (skipped at the prompt)")
-  warn "Skipped. Only continue if the reset was already done."
+  note "No reset this run, so there is nothing to clear."
   pause
 fi
 
-# ── 3 ─────────────────────────────────────────────────────────────────────
-stage "Clear the old accounts"
-say "Everyone registers again, so the old Auth users go."
-open_url "$DASH/sql/new"
-step "Paste this into the SQL editor and click Run:"
-sql "DELETE FROM auth.users;"
-step "It reports the rows deleted (0 is fine on a re-run)."
-pause "Done? Press Enter to continue"
-
-# ── 4 ─────────────────────────────────────────────────────────────────────
-stage "Empty the documents bucket"
-open_url "$DASH/storage/buckets"
-step "Open the crew-documents bucket."
-step "Select every file and folder, then Delete. Repeat until it's empty."
-note "Keep the bucket itself: the migrations configured its limits."
-pause "Bucket empty? Press Enter to continue"
-
-# ── 5 ─────────────────────────────────────────────────────────────────────
-stage "Check that hosted matches the repository"
-say "Right after the reset, db push should say the remote is up to date."
-$SUPABASE db push
-pause "Press Enter to continue"
-
 # ── 6 ─────────────────────────────────────────────────────────────────────
-stage "Set the app_backend password"
-APP_BACKEND_PASSWORD=$(_existing APP_BACKEND_PASSWORD || true)
-if [[ -z "$APP_BACKEND_PASSWORD" ]]; then
-  # Hex, so it needs no escaping in a connection URL.
-  write_env APP_BACKEND_PASSWORD "$(openssl rand -hex 32)"
-else
-  note "Reusing the password generated on an earlier run (in $ENV_FILE)."
+stage "Production: app_backend password and DATABASE_URL"
+# Reuse the password the hosted reset's run of this wizard generated, if any.
+OLD_PW=$(_existing APP_BACKEND_PASSWORD || true)
+if [[ -z "$(_existing PROD_APP_BACKEND_PASSWORD || true)" && -n "$OLD_PW" ]]; then
+  write_env PROD_APP_BACKEND_PASSWORD "$OLD_PW"
 fi
-open_url "$DASH/sql/new"
-step "Paste this into the SQL editor and click Run:"
-sql "ALTER ROLE app_backend PASSWORD '$APP_BACKEND_PASSWORD';"
-pause "Ran it? Press Enter to continue"
+if [[ "$PROD_RESET" == "no" ]] && [[ -z "$(_existing PROD_APP_BACKEND_PASSWORD || true)" ]]; then
+  warn "A new app_backend password also cuts off the old API, which stays live until"
+  warn "the domain switch: put the new password in its DATABASE_URL too."
+fi
+app_backend_url PROD "$PROD_REF" "$PROD_DASH"
+pause
 
 # ── 7 ─────────────────────────────────────────────────────────────────────
-stage "Build the app's DATABASE_URL"
-open_url "$DASH?showConnect=true"
-step "In the Connect panel, pick 'Session pooler' and copy the URI."
-note "It looks like postgresql://postgres.<ref>:[YOUR-PASSWORD]@<host>:5432/postgres"
-ask POOLER_URI "Paste the session pooler URI:"
-HOSTPART="${POOLER_URI##*@}"
-if [[ "$HOSTPART" == "$POOLER_URI" || "$HOSTPART" != *pooler.supabase.com* ]]; then
-  warn "That doesn't look like a pooler URI; check it before using the result."
-fi
-write_env DATABASE_URL "postgresql://app_backend.$SUPABASE_PROJECT_REF:$APP_BACKEND_PASSWORD@$HOSTPART"
-note "The user is app_backend.<ref>: that's how the pooler names a custom role."
+stage "Generate the cron secrets"
+say "Each environment gets its own CRON_SECRET. The same value goes to Vercel"
+say "(CRON_SECRET) and to that project's Vault (cron_secret)."
+for env in PROD STAGING; do
+  if [[ -z "$(_existing "${env}_CRON_SECRET" || true)" ]]; then
+    write_env "${env}_CRON_SECRET" "$(openssl rand -hex 32)"
+  else
+    note "Reusing ${env}_CRON_SECRET from an earlier run."
+    printf -v "${env}_CRON_SECRET" '%s' "$(_existing "${env}_CRON_SECRET")"
+  fi
+done
 pause
 
 # ── 8 ─────────────────────────────────────────────────────────────────────
-stage "Point Railway at app_backend"
-open_url "https://railway.com/dashboard"
-step "Open the project, then the backend service, then Variables."
-step "Set DATABASE_URL to the value now on your clipboard."
-copy "$DATABASE_URL"
-step "Delete OWNER_DATABASE_URL there if it exists: the app must not have it."
-step "Check these are set for the hosted project: SUPABASE_URL,"
-note "  SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, MAIL_FROM, RESEND_API_KEY,"
-note "  FRONTEND_URL and CORS_ORIGINS (the deployed frontend's origin)."
-step "Deploy the changes and wait for the deploy to go green."
-note "The deploy logs should show no 'password authentication failed'."
-pause "Deployed? Press Enter to continue"
+stage "Create the Vercel project from the repository root"
+open_url "https://vercel.com/new"
+step "Import this GitHub repository."
+step "Root Directory: leave it at the repository root (./), NOT frontend/."
+step "Framework Preset: Other. Leave the build, output and install settings"
+note "  unset: the root vercel.json sets them, the fra1 region and the /api rewrite."
+step "Don't deploy yet if it offers to (or let it fail): env vars come next."
+note "The old frontend-only Vercel project keeps serving the domain until stage 15."
+ask VERCEL_PROJECT_URL "The new project's settings URL (https://vercel.com/<team>/<project>):"
+write_env VERCEL_PROJECT_URL "$VERCEL_PROJECT_URL"
+pause
 
 # ── 9 ─────────────────────────────────────────────────────────────────────
-stage "Sign up the first administrator"
-ask APP_URL "The deployed app's URL (https://...):"
-write_env APP_URL "$APP_URL"
-ask ADMIN_EMAIL "The first administrator's e-mail:"
-write_env ADMIN_EMAIL "$ADMIN_EMAIL"
-open_url "$APP_URL"
-step "Sign up with $ADMIN_EMAIL, and confirm the e-mail if Supabase sends one."
-step "After signing in you should see the 'waiting for approval' page."
-pause "Signed up? Press Enter to continue"
+stage "Vercel environment variables: Production"
+ask DOMAIN "The production domain (e.g. crew.example.com):"
+write_env DOMAIN "$DOMAIN"
+open_url "$VERCEL_PROJECT_URL/settings/environment-variables"
+say "Add each with only the Production environment ticked."
+say "From the production Supabase project ($PROD_DASH/settings/api-keys"
+say "and the JWT settings):"
+step "SUPABASE_URL and VITE_SUPABASE_URL = https://$PROD_REF.supabase.co"
+step "SUPABASE_ANON_KEY and VITE_SUPABASE_ANON_KEY = the anon (public) key"
+step "SUPABASE_SERVICE_ROLE_KEY = the service_role key (mark it Sensitive)"
+step "SUPABASE_JWT_SECRET = the (legacy) JWT secret (Sensitive)"
+say "From this wizard:"
+step "DATABASE_URL = the app_backend transaction-pooler URL (on your clipboard)"
+copy "$PROD_DATABASE_URL"
+step "CRON_SECRET = PROD_CRON_SECRET from $ENV_FILE (Sensitive)"
+step "FRONTEND_URL = https://$DOMAIN"
+say "From Resend:"
+step "RESEND_API_KEY = the production key; MAIL_FROM = an address on the domain"
+note "  verified in Resend (e.g. alerts@$DOMAIN), or Resend refuses to send."
+warn "Do NOT add OWNER_DATABASE_URL, CORS_ORIGINS or VITE_API_BASE: the owner string"
+warn "must never reach Vercel, and the build sets VITE_API_BASE empty itself."
+pause "All eleven set for Production? Press Enter to continue"
 
 # ── 10 ────────────────────────────────────────────────────────────────────
-stage "Make the account an administrator"
-say "Running make_admin against hosted, as app_backend (it is audited)."
-# Only DATABASE_URL is used; the other three just satisfy the settings class.
-until (cd backend && DATABASE_URL="$DATABASE_URL" SUPABASE_URL="unused" \
+stage "Vercel environment variables: Preview (staging)"
+say "Previews track a long-lived 'staging' branch, so their URL stays stable:"
+note "https://<project>-git-staging-<team>.vercel.app (Vercel shows it after the push)."
+ask PREVIEW_URL "The staging branch URL (https://...vercel.app; a guess is fine, edit later):"
+write_env PREVIEW_URL "${PREVIEW_URL%/}"
+open_url "$VERCEL_PROJECT_URL/settings/environment-variables"
+say "Add the same eleven names with only the Preview environment ticked, from the"
+say "STAGING project ($STAGING_DASH/settings/api-keys):"
+step "SUPABASE_URL, VITE_SUPABASE_URL = https://$STAGING_REF.supabase.co"
+step "SUPABASE_ANON_KEY, VITE_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,"
+note "  SUPABASE_JWT_SECRET: staging's values."
+step "DATABASE_URL = staging's app_backend URL (on your clipboard)"
+copy "$STAGING_DATABASE_URL"
+step "CRON_SECRET = STAGING_CRON_SECRET from $ENV_FILE"
+step "FRONTEND_URL = $PREVIEW_URL"
+step "MAIL_FROM = the same verified-domain address as production"
+step "RESEND_API_KEY: leave it EMPTY, so staging never e-mails real officers"
+note "  (digests then fail with 'RESEND_API_KEY is not set'). If you want staging mail,"
+note "  use a key from a Resend account with no verified domain, which can only send"
+note "  to that account's own address, i.e. yours."
+pause "Preview variables set? Press Enter to continue"
+
+# ── 11 ────────────────────────────────────────────────────────────────────
+stage "Supabase Auth URLs for both projects"
+open_url "$PROD_DASH/auth/url-configuration"
+step "Production: Site URL https://$DOMAIN, Redirect URLs include https://$DOMAIN/**"
+open_url "$STAGING_DASH/auth/url-configuration"
+step "Staging: Site URL $PREVIEW_URL, Redirect URLs include https://*.vercel.app/**"
+note "  (or the narrower https://*-<team>.vercel.app/**)."
+pause "Both saved? Press Enter to continue"
+
+# ── 12 ────────────────────────────────────────────────────────────────────
+stage "Deploy a preview and check it"
+say "Push a 'staging' branch so Vercel builds a preview against staging:"
+note "  git push origin HEAD:staging"
+open_url "$VERCEL_PROJECT_URL/deployments"
+step "Wait for the staging deployment to be Ready, and confirm its branch URL."
+ask PREVIEW_URL "The staging branch URL:"
+write_env PREVIEW_URL "${PREVIEW_URL%/}"
+open_url "$VERCEL_PROJECT_URL/settings/deployment-protection"
+step "Previews are behind Vercel Authentication by default, which also blocks the"
+note "  database's calls. Under 'Protection Bypass for Automation' create a secret,"
+note "  or turn protection off for previews (then leave the next answer empty)."
+ask_secret VERCEL_BYPASS "Bypass secret (empty if previews are unprotected):"
+write_env VERCEL_BYPASS "$VERCEL_BYPASS"
+probe "$PREVIEW_URL" "$VERCEL_BYPASS"
+step "Open the preview in the browser: the sign-in page (the SPA) loads, and a deep"
+note "  link such as $PREVIEW_URL/settings also loads the SPA, not a 404."
+pause "Preview serves the SPA and /api from fra1? Press Enter to continue"
+
+# ── 13 ────────────────────────────────────────────────────────────────────
+stage "Staging: Vault values, cron calls and an end-to-end test"
+STAGING_CALL="$PREVIEW_URL/api/internal/daily-check"
+[[ -n "$VERCEL_BYPASS" ]] && STAGING_CALL+="?x-vercel-protection-bypass=$VERCEL_BYPASS"
+open_url "$STAGING_DASH/sql/new"
+step "Run this in staging's SQL editor (it points staging's job at the preview):"
+sql "$(vault_sql "$STAGING_CALL" "$STAGING_CRON_SECRET")"
+pause "Ran it? Wait 5 minutes, then press Enter"
+step "Run this in staging's SQL editor; both should show recent successful calls"
+note "  (job status 'succeeded', HTTP status_code 200 with {\"ran\": ...}):"
+sql "$CRON_CHECK_SQL"
+note "401 → the bypass secret is wrong; 404 → Vercel's CRON_SECRET doesn't match Vault."
+pause "Calls succeed? Press Enter to continue"
+ask ADMIN_EMAIL "Your e-mail (the first administrator, on staging and production):"
+write_env ADMIN_EMAIL "$ADMIN_EMAIL"
+open_url "$PREVIEW_URL"
+step "Sign up on the preview with $ADMIN_EMAIL; you land on 'waiting for approval'."
+pause "Signed up? Press Enter to make the account an administrator"
+until (cd backend && DATABASE_URL="$STAGING_DATABASE_URL" SUPABASE_URL="unused" \
         SUPABASE_SERVICE_ROLE_KEY="unused" MAIL_FROM="unused@localhost" \
         uv run python -m app.scripts.make_admin "$ADMIN_EMAIL"); do
   warn "make_admin failed (see the output above)."
-  confirm "Try again?" || { SKIPPED+=("make_admin $ADMIN_EMAIL"); break; }
+  confirm "Try again?" || { SKIPPED+=("make_admin $ADMIN_EMAIL on staging"); break; }
 done
-pause "Press Enter to continue"
+step "Sign in on the preview, add a vessel, a seafarer and a document (under 4 MB),"
+note "  and open the Version. Check that no e-mail reaches anyone but you."
+pause "Preview works end to end? Press Enter to continue"
 
-# ── 11 ────────────────────────────────────────────────────────────────────
-stage "Sign in and close ticket 14"
-open_url "$APP_URL"
-step "Sign out, then sign in again as $ADMIN_EMAIL."
-step "The dashboard loads, and Accounts lists you as an active administrator."
-if confirm "Did the first administrator sign in and see the dashboard?"; then
-  if [[ -f "$TICKET" ]]; then
-    sed -i -E 's/^(\*\*Status:\*\*|Status:)[ \t]*.+$/\1 done/' "$TICKET"
-    printf '  %s✓ marked%s ticket 14 done\n' "$GREEN" "$RESET"
-  fi
-else
-  SKIPPED+=("ticket 14 left open: the sign-in check didn't pass")
+# ── 14 ────────────────────────────────────────────────────────────────────
+stage "Deploy production on Vercel and set its Vault values"
+say "Railway keeps running. Merge to main (or Redeploy in Vercel) for a production"
+say "deployment; it is reachable at the project's *.vercel.app domain."
+open_url "$VERCEL_PROJECT_URL/deployments"
+step "Wait for the Production deployment to be Ready, and copy its *.vercel.app URL."
+ask PROD_VERCEL_URL "Production *.vercel.app URL:"
+write_env PROD_VERCEL_URL "${PROD_VERCEL_URL%/}"
+probe "$PROD_VERCEL_URL"
+say "The production job calls the domain. Until stage 15 those calls reach the old"
+say "frontend and fail harmlessly; Railway's own timer keeps sending Alerts, and"
+say "run_if_due claims each day's run once, so the two never double up."
+open_url "$PROD_DASH/sql/new"
+step "Run this in PRODUCTION's SQL editor:"
+sql "$(vault_sql "https://$DOMAIN/api/internal/daily-check" "$PROD_CRON_SECRET")"
+pause "Ran it? Press Enter to continue"
+
+# ── 15 ────────────────────────────────────────────────────────────────────
+stage "Move the domain and DNS to Vercel"
+step "If the old frontend Vercel project has $DOMAIN, remove it there first."
+open_url "$VERCEL_PROJECT_URL/settings/domains"
+step "Add $DOMAIN (and www if you use it) to the new project."
+open_url "https://resend.com/domains"
+step "Open $DOMAIN in Resend and note every DNS record it lists (SPF/MX on the"
+note "  send subdomain, the DKIM TXT, and your DMARC TXT)."
+open_url "https://vercel.com/dashboard/domains"
+step "In Vercel's DNS for $DOMAIN add each Resend record exactly, plus DMARC"
+note "  (_dmarc TXT) and any mail-forwarding MX records you rely on."
+warn "Add every mail record in Vercel BEFORE switching nameservers, or mail stops."
+pause "All mail records added in Vercel? Press Enter to continue"
+open_url "https://ap.www.namecheap.com/domains/list/"
+step "Namecheap → $DOMAIN → Manage → Nameservers → Custom DNS:"
+note "  ns1.vercel-dns.com and ns2.vercel-dns.com. Save (the green check)."
+step "Then remove leftover Namecheap mail records and Namecheap's own email"
+note "  forwarding for $DOMAIN, so nothing points at the old setup."
+note "Nameservers take minutes to hours. Vercel issues the HTTPS certificate itself."
+step "Wait until Vercel shows $DOMAIN as Valid Configuration, and Resend still"
+note "  shows the domain as Verified."
+probe "https://$DOMAIN"
+pause "Domain serves the Vercel deployment? Press Enter to continue"
+
+# ── 16 ────────────────────────────────────────────────────────────────────
+stage "Production: the first administrator"
+if [[ "$PROD_RESET" == "yes" ]]; then
+  open_url "https://$DOMAIN"
+  step "Sign up with $ADMIN_EMAIL, and confirm the e-mail if Supabase sends one."
+  pause "Signed up? Press Enter to make the account an administrator"
+  until (cd backend && DATABASE_URL="$PROD_DATABASE_URL" SUPABASE_URL="unused" \
+          SUPABASE_SERVICE_ROLE_KEY="unused" MAIL_FROM="unused@localhost" \
+          uv run python -m app.scripts.make_admin "$ADMIN_EMAIL"); do
+    warn "make_admin failed (see the output above)."
+    confirm "Try again?" || { SKIPPED+=("make_admin $ADMIN_EMAIL on production"); break; }
+  done
 fi
-warn "Delete $ENV_FILE when you're done: it holds the hosted app_backend password."
+open_url "https://$DOMAIN"
+step "Sign in as an administrator: the dashboard loads, and Accounts lists you."
+pause "Signed in? Press Enter to continue"
+
+# ── 17 ────────────────────────────────────────────────────────────────────
+stage "Production checks before Railway goes"
+say "Check each by hand:"
+step "Responses come from fra1: x-vercel-id above, or the deployment's Functions tab."
+step "The hosted connection goes through port 6543 as app_backend: Vercel's"
+note "  Production DATABASE_URL is app_backend.$PROD_REF@…:6543, and this shows"
+note "  app_backend sessions (through Supavisor) after you click around the app:"
+open_url "$PROD_DASH/sql/new"
+sql "SELECT usename, application_name, count(*) FROM pg_stat_activity WHERE usename = 'app_backend' GROUP BY 1, 2;"
+pause "Press Enter for the cron checks"
+step "cron.job_run_details and net._http_response show successful 5-minute calls"
+note "  (status_code 200) since the domain switch:"
+sql "$CRON_CHECK_SQL"
+pause "Press Enter for the daily check"
+step "One scheduled daily check ran on Vercel (after the configured check time):"
+note "  a row with manual = false, finished_at set, and started_at after the switch."
+note "  Its HTTP call in net._http_response returned {\"ran\": true, ...}."
+sql "SELECT local_date, manual, started_at, finished_at FROM daily_check_run ORDER BY started_at DESC LIMIT 5;"
+step "Email still arrives after the DNS move: the digest reached your inbox, or"
+note "  send yourself one (e.g. an account approval) and check it arrives."
+if ! confirm "Did a scheduled daily check succeed on Vercel, and did email arrive?"; then
+  SKIPPED+=("Railway not deleted: wait for a scheduled daily check on Vercel, then re-run")
+  warn "Keep Railway running. Re-run this wizard tomorrow: it keeps your answers."
+  finish
+  return 0
+fi
+
+# ── 18 ────────────────────────────────────────────────────────────────────
+stage "Delete the Railway service"
+open_url "https://railway.com/dashboard"
+step "Open the project → the backend service → Settings → Delete service."
+if confirm "Deleted the Railway service?"; then
+  mark_done "$TICKET"
+  [[ "$PROD_RESET" == "yes" ]] && mark_done "$RESET_TICKET"
+else
+  SKIPPED+=("delete the Railway service")
+fi
+warn "Delete $ENV_FILE when you're done: it holds the hosted passwords and secrets."
 pause
 
 finish

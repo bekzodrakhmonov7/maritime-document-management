@@ -7,6 +7,7 @@ A full-stack application for tracking maritime crew document expirations across 
 - **Backend**: FastAPI + asyncpg + Supabase local (PostgreSQL + Auth + Storage)
 - **Frontend**: React 19 + Vite + Tailwind CSS v4 + shadcn/ui
 - **E-mail**: Resend HTTP API
+- **Hosting**: one Vercel project (frontend + API as Python functions in `fra1`), Supabase hosted. See [Hosting](#hosting-vercel--supabase)
 
 ## Prerequisites
 
@@ -122,9 +123,12 @@ Key variables in `.env` (project root):
 | `OWNER_DATABASE_URL` | The table owner, for tooling and test fixtures only | `postgresql://postgres:postgres@127.0.0.1:54322/postgres` |
 | `SUPABASE_URL` | Supabase local API URL | `http://127.0.0.1:54321` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | `eyJhbG...` |
+| `SUPABASE_ANON_KEY` | Supabase anon/public key, for the sign-in proxy | `eyJhbG...` |
 | `SUPABASE_JWT_SECRET` | JWT signing secret | `super-secret-jwt-token-with-at-least-32-characters-long` |
 | `RESEND_API_KEY` | Resend API key for e-mail | `re_...` |
 | `MAIL_FROM` | Sender email | `noreply@maritime.local` |
+| `FRONTEND_URL` | The app's address, for links in e-mails | `http://localhost:5173` |
+| `CRON_SECRET` | Shared with the database's `daily-check` job (Vault `cron_secret`); empty means `/api/internal/daily-check` always answers 404 | `local-dev-cron-secret` |
 
 Frontend variables in `frontend/.env`:
 
@@ -134,46 +138,177 @@ Frontend variables in `frontend/.env`:
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key | `eyJhbG...` |
 | `VITE_API_BASE` | Backend API base URL. Unset means `http://localhost:8000`; empty means the page's own origin (the Vercel build sets it empty) | `http://localhost:8000` |
 
-## Hosted cutover (one time)
+## Hosting (Vercel + Supabase)
 
-The rebuilt app does not migrate the old hosted data. The hosted Supabase
-project is reset once and everyone registers again. Run these steps in order,
-from the repository root, after the rebuild is merged into `main`:
+One Vercel project serves the frontend at `/` and the API at `/api` from one
+origin, in Vercel's `fra1` region next to the Supabase project in eu-central-1
+(ADR 0003). The root `vercel.json` builds the frontend as static output
+(`frontend/dist`, with `VITE_API_BASE` set empty so the app calls its own
+origin), exposes the FastAPI app as the Python function `api/index.py` (bundling
+`backend/app/**`), and rewrites `/api/*` to that function and every other path to
+the SPA. Every 5 minutes the database's `daily-check` `pg_cron` job calls
+`POST /api/internal/daily-check`, with the URL and shared secret read from
+Supabase Vault. Email goes through Resend. DNS is managed in Vercel.
 
-1. **Link** the hosted project:
-   `npx supabase@latest link --project-ref <project-ref>`
-2. **Reset** the hosted database. This drops the old schema and applies
-   `supabase/migrations/`. `--no-seed` keeps the local demo data, and the
-   `app_backend_dev` password that the seed sets, off hosted:
-   `npx supabase@latest db reset --linked --no-seed`
-3. **Clear the old accounts and files.** In the Supabase Dashboard SQL editor,
-   run `DELETE FROM auth.users;`. Then empty the `crew-documents` bucket in
+There are two Supabase projects:
+
+| Supabase project | Used by | Vercel environment |
+|------------------|---------|--------------------|
+| production | the production deployment (the domain) | Production |
+| staging | every preview deployment, so unmerged code never touches real crew records | Preview |
+
+The cutover wizard does the whole setup, step by step, and remembers its answers
+in `.env.hosted` (gitignored; delete it when done):
+
+```bash
+bash scripts/hosted-cutover.sh
+```
+
+### Vercel project
+
+Create the project from this repository with the **Root Directory left at the
+repository root** (not `frontend/`) and the framework preset **Other**. Leave the
+build, output and install settings unset: `vercel.json` sets them, the `fra1`
+region and the rewrites.
+
+### Environment variables
+
+Set these eleven in Vercel. Production gets the production Supabase project's
+values, Preview gets the staging project's. Mark the secret ones Sensitive.
+
+| Variable | Value |
+|----------|-------|
+| `SUPABASE_URL`, `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `SUPABASE_ANON_KEY`, `VITE_SUPABASE_ANON_KEY` | the project's anon (public) key |
+| `SUPABASE_SERVICE_ROLE_KEY` | the project's service_role key |
+| `SUPABASE_JWT_SECRET` | the project's (legacy) JWT secret |
+| `DATABASE_URL` | the **transaction pooler**, as `app_backend`: `postgresql://app_backend.<project-ref>:<password>@<region>.pooler.supabase.com:6543/postgres` |
+| `CRON_SECRET` | a generated secret per environment (`openssl rand -hex 32`), the same value as that project's Vault `cron_secret` |
+| `FRONTEND_URL` | Production: `https://<domain>`. Preview: the staging branch URL |
+| `MAIL_FROM` | an address on the domain verified in Resend, e.g. `alerts@<domain>` |
+| `RESEND_API_KEY` | Production: the Resend key. Preview: **empty**, or a key that can only send to the developer's own address (a Resend account with no verified domain), so staging never e-mails real officers |
+
+Never set `OWNER_DATABASE_URL` on Vercel: the table owner could alter the Audit
+Log (ADR 0002). `CORS_ORIGINS` is for local development only, and the build sets
+`VITE_API_BASE` itself. Use port 6543 (transaction pooler), not 5432: parallel
+function instances would exhaust the session pooler, and the app turns
+asyncpg's statement cache off for it.
+
+### Each Supabase project
+
+For production and for staging:
+
+1. **Migrations.** Link it and push: `npx supabase@2.122.1 link --project-ref
+   <project-ref>`, then `npx supabase@2.122.1 db push`. Pushed migrations are
+   frozen (below). A new staging project just gets every migration.
+2. **`app_backend` password.** In the SQL editor:
+   `ALTER ROLE app_backend PASSWORD '<generated-secret>';` (for example from
+   `openssl rand -hex 32`, which needs no URL escaping). Put it in that
+   environment's `DATABASE_URL`. Keep it out of git.
+3. **Vault.** Enable Vault if needed, then set the two values the `daily-check`
+   job reads. Each project points at its own deployment:
+
+   ```sql
+   DELETE FROM vault.secrets WHERE name IN ('daily_check_url', 'cron_secret');
+   SELECT vault.create_secret('<url>', 'daily_check_url');
+   SELECT vault.create_secret('<CRON_SECRET of that environment>', 'cron_secret');
+   ```
+
+   Production's `<url>` is `https://<domain>/api/internal/daily-check`.
+   Staging's is the preview of a long-lived `staging` branch,
+   `https://<project>-git-staging-<team>.vercel.app/api/internal/daily-check`.
+   Previews sit behind Vercel Authentication by default, which also blocks the
+   database's call: either create a **Protection Bypass for Automation** secret
+   (Settings → Deployment Protection) and append
+   `?x-vercel-protection-bypass=<secret>` to staging's URL, or turn protection
+   off for previews.
+4. **Auth URLs.** Authentication → URL Configuration: production's Site URL is
+   `https://<domain>`; staging's is the staging branch URL, with
+   `https://*.vercel.app/**` among its Redirect URLs.
+5. **First administrator.** Sign up on that environment's app, then run
+   `make_admin` from your machine against its `DATABASE_URL`:
+   `cd backend && DATABASE_URL='<that DATABASE_URL>' uv run python -m app.scripts.make_admin <email>`
+
+### DNS
+
+DNS moves from Namecheap to Vercel. Mail must keep working, so the order matters:
+
+1. Add the domain to the Vercel project (remove it from any older Vercel project first).
+2. In Vercel's DNS for the domain, add every record Resend lists for it (SPF,
+   DKIM, the send subdomain's MX), the `_dmarc` TXT record, and any
+   mail-forwarding MX records, **before** the nameservers change.
+3. At Namecheap, set the domain's nameservers to Custom DNS
+   `ns1.vercel-dns.com` and `ns2.vercel-dns.com`.
+4. Remove the leftover mail records and email forwarding at Namecheap.
+5. Wait for Vercel to show the domain as configured (it issues the HTTPS
+   certificate itself) and for Resend to still show it as Verified.
+
+### Cutover order
+
+The cutover runs side by side, so there is never a window without Alerts:
+
+1. Deploy on Vercel, with the Railway service still running.
+2. Test the preview against staging: the SPA and `/api` load, staging's cron
+   calls succeed, and a document upload under 4 MB works.
+3. Set the production Vault values.
+4. Switch the domain (DNS, above).
+5. Confirm one scheduled daily check on Vercel: a `daily_check_run` row with
+   `manual = false` after the switch.
+6. Delete the Railway service.
+
+### Manual checks
+
+- **A preview serves the SPA and `/api`.** `curl -i <url>/api/me` returns
+  FastAPI's JSON `401`. HTML means the `/api` rewrite is missing. FastAPI's
+  `{"detail":"Not Found"}` means it didn't see the original `/api` path.
+  `ModuleNotFoundError: app` in the function logs means `backend/app` wasn't
+  bundled.
+- **Responses come from `fra1`.** The `x-vercel-id` response header ends in
+  `fra1::<id>` (for example `fra1::fra1::…`), and the deployment's Functions tab
+  shows `fra1`.
+- **The connection goes through port 6543 as `app_backend`.** Vercel's
+  `DATABASE_URL` uses `app_backend.<project-ref>@…:6543`, and
+  `SELECT usename, application_name, count(*) FROM pg_stat_activity WHERE usename = 'app_backend' GROUP BY 1, 2;`
+  shows its sessions.
+- **The cron calls succeed** on staging and production:
+
+  ```sql
+  SELECT status, return_message, start_time FROM cron.job_run_details
+   WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'daily-check')
+   ORDER BY start_time DESC LIMIT 5;
+  SELECT status_code, timed_out, error_msg, created, content
+    FROM net._http_response ORDER BY created DESC LIMIT 5;
+  ```
+
+  Expect `succeeded` and `200` with `{"ran": ...}`. A `404` means Vercel's
+  `CRON_SECRET` and Vault's `cron_secret` differ. A `401` on staging means the
+  protection bypass is missing or wrong.
+- **Email still arrives after the DNS move.**
+
+### One-time hosted reset
+
+The rebuilt app does not migrate the old hosted data. The production Supabase
+project is reset once and everyone registers again. The wizard offers this
+(skip it if it has already been done):
+
+1. Link the project, then reset it. This drops the old schema and applies
+   `supabase/migrations/`. `--no-seed` keeps the local demo data, the
+   `app_backend_dev` password and the local Vault values off hosted:
+   `npx supabase@2.122.1 db reset --linked --no-seed`
+2. Clear the old accounts and files. In the SQL editor run
+   `DELETE FROM auth.users;`, then empty the `crew-documents` bucket in
    **Storage** (use the Dashboard, not SQL: Storage objects must be removed
    through the Storage API).
-4. **Push** the migrations: `npx supabase@latest db push`. Right after the
-   reset it should report that the remote database is up to date. Run it
-   anyway, as the check that hosted matches the repository.
-5. **Set the `app_backend` password** to a generated secret, for example from
-   `openssl rand -base64 32`. Run this in the SQL editor:
-   `ALTER ROLE app_backend PASSWORD '<generated-secret>';`
-   Keep the secret out of git.
-6. **Set `DATABASE_URL` on Railway** to the hosted connection string with user
-   `app_backend` and that password. Use the pooler URL from **Project Settings
-   → Database**; the pooler user is `app_backend.<project-ref>`. Redeploy.
-   `OWNER_DATABASE_URL` is not set on Railway.
-7. **Sign up** on the deployed app with the first administrator's e-mail. The
-   account starts pending.
-8. **Make it an administrator**. Run this with `DATABASE_URL` pointing at
-   hosted as `app_backend`, for example through `railway run`:
-   `cd backend && uv run python -m app.scripts.make_admin <email>`
-   Then sign in and check that the dashboard loads.
+3. Continue with the `app_backend` password, Vault and first administrator
+   above.
 
 ### Migrations are frozen after the cutover
 
 From the cutover on, **a migration that has been pushed to hosted is never
 edited**. Any schema change goes into a new migration file with a later
-timestamp, and that file is pushed with `supabase db push`. Do not run
-`db reset --linked` again: it would wipe production data.
+timestamp, and that file is pushed with `supabase db push`, to staging first,
+then to production. Do not run `db reset --linked` on production again: it would
+wipe production data.
 
 ## Project Structure
 
@@ -204,6 +339,11 @@ timestamp, and that file is pushed with `supabase db push`. Do not run
 │   │   ├── lib/                 # API client & Supabase
 │   │   └── context/             # Auth context
 │   └── public/
+├── api/
+│   └── index.py                 # Vercel Python function: the FastAPI app
+├── scripts/
+│   └── hosted-cutover.sh        # Hosting setup and cutover wizard
+├── vercel.json                  # Build, fra1 region, /api and SPA rewrites
 ├── docker-compose.yml           # Mailhog only
 └── README.md
 ```
