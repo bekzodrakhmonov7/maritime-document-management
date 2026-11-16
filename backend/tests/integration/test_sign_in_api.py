@@ -184,23 +184,21 @@ async def test_register_needs_a_full_name(client, fake_auth):
 # --- checking the code ----------------------------------------------------------
 
 
-@pytest.mark.parametrize("problem", ["wrong", "expired"])
+@pytest.mark.parametrize(
+    ("code", "expired", "expected"),
+    [("000000", False, "otp_invalid"), ("123456", True, "otp_expired")],
+)
 async def test_a_wrong_or_expired_code_is_recorded_against_the_account(
-    client, owner_db, make_account, fake_auth, problem
+    client, owner_db, make_account, fake_auth, code, expired, expected
 ):
     email = _unique_email()
     officer = await make_account(role="crewing_officer", email=email)
-    fake_auth.codes[email] = "123456"
-    if problem == "expired":
-        fake_auth.expired.add(email)
-    expected = {"wrong": "otp_invalid", "expired": "otp_expired"}[problem]
 
     # The e-mail is matched the way it was typed, whatever its case.
     typed = email.upper()
     fake_auth.codes[typed] = "123456"
-    if problem == "expired":
+    if expired:
         fake_auth.expired.add(typed)
-    code = "000000" if problem == "wrong" else "123456"
     res = await client.post("/api/auth/verify", json={"email": typed, "code": code})
 
     assert res.status_code == 403

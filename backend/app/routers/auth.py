@@ -80,7 +80,7 @@ async def send_code(
     supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
 ) -> dict[str, str]:
     """E-mail a Sign-in Code to an existing Account. Never creates one."""
-    return await _send_code(db, request, supabase_auth, body.email, None)
+    return await _send_code(db, request, supabase_auth, body.email, full_name=None)
 
 
 async def _send_code(
