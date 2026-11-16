@@ -70,9 +70,10 @@ export function CodeStep({
     setResending(true)
     try {
       await onResend()
+      const resentAt = Date.now()
       setCode('')
-      setSentAt(Date.now())
-      setNow(Date.now())
+      setSentAt(resentAt)
+      setNow(resentAt)
     } catch (err) {
       setError(toError(err).message)
     } finally {

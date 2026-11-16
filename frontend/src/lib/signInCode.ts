@@ -14,8 +14,10 @@ export function normaliseCode(input: string): string {
   return input.replace(/\D/g, '').slice(0, CODE_LENGTH)
 }
 
+const COMPLETE_CODE = new RegExp(`^[0-9]{${CODE_LENGTH}}$`)
+
 export function isCompleteCode(code: string): boolean {
-  return new RegExp(`^[0-9]{${CODE_LENGTH}}$`).test(code)
+  return COMPLETE_CODE.test(code)
 }
 
 /** Whole seconds left before "Send a new code" may be used again. */
