@@ -383,7 +383,7 @@ wipe production data.
 │   │   ├── deps.py              # JWT + per-request account check
 │   │   ├── audit.py             # The audit helper (Audit Log writes)
 │   │   ├── refused_access.py    # Records every refused request
-│   │   ├── supabase_auth.py     # Password sign-in against Supabase Auth
+│   │   ├── supabase_auth.py     # Sign-in Codes from Supabase Auth
 │   │   ├── routers/             # API endpoints (under /api)
 │   │   ├── services/            # Business logic
 │   │   └── scripts/             # make_admin
