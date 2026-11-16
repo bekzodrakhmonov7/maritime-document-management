@@ -1,21 +1,25 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { Anchor, Loader2, AlertCircle, CheckCircle, UserPlus } from 'lucide-react'
+import { Anchor, Loader2, UserPlus } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { CodeStep } from '../components/auth/CodeStep'
+import { ErrorNote } from '../components/ErrorNote'
 
-const MIN_PASSWORD_LENGTH = 6
+const INPUT_CLASS =
+  'w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-navy-50 placeholder-navy-500 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50'
 
+/** Register: full name and e-mail, then the Sign-in Code e-mailed to it
+ * (ADR-0004). The only place an Account comes into existence; it starts
+ * pending, so the code leads to the waiting-for-approval page (FR-01). */
 export function RegisterPage() {
-  const { signUp, user, loading: authLoading } = useAuth()
+  const { register, verifyCode, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const [codeSent, setCodeSent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
 
   if (!authLoading && user) {
     return <Navigate to="/" replace />
@@ -23,41 +27,24 @@ export function RegisterPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    const name = fullName.trim()
+    const typed = email.trim()
+    if (!name || !typed) {
+      setError('Enter your full name and e-mail.')
+      return
+    }
     setError(null)
-    setInfo(null)
-
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
-      return
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.')
-      return
-    }
-
     setLoading(true)
-
-    const { error: signUpError, needsEmailConfirmation } = await signUp(
-      email,
-      password,
-      fullName.trim(),
-    )
-
-    if (signUpError) {
-      setError(signUpError.message)
+    try {
+      await register(typed, name)
+      setFullName(name)
+      setEmail(typed)
+      setCodeSent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed.')
+    } finally {
       setLoading(false)
-      return
     }
-
-    if (needsEmailConfirmation) {
-      setInfo(
-        'Account created. Please check your email to confirm your address before signing in.',
-      )
-      setLoading(false)
-      return
-    }
-
-    navigate('/')
   }
 
   return (
@@ -76,134 +63,83 @@ export function RegisterPage() {
         </div>
 
         <div className="rounded-xl border border-navy-800 bg-navy-900 p-8 shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-            {error && (
-              <div
-                role="alert"
-                className="flex items-start gap-3 rounded-lg border border-status-expired/40 bg-status-expired-bg/10 p-4"
-              >
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-status-expired" />
-                <p className="text-sm text-status-expired">{error}</p>
+          {codeSent ? (
+            <CodeStep
+              email={email}
+              onVerify={async (code) => {
+                await verifyCode(email, code)
+                navigate('/')
+              }}
+              onResend={() => register(email, fullName)}
+              onChangeEmail={() => setCodeSent(false)}
+            />
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+              {error && <ErrorNote message={error} />}
+
+              <div>
+                <label
+                  htmlFor="fullName"
+                  className="mb-2 block text-sm font-medium text-navy-100"
+                >
+                  Full Name
+                </label>
+                <input
+                  id="fullName"
+                  type="text"
+                  autoComplete="name"
+                  required
+                  autoFocus
+                  maxLength={200}
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  disabled={loading}
+                  aria-required="true"
+                  aria-invalid={error ? true : undefined}
+                  className={INPUT_CLASS}
+                  placeholder="John Smith"
+                />
               </div>
-            )}
 
-            {info && (
-              <div
-                role="status"
-                className="flex items-start gap-3 rounded-lg border border-status-valid/40 bg-status-valid-bg/10 p-4"
-              >
-                <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-status-valid" />
-                <p className="text-sm text-status-valid">{info}</p>
+              <div>
+                <label
+                  htmlFor="email"
+                  className="mb-2 block text-sm font-medium text-navy-100"
+                >
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                  aria-required="true"
+                  aria-invalid={error ? true : undefined}
+                  className={INPUT_CLASS}
+                  placeholder="you@company.com"
+                />
               </div>
-            )}
 
-            <div>
-              <label
-                htmlFor="fullName"
-                className="mb-2 block text-sm font-medium text-navy-100"
-              >
-                Full Name
-              </label>
-              <input
-                id="fullName"
-                type="text"
-                autoComplete="name"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+              <button
+                type="submit"
                 disabled={loading}
-                aria-required="true"
-                aria-invalid={error ? true : undefined}
-                className="w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-navy-50 placeholder-navy-500 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50"
-                placeholder="John Smith"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-2 block text-sm font-medium text-navy-100"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-navy-600 px-4 py-2.5 font-medium text-navy-50 transition-colors hover:bg-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-                aria-required="true"
-                aria-invalid={error ? true : undefined}
-                className="w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-navy-50 placeholder-navy-500 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50"
-                placeholder="you@company.com"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-2 block text-sm font-medium text-navy-100"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={MIN_PASSWORD_LENGTH}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-                aria-required="true"
-                aria-invalid={error ? true : undefined}
-                className="w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-navy-50 placeholder-navy-500 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50"
-                placeholder="At least 6 characters"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="confirmPassword"
-                className="mb-2 block text-sm font-medium text-navy-100"
-              >
-                Confirm Password
-              </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={MIN_PASSWORD_LENGTH}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                disabled={loading}
-                aria-required="true"
-                aria-invalid={error ? true : undefined}
-                className="w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-navy-50 placeholder-navy-500 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50"
-                placeholder="Re-enter your password"
-              />
-            </div>
-
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-navy-600 px-4 py-2.5 font-medium text-navy-50 transition-colors hover:bg-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading && <Loader2 className="h-5 w-5 animate-spin" />}
-              {loading ? (
-                'Creating account...'
-              ) : (
-                <>
-                  <UserPlus className="h-5 w-5" aria-hidden="true" />
-                  Create Account
-                </>
-              )}
-            </button>
-          </form>
+                {loading && <Loader2 className="h-5 w-5 animate-spin" />}
+                {loading ? (
+                  'Sending code...'
+                ) : (
+                  <>
+                    <UserPlus className="h-5 w-5" aria-hidden="true" />
+                    Create Account
+                  </>
+                )}
+              </button>
+            </form>
+          )}
         </div>
 
         <p className="mt-6 text-center text-sm text-navy-400">

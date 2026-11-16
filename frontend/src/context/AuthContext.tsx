@@ -31,12 +31,12 @@ interface AuthContextValue {
   switchedOff: boolean
   clearSwitchedOff: () => void
   refreshAccount: () => Promise<void>
-  signIn: (email: string, password: string) => Promise<{ error?: Error }>
-  signUp: (
-    email: string,
-    password: string,
-    fullName: string,
-  ) => Promise<{ error?: Error; needsEmailConfirmation?: boolean }>
+  /** Sign in: e-mail a Sign-in Code to an existing Account. */
+  requestCode: (email: string) => Promise<void>
+  /** Register: e-mail a Sign-in Code, creating a pending Account if needed. */
+  register: (email: string, fullName: string) => Promise<void>
+  /** Check the code and start the session; throws the API's refusal. */
+  verifyCode: (email: string, code: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -129,39 +129,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSwitchedOff(false)
   }, [])
 
-  // Sign-in goes through the API so failed attempts reach the Audit Log
-  // (T7); the session it returns is then handed to Supabase.
-  const signIn = async (email: string, password: string) => {
-    let tokens: SessionTokens
-    try {
-      tokens = await apiFetch<SessionTokens>('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      })
-    } catch (err) {
-      return { error: err instanceof Error ? err : new Error('Sign-in failed.') }
-    }
+  // Every sign-in step goes through the API's sign-in proxy so failed
+  // attempts reach the Audit Log (FR-22, ADR-0004). Both code requests get
+  // the same answer whether or not the e-mail has an Account.
+  const requestCode = async (email: string) => {
+    await apiFetch('/api/auth/code', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
+  }
+
+  const register = async (email: string, fullName: string) => {
+    await apiFetch('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, full_name: fullName }),
+    })
+  }
+
+  // The session the proxy returns is handed to Supabase; the existing
+  // routing then sends a pending Account to the waiting page (FR-01).
+  const verifyCode = async (email: string, code: string) => {
+    const tokens = await apiFetch<SessionTokens>('/api/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    })
     const { error } = await supabase.auth.setSession({
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
     })
-    if (!error) clearSwitchedOff()
-    return { error: error ?? undefined }
-  }
-
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-      },
-    })
-    if (error) {
-      return { error: error as Error }
-    }
-    const needsEmailConfirmation = !data.session
-    return { needsEmailConfirmation }
+    if (error) throw error
+    clearSwitchedOff()
   }
 
   return (
@@ -175,8 +172,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         switchedOff,
         clearSwitchedOff,
         refreshAccount: fetchAccount,
-        signIn,
-        signUp,
+        requestCode,
+        register,
+        verifyCode,
         signOut,
       }}
     >
