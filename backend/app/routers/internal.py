@@ -22,6 +22,7 @@ from app.deps import get_db
 from app.mail import Mailer, get_mailer
 from app.models.alert import ScheduledCheckResult
 from app.services import daily_check
+from app.storage import FileStorage, get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +55,10 @@ def other_methods_are_not_found() -> None:
 async def run_daily_check_if_due(
     db: asyncpg.Connection = Depends(get_db),
     mailer: Mailer = Depends(get_mailer),
+    storage: FileStorage = Depends(get_storage),
 ):
     try:
-        result = await daily_check.run_if_due(db, mailer)
+        result = await daily_check.run_if_due(db, mailer, storage=storage)
     except Exception:
         logger.exception("The daily check failed")
         return JSONResponse({"detail": "The daily check failed"}, status_code=500)

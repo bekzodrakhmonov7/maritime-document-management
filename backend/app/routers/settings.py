@@ -16,7 +16,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 async def get_settings(
     db: asyncpg.Connection = Depends(get_db), _: UserPayload = Depends(get_current_user)
 ):
-    return await svc.get(db)
+    return await svc.with_last_cleanup(db, await svc.get(db))
 
 
 @router.put("", response_model=SettingsRead)
@@ -27,7 +27,7 @@ async def save_settings(
     admin: UserPayload = Depends(require_role("administrator")),
 ):
     try:
-        return await svc.save(
+        saved = await svc.save(
             db,
             audit_context_for(request, admin),
             admin.sub,
@@ -39,3 +39,4 @@ async def save_settings(
             status.HTTP_409_CONFLICT,
             "Someone else saved the settings since you opened them. Reload to see their values.",
         )
+    return await svc.with_last_cleanup(db, saved)

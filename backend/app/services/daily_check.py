@@ -17,6 +17,10 @@ A run has two phases:
 The scheduled run happens once per local date (company time zone), from the
 configured check time on; a manual run by an administrator doesn't count as
 the day's run and is audited. Settings are read at the start of each run.
+
+The scheduled run ends with retention (`services.retention`): Replaced
+Versions, Inactive seafarers and old Audit Records whose Retention Period has
+ended are removed. The manual run never removes anything.
 """
 
 import logging
@@ -33,7 +37,9 @@ from app import audit, domain
 from app.audit import AuditAction, AuditContext
 from app.config import settings as app_config
 from app.mail import MailFailed, Mailer
-from app.services import documents
+from app.services import documents, retention
+from app.services.retention import CleanupResult
+from app.storage import FileStorage, get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +55,8 @@ class RunResult:
     skipped: int
     sent: int
     failed: int
+    # Scheduled runs only; None when it didn't run or failed.
+    retention: CleanupResult | None = None
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -58,7 +66,11 @@ class RunResult:
 
 
 async def run_if_due(
-    conn: asyncpg.Connection, mailer: Mailer, *, now: datetime | None = None
+    conn: asyncpg.Connection,
+    mailer: Mailer,
+    *,
+    now: datetime | None = None,
+    storage: FileStorage | None = None,
 ) -> RunResult | None:
     """The scheduled run: once per local date, from the check time on. The
     run row is claimed first, so two workers never both run the same day."""
@@ -80,7 +92,9 @@ async def run_if_due(
     )
     if run_id is None:
         return None
-    return await _check(conn, mailer, run_id, local_now.date(), manual=False)
+    return await _check(
+        conn, mailer, run_id, local_now.date(), manual=False, storage=storage or get_storage()
+    )
 
 
 async def run_manually(
@@ -110,14 +124,28 @@ async def _company_today(conn: asyncpg.Connection) -> date:
 
 
 async def _check(
-    conn: asyncpg.Connection, mailer: Mailer, run_id: int, today: date, *, manual: bool
+    conn: asyncpg.Connection,
+    mailer: Mailer,
+    run_id: int,
+    today: date,
+    *,
+    manual: bool,
+    storage: FileStorage | None = None,
 ) -> RunResult:
+    """Alerts, then (scheduled runs only, given `storage`) retention last."""
     raised, skipped = await raise_alerts(conn, today)
     sent, failed = await send_digests(conn, mailer, today)
+    cleanup = None
+    if not manual and storage is not None:
+        try:
+            cleanup = await retention.clean_up(conn, storage, run_id)
+        except Exception:
+            # The alerts went out; the clean-up is tried again tomorrow.
+            logger.exception("Retention failed in daily check run %s", run_id)
     await conn.execute(
         "UPDATE public.daily_check_run SET finished_at = now() WHERE id = $1", run_id
     )
-    result = RunResult(run_id, today, manual, raised, skipped, sent, failed)
+    result = RunResult(run_id, today, manual, raised, skipped, sent, failed, cleanup)
     logger.info("Daily check finished: %s", result)
     return result
 

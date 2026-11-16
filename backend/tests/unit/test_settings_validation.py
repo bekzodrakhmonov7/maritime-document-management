@@ -12,6 +12,9 @@ VALID = {
     "max_pdf_pages": 50,
     "time_zone": "UTC",
     "daily_check_time": "07:00",
+    "retention_replaced_version_years": 5,
+    "retention_inactive_seafarer_years": 5,
+    "retention_audit_record_years": 7,
     "version": 1,
 }
 
@@ -69,6 +72,9 @@ def test_alert_steps_refused(steps):
         ("planning_horizon_days", 7, 365),
         ("max_file_size_mb", 1, 4),
         ("max_pdf_pages", 1, 500),
+        ("retention_replaced_version_years", 1, 10),
+        ("retention_inactive_seafarer_years", 1, 10),
+        ("retention_audit_record_years", 1, 10),
     ],
 )
 def test_range_bounds_are_inclusive(field, low, high):
@@ -78,7 +84,17 @@ def test_range_bounds_are_inclusive(field, low, high):
     _refused(field, **{field: high + 1})
 
 
-@pytest.mark.parametrize("field", ["planning_horizon_days", "max_file_size_mb", "max_pdf_pages"])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "planning_horizon_days",
+        "max_file_size_mb",
+        "max_pdf_pages",
+        "retention_replaced_version_years",
+        "retention_inactive_seafarer_years",
+        "retention_audit_record_years",
+    ],
+)
 def test_ranges_take_whole_numbers_only(field):
     _refused(field, **{field: 10.5})
 
