@@ -150,8 +150,6 @@ async def w(crew, make_account, retention_cleanup, settings_reset, owner_db, app
         assert result is not None
         return result
 
-    w.seafarer, w.document, w.version, w.review = seafarer, document, version, review
-    w.verification, w.path_of, w.exists, w.scheduled_run = verification, path_of, exists, scheduled_run
     async def records(target_type: str | None = None, target_id=None) -> list[dict]:
         """The retention removal records this test's runs wrote."""
         rows = await owner_db.fetch(
@@ -166,7 +164,9 @@ async def w(crew, make_account, retention_cleanup, settings_reset, owner_db, app
         )
         return [dict(r) for r in rows]
 
-    w.records = records
+    w.seafarer, w.document, w.version, w.review = seafarer, document, version, review
+    w.verification, w.path_of, w.exists = verification, path_of, exists
+    w.scheduled_run, w.records = scheduled_run, records
     return w
 
 
