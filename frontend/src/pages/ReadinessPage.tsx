@@ -7,6 +7,8 @@ import { flagLabel } from '../lib/flags'
 import { cn } from '../lib/cn'
 import { AssignmentStateBadge } from '../components/AssignmentDialogs'
 import { ErrorNote } from '../components/ErrorNote'
+import { EndorsementCapNote } from '../components/EndorsementCapNote'
+import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
 import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
 import { COVERAGE_LABELS, type CoverageClass, type ReadinessEntry } from '../types'
 
@@ -29,6 +31,8 @@ function CoverageBadge({ coverage }: { coverage: CoverageClass }) {
 }
 
 function EntryRow({ entry }: { entry: ReadinessEntry }) {
+  const cap = effectiveExpiryOf(entry, entry.expiry_date)
+  const capped = entry.document_id !== null && hasCapNote(cap)
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0 space-y-1">
@@ -44,8 +48,13 @@ function EntryRow({ entry }: { entry: ReadinessEntry }) {
           {entry.review_state === 'not_reviewed' && <NotReviewedTag />}
         </div>
         {entry.suggestion && <p className="text-sm text-navy-300">{entry.suggestion}</p>}
-        {entry.expiry_date && !entry.suggestion && (
-          <p className="text-sm text-navy-400">Valid through {entry.expiry_date}</p>
+        {capped ? (
+          <p>
+            <EndorsementCapNote {...cap} />
+          </p>
+        ) : (
+          entry.expiry_date &&
+          !entry.suggestion && <p className="text-sm text-navy-400">Valid through {entry.expiry_date}</p>
         )}
       </div>
       <CoverageBadge coverage={entry.coverage} />

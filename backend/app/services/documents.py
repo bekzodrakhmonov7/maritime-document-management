@@ -9,6 +9,9 @@ Version; a details-only Version reuses the Current Version's stored file. The
 Document Type's rules are checked when a Version is created, and only then.
 Current Version and Expiry Status are computed on read (app/domain.py), with
 today and the largest Alert Step taken from the Settings row per request.
+Expiry Status follows the Effective Expiry: an Endorsement is capped by its
+certificate's Current Version and counts as expired with none (FR-14). The
+Current Version keeps its own expiry date, which Alerts follow.
 """
 
 import mimetypes
@@ -37,9 +40,11 @@ FILE_URL_TTL_SECONDS = 120
 _DOCUMENT_FIELDS = """
        d.id, d.seafarer_id, d.document_type_id, d.created_at,
        t.name AS document_type_name, t.retired AS document_type_retired,
-       t.expires, t.max_validity_months
+       t.expires, t.max_validity_months, t.depends_on_id,
+       ct.name AS certificate_type_name
   FROM public.document d
   JOIN public.document_type t ON t.id = d.document_type_id
+  LEFT JOIN public.document_type ct ON ct.id = t.depends_on_id
 """
 
 _VERSION_FIELDS = """
@@ -126,9 +131,18 @@ class _Checks:
 
 
 def _summary(
-    document: Mapping[str, Any], versions: list[dict], checks: _Checks, today: date, largest_step: int
+    document: Mapping[str, Any],
+    versions: list[dict],
+    checks: _Checks,
+    today: date,
+    largest_step: int,
+    certificate_current: Mapping[str, Any] | None,
 ) -> dict:
+    """A Document with its Current Version and Expiry Status. The status follows
+    the Effective Expiry, so an Endorsement is capped by `certificate_current`
+    (its certificate's Current Version, None when there is none)."""
     current = domain.current_version(versions, checks.reviews)
+    effective = domain.effective_expiry({**document, "current_version": current}, certificate_current)
     return {
         **document,
         "version_count": len(versions),
@@ -136,12 +150,31 @@ def _summary(
             None if current is None
             else {**current, "review_state": domain.review_state(current["id"], checks.reviews)}
         ),
-        "expiry_status": (
-            None if current is None
-            else domain.expiry_status(current["expiry_date"], today, largest_step)
-        ),
+        "expiry_status": None if effective is None else effective.status(today, largest_step),
+        # Kept for coverage and readiness; not part of the response.
+        "effective": effective,
+        "effective_expiry": None if effective is None else effective.expiry,
+        "capped_by": None if effective is None else effective.capped_by,
+        "certificate_missing": effective is not None and effective.certificate_missing,
         "verified": domain.is_verified(current, checks.verifications),
     }
+
+
+async def _certificate_current(
+    conn: asyncpg.Connection, document: Mapping[str, Any]
+) -> Mapping[str, Any] | None:
+    """An Endorsement's certificate's Current Version: the seafarer's Document of
+    the type it depends on. None for any other document, or with no certificate."""
+    if document["depends_on_id"] is None:
+        return None
+    certificate_id = await conn.fetchval(
+        "SELECT id FROM public.document WHERE seafarer_id = $1 AND document_type_id = $2",
+        document["seafarer_id"],
+        document["depends_on_id"],
+    )
+    if certificate_id is None:
+        return None
+    return (await current_versions(conn, [certificate_id]))[certificate_id]
 
 
 async def current_versions(conn: asyncpg.Connection, document_ids: list[int]) -> dict[int, dict | None]:
@@ -184,10 +217,19 @@ async def summaries_by_seafarer(
     versions = await _versions_of(conn, [d["id"] for d in documents])
     checks = await _Checks.of(conn, [v for vs in versions.values() for v in vs])
     largest_step = await _largest_alert_step(conn)
+    # A seafarer has at most one Document per type, so an Endorsement's
+    # certificate is the seafarer's Document of the type it depends on.
+    current_by_type = {
+        (d["seafarer_id"], d["document_type_id"]): domain.current_version(
+            versions.get(d["id"], []), checks.reviews
+        )
+        for d in documents
+    }
     by_seafarer: dict[int, list[dict]] = {}
     for d in documents:
+        certificate = current_by_type.get((d["seafarer_id"], d["depends_on_id"]))
         by_seafarer.setdefault(d["seafarer_id"], []).append(
-            _summary(dict(d), versions.get(d["id"], []), checks, today, largest_step)
+            _summary(dict(d), versions.get(d["id"], []), checks, today, largest_step, certificate)
         )
     return by_seafarer
 
@@ -212,7 +254,14 @@ async def get(conn: asyncpg.Connection, scope: Scope, document_id: int) -> dict:
     del document["in_scope"]
     versions = (await _versions_of(conn, [document_id])).get(document_id, [])
     checks = await _Checks.of(conn, versions)
-    found = _summary(document, versions, checks, scope.today, await _largest_alert_step(conn))
+    found = _summary(
+        document,
+        versions,
+        checks,
+        scope.today,
+        await _largest_alert_step(conn),
+        await _certificate_current(conn, document),
+    )
     found["versions"] = _history(versions, checks, found["current_version"])
     return found
 

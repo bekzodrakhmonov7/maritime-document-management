@@ -126,6 +126,9 @@ def _held_line(seafarer_id: int, doc: Mapping[str, Any]) -> DocumentLine:
         document_type_name=doc["document_type_name"],
         document_id=doc["id"],
         expiry_date=current["expiry_date"],
+        effective_expiry=doc["effective_expiry"],
+        capped_by=doc["capped_by"],
+        certificate_missing=doc["certificate_missing"],
         expiry_status=doc["expiry_status"],
         review_state=current["review_state"],
     )

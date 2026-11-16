@@ -27,7 +27,15 @@ class ReadinessEntry(BaseModel):
     document_type_id: int
     name: str
     document_id: int | None
+    # The Current Version's own expiry date.
     expiry_date: date | None
+    # What coverage reads (FR-14): for an Endorsement capped by its certificate,
+    # the certificate's earlier date; None with no certificate behind it.
+    effective_expiry: date | None
+    # The certificate's Document Type when its date caps this Endorsement.
+    capped_by: str | None
+    # An Endorsement with no certificate behind it: runs out before start.
+    certificate_missing: bool
     coverage: CoverageClass
     # T4's advisory renewal suggestion; None when the document covers all.
     suggestion: str | None

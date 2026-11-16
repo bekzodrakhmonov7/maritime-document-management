@@ -24,7 +24,12 @@ class QueueEntry(BaseModel):
     document_type_name: str
     # None for a missing type with no Document; set when every Version is rejected.
     document_id: int | None
+    # The Current Version's own expiry date.
     expiry_date: date | None
+    # The Effective Expiry the status follows (FR-14); see DocumentSummary.
+    effective_expiry: date | None
+    capped_by: str | None
+    certificate_missing: bool
     # None: missing (no Current Version).
     expiry_status: ExpiryStatus | None
     review_state: ReviewState | None

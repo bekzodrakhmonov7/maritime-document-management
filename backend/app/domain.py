@@ -116,6 +116,59 @@ def expiry_status(expiry: date | None, today: date, largest_step: int) -> Expiry
     return "unexpired"
 
 
+@dataclass(frozen=True)
+class EffectiveExpiry:
+    """The date a document is treated as valid through (FR-14, O1/T11).
+
+    `expiry` is the Effective Expiry, `own_expiry` the Current Version's own
+    date (which Alerts keep following). `capped_by` names the certificate's
+    Document Type when its date is the earlier one; `missing_certificate`
+    names it when an Endorsement has no certificate behind it, which counts as
+    expired."""
+
+    expiry: date | None
+    own_expiry: date | None
+    capped_by: str | None = None
+    missing_certificate: str | None = None
+
+    @property
+    def certificate_missing(self) -> bool:
+        return self.missing_certificate is not None
+
+    def status(self, today: date, largest_step: int) -> ExpiryStatus:
+        """The Expiry Status against the Effective Expiry."""
+        if self.certificate_missing:
+            return "expired"
+        return expiry_status(self.expiry, today, largest_step)
+
+
+def effective_expiry(
+    document: Mapping[str, Any], certificate_current_version: Mapping[str, Any] | None
+) -> EffectiveExpiry | None:
+    """A Document's Effective Expiry, or None when it has no Current Version.
+
+    For an Endorsement (`depends_on_id` set) it is the earlier of its own and
+    its certificate's Current Version expiry date; a NULL own expiry takes the
+    certificate's. The certificate's Current Version is already the newest
+    one not rejected (awaiting review counts); with none, the Endorsement is
+    treated as expired. Any other document keeps its own expiry date. There
+    is no upload check: an Endorsement may expire after its certificate.
+    """
+    current = document["current_version"]
+    if current is None:
+        return None
+    own = current["expiry_date"]
+    if document.get("depends_on_id") is None:
+        return EffectiveExpiry(expiry=own, own_expiry=own)
+    certificate = document["certificate_type_name"]
+    if certificate_current_version is None:
+        return EffectiveExpiry(expiry=None, own_expiry=own, missing_certificate=certificate)
+    cap = certificate_current_version["expiry_date"]
+    if cap is not None and (own is None or cap < own):
+        return EffectiveExpiry(expiry=cap, own_expiry=own, capped_by=certificate)
+    return EffectiveExpiry(expiry=own, own_expiry=own)
+
+
 def latest_allowed_expiry(issue: date, max_validity_months: int) -> date:
     """Issue date plus whole months; a day the target month lacks becomes its last day."""
     months = issue.month - 1 + max_validity_months
@@ -311,15 +364,22 @@ READINESS_BUCKETS: tuple[ReadinessBucket, ...] = (
 
 
 def coverage_class(
-    start: date, end: date, current: Mapping[str, Any] | None
+    start: date,
+    end: date,
+    current: Mapping[str, Any] | None,
+    effective: EffectiveExpiry | None = None,
 ) -> CoverageClass:
     """How one required document stands against an Assignment from `start` to
-    `end`, by its Current Version's expiry date E (valid through E). Only the
-    expiry counts: not the issue date, the review or the verification, so a
-    Version awaiting review counts too."""
+    `end`, by its Effective Expiry E (valid through E; the Current Version's
+    own expiry date when `effective` isn't given). Only the expiry counts: not
+    the issue date, the review or the verification, so a Version awaiting
+    review counts too. An Endorsement with no certificate runs out before
+    start."""
     if current is None:
         return "missing"
-    expiry = current["expiry_date"]
+    if effective is not None and effective.certificate_missing:
+        return "runs_out_before_start"
+    expiry = current["expiry_date"] if effective is None else effective.expiry
     if expiry is None or expiry >= end:
         return "covers_all"
     if expiry < start:
@@ -369,6 +429,24 @@ class RequiredDocument:
     current_version: Mapping[str, Any] | None = None
     review_state: ReviewState | None = None
     verified: bool = False
+    # The Current Version's Effective Expiry; None: its own expiry date counts.
+    effective: EffectiveExpiry | None = None
+
+
+def _certificate_advice(
+    bucket: ReadinessBucket, effective: EffectiveExpiry, *, under_way: bool
+) -> str | None:
+    """The advice that names the certificate when it, not the Endorsement
+    itself, is what limits it (FR-14), or None."""
+    when = "as soon as possible" if under_way else "before joining"
+    if effective.certificate_missing:
+        return f"Obtain {effective.missing_certificate} {when} (certificate missing)"
+    if effective.capped_by is None or effective.expiry is None:
+        return None
+    cap = effective.expiry.isoformat()
+    if bucket == "renewable_at_sea":
+        return f"Can be renewed at sea: renew {effective.capped_by} by {cap}"
+    return f"Renew {effective.capped_by} {when} (endorsement capped at {cap})"
 
 
 def _advice(
@@ -422,17 +500,23 @@ def readiness(
 
     buckets: dict[ReadinessBucket, list[dict]] = {b: [] for b in READINESS_BUCKETS}
     for doc in sorted(required, key=lambda d: (d.name.lower(), d.document_type_id)):
-        current = doc.current_version
-        expiry = None if current is None else current["expiry_date"]
-        coverage = coverage_class(start, end, current)
+        current, effective = doc.current_version, doc.effective
+        own = None if current is None else current["expiry_date"]
+        expiry = own if effective is None else effective.expiry
+        coverage = coverage_class(start, end, current, effective)
         bucket, suggestion = _advice(
             coverage, expiry, renewable_at_sea=doc.renewable_at_sea, under_way=under_way, today=today
         )
+        if bucket is not None and effective is not None:
+            suggestion = _certificate_advice(bucket, effective, under_way=under_way) or suggestion
         entry = {
             "document_type_id": doc.document_type_id,
             "name": doc.name,
             "document_id": doc.document_id,
-            "expiry_date": expiry,
+            "expiry_date": own,
+            "effective_expiry": expiry,
+            "capped_by": None if effective is None else effective.capped_by,
+            "certificate_missing": effective is not None and effective.certificate_missing,
             "coverage": coverage,
             "suggestion": suggestion,
             "review_state": doc.review_state,
@@ -512,7 +596,12 @@ class DocumentLine:
     document_type_id: int
     document_type_name: str
     document_id: int | None = None
+    # The Current Version's own expiry date, and the Effective Expiry its
+    # status follows (an Endorsement capped by its certificate, FR-14).
     expiry_date: date | None = None
+    effective_expiry: date | None = None
+    capped_by: str | None = None
+    certificate_missing: bool = False
     expiry_status: ExpiryStatus | None = None
     review_state: ReviewState | None = None
 
@@ -640,6 +729,9 @@ def dashboard(
                 "document_type_name": line.document_type_name,
                 "document_id": line.document_id,
                 "expiry_date": line.expiry_date,
+                "effective_expiry": line.effective_expiry,
+                "capped_by": line.capped_by,
+                "certificate_missing": line.certificate_missing,
                 "expiry_status": line.expiry_status,
                 "review_state": line.review_state,
                 "action": _QUEUE_ACTIONS[queue],

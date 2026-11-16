@@ -7,6 +7,8 @@ import { fullName } from '../hooks/useSeafarers'
 import { cn } from '../lib/cn'
 import { ErrorNote } from '../components/ErrorNote'
 import { ExpiryStatusBadge } from '../components/ExpiryStatusBadge'
+import { EndorsementCapNote } from '../components/EndorsementCapNote'
+import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
 import { FIELD_CLASS } from '../components/FormDialog'
 import { NotReviewedTag } from '../components/ReviewTags'
 import {
@@ -125,7 +127,7 @@ function GroupCard({ group, onAdd }: { group: SeafarerGroup; onAdd: (tag: Tag) =
                 className="border-transparent text-sm font-medium text-navy-100"
               />
               {entry.review_state === 'not_reviewed' && <NotReviewedTag />}
-              {entry.expiry_date && <span className="text-sm text-navy-400">Expiry {entry.expiry_date}</span>}
+              <QueueExpiry entry={entry} />
             </div>
             <Link
               to={actionLink(s.id, entry)}
@@ -449,4 +451,12 @@ export function DashboardPage() {
       {shown === 'totals' ? <FleetTotalsView /> : <WorkQueues />}
     </div>
   )
+}
+
+/** A queue entry's expiry: the own date, or the Endorsement cap note. */
+function QueueExpiry({ entry }: { entry: QueueEntry }) {
+  const cap = effectiveExpiryOf(entry, entry.expiry_date)
+  if (entry.expiry_status && hasCapNote(cap)) return <EndorsementCapNote {...cap} />
+  if (!entry.expiry_date) return null
+  return <span className="text-sm text-navy-400">Expiry {entry.expiry_date}</span>
 }

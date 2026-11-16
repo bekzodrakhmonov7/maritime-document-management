@@ -122,7 +122,19 @@ class DocumentSummary(BaseModel):
     version_count: int
     # None when every Version is rejected: the Document counts as missing.
     current_version: CurrentVersionSummary | None
+    # Against the Effective Expiry (FR-14): an Endorsement is capped by its
+    # certificate, and counts as expired with none behind it.
     expiry_status: ExpiryStatus | None
+    # The Effective Expiry: the Current Version's own expiry date, or for an
+    # Endorsement the earlier of it and its certificate's. None with no
+    # Current Version, no expiry date, or no certificate.
+    effective_expiry: date | None
+    # The certificate's Document Type when its date caps this Endorsement.
+    capped_by: str | None
+    # An Endorsement with no certificate behind it: counts as expired.
+    certificate_missing: bool
+    # The certificate's Document Type, set for an Endorsement.
+    certificate_type_name: str | None
     # The Current Version's latest Verification is confirmed (never Reviewed).
     verified: bool
 

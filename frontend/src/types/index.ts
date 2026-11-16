@@ -165,7 +165,15 @@ export interface ReadinessEntry {
   document_type_id: number
   name: string
   document_id: number | null
+  /** The Current Version's own expiry date. */
   expiry_date: string | null
+  /** The Effective Expiry (FR-14): the own expiry date, or for an Endorsement the
+   * earlier of it and its certificate's. Null with no certificate behind it. */
+  effective_expiry: string | null
+  /** The certificate's Document Type when its date caps this Endorsement. */
+  capped_by: string | null
+  /** An Endorsement with no certificate behind it: counts as expired. */
+  certificate_missing: boolean
   coverage: CoverageClass
   /** The advisory renewal suggestion; null when it covers all. */
   suggestion: string | null
@@ -340,7 +348,17 @@ export interface DocumentSummary {
     Version,
     'id' | 'document_number' | 'issue_date' | 'expiry_date' | 'uploaded_at' | 'review_state'
   > | null
+  /** Against the Effective Expiry. */
   expiry_status: ExpiryStatus | null
+  /** The Effective Expiry (FR-14): the own expiry date, or for an Endorsement the
+   * earlier of it and its certificate's. Null with no certificate behind it. */
+  effective_expiry: string | null
+  /** The certificate's Document Type when its date caps this Endorsement. */
+  capped_by: string | null
+  /** An Endorsement with no certificate behind it: counts as expired. */
+  certificate_missing: boolean
+  /** The certificate's Document Type, set for an Endorsement. */
+  certificate_type_name: string | null
   /** The Current Version's latest Verification is confirmed. Never the same as Reviewed. */
   verified: boolean
 }
@@ -523,7 +541,15 @@ export interface QueueEntry {
   document_type_name: string
   /** null for a missing type with no Document; set when every Version is rejected. */
   document_id: number | null
+  /** The Current Version's own expiry date. */
   expiry_date: string | null
+  /** The Effective Expiry (FR-14): the own expiry date, or for an Endorsement the
+   * earlier of it and its certificate's. Null with no certificate behind it. */
+  effective_expiry: string | null
+  /** The certificate's Document Type when its date caps this Endorsement. */
+  capped_by: string | null
+  /** An Endorsement with no certificate behind it: counts as expired. */
+  certificate_missing: boolean
   /** null: missing (no Current Version). */
   expiry_status: ExpiryStatus | null
   review_state: ReviewState | null

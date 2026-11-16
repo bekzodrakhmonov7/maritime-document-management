@@ -6,6 +6,8 @@ import { useDocument, useOpenProofFile, useOpenVersionFile } from '../hooks/useD
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
 import { ExpiryStatusBadge } from '../components/ExpiryStatusBadge'
+import { EndorsementCapNote } from '../components/EndorsementCapNote'
+import { effectiveExpiryOf } from '../lib/effectiveExpiry'
 import { VersionDialog, type VersionDialogState } from '../components/DocumentDialogs'
 import { ReviewDialog, VerificationDialog } from '../components/ReviewDialogs'
 import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
@@ -49,6 +51,11 @@ export function DocumentPage() {
               <ExpiryStatusBadge status={document.expiry_status} />
               {document.current_version?.review_state === 'not_reviewed' && <NotReviewedTag />}
               {document.verified && <VerifiedShield />}
+              {document.current_version && (
+                <EndorsementCapNote
+                  {...effectiveExpiryOf(document, document.current_version.expiry_date)}
+                />
+              )}
             </div>
             {canAdd && (
               <div className="flex gap-2">

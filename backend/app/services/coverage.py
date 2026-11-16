@@ -48,6 +48,7 @@ def required_documents(
                 current_version=current,
                 review_state=None if current is None else current["review_state"],
                 verified=doc is not None and doc["verified"],
+                effective=None if doc is None else doc["effective"],
             )
         )
     return required

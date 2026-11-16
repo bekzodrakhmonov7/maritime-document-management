@@ -7,6 +7,8 @@ import { useSettings } from '../hooks/useSettings'
 import type { DocumentDetail, DocumentSummary, DocumentType, Seafarer, VersionDetails } from '../types'
 import { DocumentDropzone } from './DocumentDropzone'
 import { ExpiryStatusBadge } from './ExpiryStatusBadge'
+import { EndorsementCapNote } from './EndorsementCapNote'
+import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
 import { NotReviewedTag, VerifiedShield } from './ReviewTags'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
 import { FILE_SIZE_CEILING_MB } from '../lib/fileSize'
@@ -229,7 +231,9 @@ export function DocumentsTable({
                 {d.document_type_retired && <span className="ml-2 text-xs text-navy-400">(retired type)</span>}
               </td>
               <td className="px-4 py-3 text-navy-200">{d.current_version?.document_number ?? '—'}</td>
-              <td className="px-4 py-3 text-navy-200">{d.current_version?.expiry_date ?? '—'}</td>
+              <td className="px-4 py-3 text-navy-200">
+                <ExpiryCell document={d} />
+              </td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <ExpiryStatusBadge status={d.expiry_status} />
@@ -257,4 +261,11 @@ export function DocumentsTable({
       </table>
     </div>
   )
+}
+
+/** The documents table's expiry: the own date, or the Endorsement cap note. */
+function ExpiryCell({ document }: { document: DocumentSummary }) {
+  const fields = effectiveExpiryOf(document, document.current_version?.expiry_date ?? null)
+  if (document.current_version && hasCapNote(fields)) return <EndorsementCapNote {...fields} />
+  return <>{document.current_version?.expiry_date ?? '—'}</>
 }
