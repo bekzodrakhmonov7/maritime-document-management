@@ -213,12 +213,27 @@ export interface Settings {
   time_zone: string
   /** "HH:MM" in the company time zone, on a 15-minute step. */
   daily_check_time: string
+  /** Retention Periods in whole years, 1–10 (O3). */
+  retention_replaced_version_years: number
+  retention_inactive_seafarer_years: number
+  retention_audit_record_years: number
   version: number
   updated_at: string
+  /** What the latest scheduled run's retention clean-up removed; null before the first. */
+  last_cleanup: LastCleanup | null
+}
+
+/** The latest retention clean-up (the last step of the scheduled daily check). */
+export interface LastCleanup {
+  local_date: string
+  finished_at: string
+  versions: number
+  seafarers: number
+  audit_records: number
 }
 
 /** PUT /api/settings: the values plus the version the editor started from. */
-export type SettingsWrite = Omit<Settings, 'updated_at'>
+export type SettingsWrite = Omit<Settings, 'updated_at' | 'last_cleanup'>
 
 /** GET /api/requirements: one set cell of the Position Requirement matrix (S4). */
 export interface MatrixCell {
@@ -408,6 +423,7 @@ export const AUDIT_ACTION_LABELS = {
   audit_searched: 'Audit Log searched',
   audit_exported: 'Audit Log exported',
   daily_check_run_manually: 'Daily check run manually',
+  retention_removal: 'Retention removal',
 } as const
 
 export type AuditAction = keyof typeof AUDIT_ACTION_LABELS

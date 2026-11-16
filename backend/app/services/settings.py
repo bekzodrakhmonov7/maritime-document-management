@@ -18,6 +18,7 @@ import asyncpg
 from app import audit, domain
 from app.audit import AuditAction, AuditContext
 from app.models.settings import EDITABLE
+from app.services import retention
 
 _COLUMNS = ", ".join((*EDITABLE, "version", "updated_at"))
 _SELECT = f"SELECT {_COLUMNS} FROM public.settings"
@@ -42,6 +43,11 @@ def _column_value(column: str, value: Any) -> Any:
 async def get(conn: asyncpg.Connection) -> dict[str, Any]:
     """The current settings, with the check time as "HH:MM"."""
     return _as_dict(await conn.fetchrow(_SELECT))
+
+
+async def with_last_cleanup(conn: asyncpg.Connection, values: dict[str, Any]) -> dict[str, Any]:
+    """The settings plus what the last retention clean-up removed."""
+    return {**values, "last_cleanup": await retention.last_cleanup(conn)}
 
 
 async def save(

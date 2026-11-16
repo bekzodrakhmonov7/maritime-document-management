@@ -25,6 +25,17 @@ class AlertCount(BaseModel):
     open: int
 
 
+class RetentionResult(BaseModel):
+    """What the scheduled run's clean-up removed."""
+
+    versions: int
+    seafarers: int
+    audit_records: int
+    files_removed: int
+    # Stay queued and are retried on the next run.
+    files_failed: int
+
+
 class DailyCheckResult(BaseModel):
     run_id: int
     local_date: date
@@ -34,6 +45,8 @@ class DailyCheckResult(BaseModel):
     # Digests, one per recipient.
     sent: int
     failed: int
+    # Scheduled runs only.
+    retention: RetentionResult | None = None
 
 
 class ScheduledCheckResult(BaseModel):

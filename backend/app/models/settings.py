@@ -1,7 +1,7 @@
 """The one Settings row (FR-25, T9) and its validation."""
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from functools import lru_cache
 from typing import Annotated
 from zoneinfo import available_timezones
@@ -11,6 +11,7 @@ from pydantic import AfterValidator, BaseModel, Field, StrictInt
 from app.upload_safety import FILE_SIZE_CEILING_MB
 
 MAX_ALERT_STEPS = 6
+MAX_RETENTION_YEARS = 10
 
 # Files in a system zoneinfo directory that are not zones.
 _NOT_ZONES = {"localtime", "posixrules"}
@@ -64,11 +65,25 @@ class SettingsValues(BaseModel):
     time_zone: TimeZone
     # "HH:MM" in the company time zone.
     daily_check_time: CheckTime
+    # Retention Periods in whole years (O3).
+    retention_replaced_version_years: StrictInt = Field(..., ge=1, le=MAX_RETENTION_YEARS)
+    retention_inactive_seafarer_years: StrictInt = Field(..., ge=1, le=MAX_RETENTION_YEARS)
+    retention_audit_record_years: StrictInt = Field(..., ge=1, le=MAX_RETENTION_YEARS)
 
 
 class SettingsWrite(SettingsValues):
     # The version the editor started from; a stale one is refused (409).
     version: int
+
+
+class LastCleanup(BaseModel):
+    """The latest scheduled run's retention clean-up."""
+
+    local_date: date
+    finished_at: datetime
+    versions: int
+    seafarers: int
+    audit_records: int
 
 
 class SettingsRead(BaseModel):
@@ -78,8 +93,12 @@ class SettingsRead(BaseModel):
     max_pdf_pages: int
     time_zone: str
     daily_check_time: str
+    retention_replaced_version_years: int
+    retention_inactive_seafarer_years: int
+    retention_audit_record_years: int
     version: int
     updated_at: datetime
+    last_cleanup: LastCleanup | None = None
 
 
 EDITABLE = tuple(SettingsValues.model_fields)

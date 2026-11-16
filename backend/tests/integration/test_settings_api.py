@@ -7,6 +7,7 @@ started from, and a stale one is refused. A changing save writes one
 
 import json
 
+import asyncpg
 import pytest
 
 from tests.conftest import auth_header
@@ -18,6 +19,9 @@ DEFAULTS = {
     "max_pdf_pages": 50,
     "time_zone": "UTC",
     "daily_check_time": "07:00",
+    "retention_replaced_version_years": 5,
+    "retention_inactive_seafarer_years": 5,
+    "retention_audit_record_years": 7,
 }
 
 
@@ -149,9 +153,59 @@ async def test_a_stale_save_is_a_conflict(client, admin, admin_id, owner_db):
         {"max_pdf_pages": 0},
         {"time_zone": "Mars/Olympus"},
         {"daily_check_time": "07:10"},
+        {"retention_replaced_version_years": 0},
+        {"retention_inactive_seafarer_years": 11},
+        {"retention_audit_record_years": 0},
+        {"retention_audit_record_years": 2.5},
     ],
 )
 async def test_invalid_values_are_refused(client, admin, owner_db, change):
     res = await client.put("/api/settings", json={**DEFAULTS, **change, "version": 1}, headers=admin)
     assert res.status_code == 422
     assert await owner_db.fetchval("SELECT version FROM public.settings") == 1
+
+
+async def test_the_retention_periods_save_in_whole_years_and_are_audited(
+    client, admin, admin_id, owner_db
+):
+    body = {
+        **DEFAULTS,
+        "retention_replaced_version_years": 3,
+        "retention_inactive_seafarer_years": 10,
+        "retention_audit_record_years": 1,
+        "version": 1,
+    }
+    res = await client.put("/api/settings", json=body, headers=admin)
+    assert res.status_code == 200, res.text
+    current = await _current(client, admin)
+    assert (
+        current["retention_replaced_version_years"],
+        current["retention_inactive_seafarer_years"],
+        current["retention_audit_record_years"],
+    ) == (3, 10, 1)
+    [record] = await _settings_records(owner_db, admin_id)
+    assert json.loads(record["before"]) == {
+        "retention_replaced_version_years": 5,
+        "retention_inactive_seafarer_years": 5,
+        "retention_audit_record_years": 7,
+    }
+    assert json.loads(record["after"]) == {
+        "retention_replaced_version_years": 3,
+        "retention_inactive_seafarer_years": 10,
+        "retention_audit_record_years": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    "column", [
+        "retention_replaced_version_years",
+        "retention_inactive_seafarer_years",
+        "retention_audit_record_years",
+    ],
+)
+async def test_the_database_keeps_retention_periods_within_1_to_10_years(
+    owner_db, settings_reset, column
+):
+    for value in (0, 11):
+        with pytest.raises(asyncpg.CheckViolationError):
+            await owner_db.execute(f"UPDATE public.settings SET {column} = $1", value)
