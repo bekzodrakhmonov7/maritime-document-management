@@ -9,6 +9,8 @@ running Supabase Auth lives in test_sign_in_api.py.
 import json
 from uuid import UUID, uuid4
 
+import pytest
+
 
 async def _gotrue_writes(owner_db, action: str, actor_id: object, email: str,
                          ip: str = "203.0.113.7") -> None:
@@ -53,19 +55,39 @@ async def test_a_supabase_login_writes_login_succeeded(owner_db, make_account):
     assert rec["target_id"] == str(officer)
 
 
+async def test_the_first_sign_in_that_completes_registration_writes_login_succeeded(
+    owner_db, make_account
+):
+    # GoTrue writes user_signedup, not login, when the first code completes registration.
+    newcomer = await make_account(status="pending", email="trigger-newcomer@example.com")
+
+    await _gotrue_writes(owner_db, "user_signedup", newcomer, "trigger-newcomer@example.com")
+
+    [rec] = await _logins_of(owner_db, newcomer)
+    assert rec["outcome"] == "succeeded"
+    assert rec["actor_id"] == newcomer
+    assert rec["actor_email"] == "trigger-newcomer@example.com"
+    assert rec["target_type"] == "account"
+    assert rec["target_id"] == str(newcomer)
+
+
 async def test_other_auth_events_are_not_copied(owner_db, make_account):
     officer = await make_account(role="crewing_officer")
 
     await _gotrue_writes(owner_db, "token_refreshed", officer, "x@example.com")
     await _gotrue_writes(owner_db, "logout", officer, "x@example.com")
+    await _gotrue_writes(owner_db, "user_recovery_requested", officer, "x@example.com")
+    await _gotrue_writes(owner_db, "user_confirmation_requested", officer, "x@example.com")
 
     assert await _logins_of(owner_db, officer) == []
 
 
-async def test_a_broken_entry_never_breaks_sign_in(owner_db):
+@pytest.mark.parametrize("action", ["login", "user_signedup"])
+async def test_a_broken_entry_never_breaks_sign_in(owner_db, action):
     # A malformed actor id makes the copy fail; GoTrue's own insert must still succeed.
-    await _gotrue_writes(owner_db, "login", "not-a-uuid", "odd@example.com", ip="not-an-ip")
+    actor = f"not-a-uuid-{action}"
+    await _gotrue_writes(owner_db, action, actor, "odd@example.com", ip="not-an-ip")
 
     assert await owner_db.fetchval(
-        "SELECT count(*) FROM auth.audit_log_entries WHERE payload->>'actor_id' = 'not-a-uuid'"
+        "SELECT count(*) FROM auth.audit_log_entries WHERE payload->>'actor_id' = $1", actor
     ) >= 1
