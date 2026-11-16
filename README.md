@@ -48,34 +48,68 @@ npx supabase@latest db reset   # Applies migrations in supabase/migrations/
 > **Note:** `supabase db reset` is destructive — it drops and recreates the
 > local database, which **wipes all registered auth users** (`auth.users` and
 > `public.users`). Only the seed data is restored. After every reset you must
-> re-register your account and make it an administrator again (below).
+> register your account again and make it an administrator again (below).
 
 The app connects as the restricted `app_backend` database role, never as the
 table owner, so it can only add to and read the Audit Log. `seed.sql` gives it
 the local password `app_backend_dev` (see `DATABASE_URL` in `.env.example`).
 
+### Signing in: only by an e-mailed code
+
+There are no passwords (ADR-0004). **Register** asks for full name and e-mail;
+**Sign in** asks for the e-mail only. Both then ask for a **Sign-in Code**: 6
+digits, e-mailed, valid 10 minutes, at most one every 60 seconds (a new code
+replaces the old one). The e-mail holds only the code, never a link. Nothing
+(no env flag, dev mode or demo login) skips the code.
+
+Locally, Supabase doesn't send mail: its mail catcher, **Mailpit**, catches it.
+Ask for a code in the app, open <http://127.0.0.1:54324>, open the newest
+message for your address and type the 6 digits. The Auth settings and the two
+code-only e-mail templates live in `supabase/config.toml` and
+`supabase/templates/` (`confirmation.html` for Register, `magic_link.html` for
+Sign in); run `npx supabase@latest stop && npx supabase@latest start` after
+changing them. SMTP (Resend) is off locally and only turned on for hosted.
+
 ### First administrator
 
-New accounts start **pending** with no role and see only a "waiting for
-approval" page. Sign up in the app, then make that account the first
-administrator:
+New Accounts start **pending** with no role and see only a "waiting for
+approval" page. Make the first one an administrator:
 
-```bash
-cd backend
-uv run python -m app.scripts.make_admin you@company.com
-```
+1. **Register** in the app with your e-mail and full name.
+2. Type the **code** from the e-mail (locally: from Mailpit). You land on
+   "waiting for approval".
+3. Run `make_admin`:
 
-After that, administrators approve new sign-ups on the **Accounts** page,
+   ```bash
+   cd backend
+   uv run python -m app.scripts.make_admin you@company.com
+   ```
+
+After that, administrators approve new Accounts on the **Accounts** page,
 choosing a role (administrator, crewing officer or manager) and giving a
 reason. Every approval, role change and switch-off/on is audited.
 
-Sign-in goes through the backend (`POST /api/auth/login`, a proxy to Supabase
-Auth) so failed attempts are recorded, including ones on unknown e-mails; the
-frontend then calls `setSession`. Successful logins are copied into the Audit
-Log by a trigger on `auth.audit_log_entries`, logouts by
+Every sign-in step goes through the backend's sign-in proxy
+(`POST /api/auth/register`, `POST /api/auth/code`, `POST /api/auth/verify`)
+so failed attempts are recorded, including codes asked for unknown e-mails and
+wrong or expired codes; the frontend then calls `setSession`. Successful
+sign-ins (including the first one that completes registration) are copied into
+the Audit Log by a trigger on `auth.audit_log_entries`, sign-outs by
 `POST /api/auth/logout`, and every refused request (403, or a 404 on a record
-outside the caller's Scope) by one exception handler. Stated limit: a direct
-call to Supabase Auth with the public key skips the failed-login record.
+outside the caller's Scope) by one exception handler.
+
+Stated limits:
+
+- A direct call to Supabase Auth with the public key skips the failed-login
+  record.
+- A session lasts until sign-out; there is no periodic re-proof of the e-mail
+  (time-boxed sessions need Supabase Pro). Switching an Account off still cuts
+  it off on its next request (FR-02).
+- A direct call to Supabase's `/otp` with the public key reveals whether an
+  e-mail has an Account (422 for unknown, 200 for known). Only our proxy hides
+  it.
+- Changing an Account's e-mail has no screen. Through Supabase directly, it
+  needs confirmation from both the old and the new inbox.
 
 Start the FastAPI server:
 
@@ -127,6 +161,7 @@ Key variables in `.env` (project root):
 | `SUPABASE_JWT_SECRET` | JWT signing secret | `super-secret-jwt-token-with-at-least-32-characters-long` |
 | `RESEND_API_KEY` | Resend API key for e-mail | `re_...` |
 | `MAIL_FROM` | Sender email | `noreply@maritime.local` |
+| `SUPABASE_AUTH_SMTP_PASSWORD` | Hosted only: the Resend API key Supabase Auth sends the sign-in codes with, read by `supabase config push` (`env(...)` in `supabase/config.toml`). Empty locally, where Mailpit catches the mail | `re_...` |
 | `FRONTEND_URL` | The app's address, for links in e-mails | `http://localhost:5173` |
 | `CRON_SECRET` | Shared with the database's `daily-check` job (Vault `cron_secret`); empty means `/api/internal/daily-check` always answers 404 | `local-dev-cron-secret` |
 
@@ -225,8 +260,34 @@ For production and for staging:
 4. **Auth URLs.** Authentication → URL Configuration: production's Site URL is
    `https://<domain>`; staging's is the staging branch URL, with
    `https://*.vercel.app/**` among its Redirect URLs.
-5. **First administrator.** Sign up on that environment's app, then run
-   `make_admin` from your machine against its `DATABASE_URL`:
+5. **Auth config (sign in only by code).** Push `supabase/config.toml`'s Auth
+   settings and the code-only templates with `supabase config push`, **staging
+   first, then production** once staging signs in by code. The wizard does it
+   (also on its own, for projects already cut over):
+
+   ```bash
+   bash scripts/hosted-cutover.sh auth-config
+   ```
+
+   It pushes a copy of the config with Resend SMTP turned on and that
+   project's Site URL and redirect URL instead of the local ones, with
+   `SUPABASE_AUTH_SMTP_PASSWORD` (a Resend API key) and `MAIL_FROM` (the
+   sender, on the domain the Alerts use) in its environment. `config push`
+   prints the diff and asks before changing anything: **read it**. It should
+   show `enable_confirmations`, `otp_length` 6, `otp_expiry` 600,
+   `max_frequency` 60s, SMTP through `smtp.resend.com` and both templates. It
+   isn't confirmed that `config push` carries the SMTP, OTP and template
+   fields; if the diff lacks them, the wizard sets them through the Management
+   API instead: `PATCH https://api.supabase.com/v1/projects/<ref>/config/auth`
+   with a personal access token and the same values (`mailer_otp_length`,
+   `mailer_otp_exp`, `smtp_*`, `mailer_subjects_*`,
+   `mailer_templates_magic_link_content`,
+   `mailer_templates_confirmation_content`, read from the repository).
+   Supabase's built-in sender only delivers to project team members, so
+   without SMTP nobody else gets a code.
+6. **First administrator.** Register on that environment's app, type the code
+   from the e-mail, then run `make_admin` from your machine against its
+   `DATABASE_URL`:
    `cd backend && DATABASE_URL='<that DATABASE_URL>' uv run python -m app.scripts.make_admin <email>`
 
 ### DNS

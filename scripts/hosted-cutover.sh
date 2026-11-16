@@ -231,12 +231,17 @@ mark_done() {
   printf '  %s✓ marked%s %s done\n' "$GREEN" "$RESET" "$1"
 }
 
-# link REF links the Supabase CLI to project REF (asks for its db password).
-link() {
+# cli_login signs the Supabase CLI in, if it isn't already.
+cli_login() {
   if ! $SUPABASE projects list >/dev/null 2>&1; then
     say "You're not signed in to the Supabase CLI yet, so a browser will open."
     $SUPABASE login
   fi
+}
+
+# link REF links the Supabase CLI to project REF (asks for its db password).
+link() {
+  cli_login
   say "Linking $1. The CLI asks for that project's database password (the"
   note "postgres owner's, from Project Settings → Database; reset it there if needed)."
   $SUPABASE link --project-ref "$1"
@@ -307,9 +312,156 @@ probe() {
   rm -f "$body" "$body.h"
 }
 
+# auth_smtp_values asks once for what Supabase Auth needs to send through Resend
+# (ADR-0004): a Resend API key, and the sender on the domain the Alerts use.
+auth_smtp_values() {
+  if [[ -z "$(_existing SUPABASE_AUTH_SMTP_PASSWORD || true)" ]]; then
+    open_url "https://resend.com/api-keys"
+    step "Create an API key named e.g. 'supabase-auth' (Sending access, the alerts domain)."
+  fi
+  ask_secret SUPABASE_AUTH_SMTP_PASSWORD "Resend API key for Supabase Auth SMTP:"
+  write_env SUPABASE_AUTH_SMTP_PASSWORD "$SUPABASE_AUTH_SMTP_PASSWORD"
+  ask MAIL_FROM "Sender of the sign-in codes (e.g. alerts@<domain>, the MAIL_FROM on Vercel):"
+  write_env MAIL_FROM "$MAIL_FROM"
+}
+
+# hosted_config DIR SITE REDIRECT writes DIR/supabase: supabase/config.toml and
+# its templates, with Resend SMTP on and that project's Site URL and redirect
+# URL in place of the local ones. Everything else is pushed as committed.
+hosted_config() {
+  mkdir -p "$1/supabase"
+  cp -R supabase/templates "$1/supabase/"
+  awk -v site="$2" -v redirect="$3" '
+    /^\[/ { section = $0 }
+    section == "[auth]" && /^site_url *=/ { print "site_url = \"" site "\""; next }
+    section == "[auth]" && /^additional_redirect_urls *=/ { print "additional_redirect_urls = [\"" redirect "\"]"; next }
+    section == "[auth.email.smtp]" && /^enabled *=/ { print "enabled = true"; next }
+    { print }
+  ' supabase/config.toml > "$1/supabase/config.toml"
+}
+
+# auth_config_body: the Management API body for the same settings, read from
+# supabase/config.toml and supabase/templates, so the fallback can't drift.
+# The SMTP password comes from the environment, never from a file in git.
+auth_config_body() {
+  (cd backend && uv run python - <<'PY'
+import json, os, re, tomllib
+from pathlib import Path
+
+repo = Path("..")
+auth = tomllib.loads((repo / "supabase/config.toml").read_text(encoding="utf-8"))["auth"]
+email, smtp = auth["email"], auth["email"]["smtp"]
+body = {
+    "mailer_autoconfirm": not email["enable_confirmations"],
+    "mailer_otp_length": email["otp_length"],
+    "mailer_otp_exp": email["otp_expiry"],
+    "smtp_max_frequency": int(re.fullmatch(r"(\d+)s", email["max_frequency"]).group(1)),
+    "smtp_host": smtp["host"],
+    "smtp_port": str(smtp["port"]),
+    "smtp_user": smtp["user"],
+    "smtp_pass": os.environ["SUPABASE_AUTH_SMTP_PASSWORD"],
+    "smtp_admin_email": os.environ["MAIL_FROM"],
+    "smtp_sender_name": smtp["sender_name"],
+    "rate_limit_email_sent": auth["rate_limit"]["email_sent"],
+}
+for name, template in email["template"].items():
+    body[f"mailer_subjects_{name}"] = template["subject"]
+    body[f"mailer_templates_{name}_content"] = (repo / template["content_path"]).read_text(encoding="utf-8")
+print(json.dumps(body))
+PY
+  )
+}
+
+# patch_auth_config REF: the fallback when `config push` doesn't carry the SMTP,
+# OTP or template fields: PATCH /v1/projects/REF/config/auth on the Management
+# API with a personal access token (not saved).
+patch_auth_config() {
+  local ref="$1" token body hdr code
+  open_url "https://supabase.com/dashboard/account/tokens"
+  step "Generate a personal access token (delete it afterwards)."
+  ask_secret MANAGEMENT_TOKEN "Personal access token:"
+  token="$MANAGEMENT_TOKEN"; unset MANAGEMENT_TOKEN
+  body=$(umask 077 && mktemp); hdr=$(umask 077 && mktemp)
+  SUPABASE_AUTH_SMTP_PASSWORD="$SUPABASE_AUTH_SMTP_PASSWORD" MAIL_FROM="$MAIL_FROM" \
+    auth_config_body > "$body"
+  printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$token" > "$hdr"
+  code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH -H @"$hdr" --data @"$body" \
+    "https://api.supabase.com/v1/projects/$ref/config/auth" || true)
+  rm -f "$body" "$hdr"
+  if [[ "$code" == 2* ]]; then
+    printf '  %s✓%s Auth config set through the Management API (HTTP %s)\n' "$GREEN" "$RESET" "$code"
+  else
+    warn "The Management API answered HTTP $code: set the values by hand in"
+    warn "Authentication → Emails (SMTP, both templates) and Sign In / Providers → Email."
+    SKIPPED+=("Auth config on $ref (Management API answered $code)")
+  fi
+}
+
+# push_auth_config REF SITE REDIRECT pushes supabase/config.toml to project REF
+# with `supabase config push`: it prints the diff and asks before changing
+# anything. If the diff lacks the SMTP, OTP or template fields, the Management
+# API sets them instead.
+push_auth_config() {
+  local ref="$1" dir
+  cli_login
+  dir=$(mktemp -d)
+  hosted_config "$dir" "$2" "$3"
+  say "Pushing the Auth config to $ref. Read the diff before you confirm it: it"
+  say "should show code-only sign-in (enable_confirmations, otp_length 6,"
+  say "otp_expiry 600, max_frequency 60s), SMTP through smtp.resend.com, the"
+  say "magic_link and confirmation templates, and Site URL $2."
+  note "Decline any section whose change you didn't expect."
+  SUPABASE_AUTH_SMTP_PASSWORD="$SUPABASE_AUTH_SMTP_PASSWORD" MAIL_FROM="$MAIL_FROM" \
+    $SUPABASE config push --workdir "$dir" --project-ref "$ref" \
+    || warn "config push failed (see above)."
+  rm -rf "$dir"
+  if ! confirm "Did the diff carry the SMTP, OTP and template fields (or were they already equal)?"; then
+    say "Setting them through the Management API instead."
+    patch_auth_config "$ref"
+  fi
+  open_url "https://supabase.com/dashboard/project/$ref/auth/templates"
+  step "Check: the Magic Link and Confirm signup templates show only the code,"
+  note "  and SMTP Settings show smtp.resend.com as the sender's host."
+  pause "Looks right? Press Enter to continue"
+}
+
+# run_auth_config: only the Auth config push (email-code-sign-in), for projects
+# that were cut over already: bash scripts/hosted-cutover.sh auth-config
+run_auth_config() {
+TOTAL_STAGES=2
+banner "Push the Auth config: sign in only by an e-mailed code"
+say "Push the migrations first (db push to staging, then production), then this."
+
+stage "Staging: push the Auth config"
+ask STAGING_REF "Staging project ref:"
+write_env STAGING_REF "$STAGING_REF"
+ask PREVIEW_URL "The staging branch URL (https://...vercel.app):"
+write_env PREVIEW_URL "${PREVIEW_URL%/}"
+auth_smtp_values
+push_auth_config "$STAGING_REF" "$PREVIEW_URL" "https://*.vercel.app/**"
+step "Register on $PREVIEW_URL with your e-mail and sign in with the code it sends."
+if ! confirm "Staging signs in by code? (production comes next)"; then
+  SKIPPED+=("production Auth config: staging didn't sign in by code yet")
+  finish; return 0
+fi
+
+stage "Production: push the Auth config"
+ask PROD_REF "Production project ref:"
+write_env PROD_REF "$PROD_REF"
+ask DOMAIN "The production domain (e.g. crew.example.com):"
+write_env DOMAIN "$DOMAIN"
+push_auth_config "$PROD_REF" "https://$DOMAIN" "https://$DOMAIN/**"
+step "Sign in on https://$DOMAIN by code; the Audit Log shows Login succeeded."
+pause
+warn "Delete $ENV_FILE when you're done: it holds the hosted passwords and secrets."
+finish
+}
+
 run_wizard() {
 
-TOTAL_STAGES=18
+if [[ "${1:-}" == "auth-config" ]]; then run_auth_config; return 0; fi
+
+TOTAL_STAGES=20
 
 banner "Hosted cutover: move the API from Railway to Vercel"
 say "Production stays on Railway until one scheduled daily check succeeds on Vercel."
@@ -355,7 +507,7 @@ say "Has the one-time hosted reset (README, fr-build-plan ticket 14) been run on
 say "production already? If it has, the reset is never run again."
 if confirm "Run the one-time hosted reset now (wipes production data, no undo)?"; then
   warn "Every table, row, account and file on production is deleted. The live app"
-  warn "is down from here until the domain switch in stage 15."
+  warn "is down from here until the domain switch in stage 17."
   if confirm "Reset production project $PROD_REF now?"; then
     $SUPABASE db reset --linked --no-seed
     PROD_RESET="yes"
@@ -420,7 +572,7 @@ step "Root Directory: leave it at the repository root (./), NOT frontend/."
 step "Framework Preset: Other. Leave the build, output and install settings"
 note "  unset: the root vercel.json sets them, the fra1 region and the /api rewrite."
 step "Don't deploy yet if it offers to (or let it fail): env vars come next."
-note "The old frontend-only Vercel project keeps serving the domain until stage 15."
+note "The old frontend-only Vercel project keeps serving the domain until stage 17."
 ask VERCEL_PROJECT_URL "The new project's settings URL (https://vercel.com/<team>/<project>):"
 write_env VERCEL_PROJECT_URL "$VERCEL_PROJECT_URL"
 pause
@@ -482,6 +634,13 @@ note "  (or the narrower https://*-<team>.vercel.app/**)."
 pause "Both saved? Press Enter to continue"
 
 # ── 12 ────────────────────────────────────────────────────────────────────
+stage "Staging: push the Auth config (sign in only by code)"
+say "Supabase Auth sends the 6-digit Sign-in Code through Resend's SMTP, with the"
+say "code-only templates from supabase/templates (ADR-0004)."
+auth_smtp_values
+push_auth_config "$STAGING_REF" "$PREVIEW_URL" "https://*.vercel.app/**"
+
+# ── 13 ────────────────────────────────────────────────────────────────────
 stage "Deploy a preview and check it"
 say "Push a 'staging' branch so Vercel builds a preview against staging:"
 note "  git push origin HEAD:staging"
@@ -500,7 +659,7 @@ step "Open the preview in the browser: the sign-in page (the SPA) loads, and a d
 note "  link such as $PREVIEW_URL/settings also loads the SPA, not a 404."
 pause "Preview serves the SPA and /api from fra1? Press Enter to continue"
 
-# ── 13 ────────────────────────────────────────────────────────────────────
+# ── 14 ────────────────────────────────────────────────────────────────────
 stage "Staging: Vault values, cron calls and an end-to-end test"
 STAGING_CALL="$PREVIEW_URL/api/internal/daily-check"
 [[ -n "$VERCEL_BYPASS" ]] && STAGING_CALL+="?x-vercel-protection-bypass=$VERCEL_BYPASS"
@@ -516,19 +675,25 @@ pause "Calls succeed? Press Enter to continue"
 ask ADMIN_EMAIL "Your e-mail (the first administrator, on staging and production):"
 write_env ADMIN_EMAIL "$ADMIN_EMAIL"
 open_url "$PREVIEW_URL"
-step "Sign up on the preview with $ADMIN_EMAIL; you land on 'waiting for approval'."
-pause "Signed up? Press Enter to make the account an administrator"
+step "Register on the preview with $ADMIN_EMAIL and type the code from the e-mail;"
+note "  you land on 'waiting for approval'."
+pause "Registered? Press Enter to make the account an administrator"
 until (cd backend && DATABASE_URL="$STAGING_DATABASE_URL" SUPABASE_URL="unused" \
         SUPABASE_SERVICE_ROLE_KEY="unused" MAIL_FROM="unused@localhost" \
         uv run python -m app.scripts.make_admin "$ADMIN_EMAIL"); do
   warn "make_admin failed (see the output above)."
   confirm "Try again?" || { SKIPPED+=("make_admin $ADMIN_EMAIL on staging"); break; }
 done
-step "Sign in on the preview, add a vessel, a seafarer and a document (under 4 MB),"
+step "Sign in by code on the preview, add a vessel, a seafarer and a document (under 4 MB),"
 note "  and open the Version. Check that no e-mail reaches anyone but you."
 pause "Preview works end to end? Press Enter to continue"
 
-# ── 14 ────────────────────────────────────────────────────────────────────
+# ── 15 ────────────────────────────────────────────────────────────────────
+stage "Production: push the Auth config (sign in only by code)"
+say "Staging signs in by code, so production gets the same Auth config."
+push_auth_config "$PROD_REF" "https://$DOMAIN" "https://$DOMAIN/**"
+
+# ── 16 ────────────────────────────────────────────────────────────────────
 stage "Deploy production on Vercel and set its Vault values"
 say "Railway keeps running. Merge to main (or Redeploy in Vercel) for a production"
 say "deployment; it is reachable at the project's *.vercel.app domain."
@@ -537,7 +702,7 @@ step "Wait for the Production deployment to be Ready, and copy its *.vercel.app 
 ask PROD_VERCEL_URL "Production *.vercel.app URL:"
 write_env PROD_VERCEL_URL "${PROD_VERCEL_URL%/}"
 probe "$PROD_VERCEL_URL"
-say "The production job calls the domain. Until stage 15 those calls reach the old"
+say "The production job calls the domain. Until stage 17 those calls reach the old"
 say "frontend and fail harmlessly; Railway's own timer keeps sending Alerts, and"
 say "run_if_due claims each day's run once, so the two never double up."
 open_url "$PROD_DASH/sql/new"
@@ -545,7 +710,7 @@ step "Run this in PRODUCTION's SQL editor:"
 sql "$(vault_sql "https://$DOMAIN/api/internal/daily-check" "$PROD_CRON_SECRET")"
 pause "Ran it? Press Enter to continue"
 
-# ── 15 ────────────────────────────────────────────────────────────────────
+# ── 17 ────────────────────────────────────────────────────────────────────
 stage "Move the domain and DNS to Vercel"
 step "If the old frontend Vercel project has $DOMAIN, remove it there first."
 open_url "$VERCEL_PROJECT_URL/settings/domains"
@@ -569,12 +734,12 @@ note "  shows the domain as Verified."
 probe "https://$DOMAIN"
 pause "Domain serves the Vercel deployment? Press Enter to continue"
 
-# ── 16 ────────────────────────────────────────────────────────────────────
+# ── 18 ────────────────────────────────────────────────────────────────────
 stage "Production: the first administrator"
 if [[ "$PROD_RESET" == "yes" ]]; then
   open_url "https://$DOMAIN"
-  step "Sign up with $ADMIN_EMAIL, and confirm the e-mail if Supabase sends one."
-  pause "Signed up? Press Enter to make the account an administrator"
+  step "Register with $ADMIN_EMAIL and type the code from the e-mail."
+  pause "Registered? Press Enter to make the account an administrator"
   until (cd backend && DATABASE_URL="$PROD_DATABASE_URL" SUPABASE_URL="unused" \
           SUPABASE_SERVICE_ROLE_KEY="unused" MAIL_FROM="unused@localhost" \
           uv run python -m app.scripts.make_admin "$ADMIN_EMAIL"); do
@@ -583,10 +748,10 @@ if [[ "$PROD_RESET" == "yes" ]]; then
   done
 fi
 open_url "https://$DOMAIN"
-step "Sign in as an administrator: the dashboard loads, and Accounts lists you."
+step "Sign in by code as an administrator: the dashboard loads, and Accounts lists you."
 pause "Signed in? Press Enter to continue"
 
-# ── 17 ────────────────────────────────────────────────────────────────────
+# ── 19 ────────────────────────────────────────────────────────────────────
 stage "Production checks before Railway goes"
 say "Check each by hand:"
 step "Responses come from fra1: x-vercel-id above, or the deployment's Functions tab."
@@ -613,7 +778,7 @@ if ! confirm "Did a scheduled daily check succeed on Vercel, and did email arriv
   return 0
 fi
 
-# ── 18 ────────────────────────────────────────────────────────────────────
+# ── 20 ────────────────────────────────────────────────────────────────────
 stage "Delete the Railway service"
 open_url "https://railway.com/dashboard"
 step "Open the project → the backend service → Settings → Delete service."
