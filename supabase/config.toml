@@ -196,7 +196,9 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-email_sent = 2
+# Every sign-in sends a Sign-in Code, so a working day's sign-ins must fit; with custom SMTP
+# the hosted default is 30.
+email_sent = 100
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
 # Number of anonymous sign-ins that can be made per hour per IP address. Requires enable_anonymous_sign_ins = true.
@@ -222,31 +224,44 @@ enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
-# If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+# If enabled, users need to confirm their email address before signing in. Register finishes
+# only with the code e-mailed to the address (ADR-0004).
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
-max_frequency = "1s"
+# A Sign-in Code: one at most every 60 seconds, 6 digits, valid 10 minutes (ADR-0004).
+max_frequency = "60s"
 # Number of characters used in the email OTP.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 3600
+otp_expiry = 600
 
-# Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# Auth e-mail goes through Resend's SMTP on hosted: Supabase's built-in sender only delivers to
+# project team members. Disabled locally, so Mailpit (http://127.0.0.1:54324) catches the mail;
+# scripts/hosted-cutover.sh turns it on in the copy it pushes with `supabase config push`.
+[auth.email.smtp]
+enabled = false
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+# A Resend API key. DO NOT commit it: set it in the environment of `supabase config push`.
+pass = "env(SUPABASE_AUTH_SMTP_PASSWORD)"
+# The sender, on the domain the Alerts already use.
+admin_email = "env(MAIL_FROM)"
+sender_name = "Maritime Crew Documents"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# The two e-mails a Sign-in Code comes in: the code only, never a link (a mail scanner opening
+# the link would spend the code). Paths are relative to the repository root.
+# Register (a new Account):
+[auth.email.template.confirmation]
+subject = "Your code to finish registering"
+content_path = "./supabase/templates/confirmation.html"
+
+# Sign in (an existing Account):
+[auth.email.template.magic_link]
+subject = "Your sign-in code"
+content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
