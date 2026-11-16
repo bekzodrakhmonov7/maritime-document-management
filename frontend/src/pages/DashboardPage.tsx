@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { Search, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useDashboard, useFleetTotals, type DashboardFilters } from '../hooks/useDashboard'
+import { useCanReportOnVessel } from '../hooks/useReports'
 import { fullName } from '../hooks/useSeafarers'
 import { cn } from '../lib/cn'
 import { ErrorNote } from '../components/ErrorNote'
+import { ReportDownloads } from '../components/ReportDownloads'
 import { ExpiryStatusBadge } from '../components/ExpiryStatusBadge'
 import { EndorsementCapNote } from '../components/EndorsementCapNote'
 import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
@@ -190,6 +192,10 @@ function WorkQueues() {
 
   const addTag = (tag: Tag) => setTags((held) => (held.some((t) => sameTag(t, tag)) ? held : [...held, tag]))
   const removeTag = (tag: Tag) => setTags((held) => held.filter((t) => !sameTag(t, tag)))
+  const canReport = useCanReportOnVessel()
+  // The vessel report is offered when exactly one vessel filter is active.
+  const vesselTags = tags.filter((t) => t.kind === 'vessel')
+  const reportVessel = vesselTags.length === 1 && vesselTags[0].id !== null ? vesselTags[0] : null
 
   return (
     <div className="space-y-4">
@@ -246,6 +252,16 @@ function WorkQueues() {
             <button type="button" onClick={() => setTags([])} className="text-xs text-navy-400 hover:text-navy-200">
               Clear all
             </button>
+            {reportVessel && canReport(reportVessel.id as number) && (
+              <span className="ml-auto inline-flex items-center gap-2 text-xs text-navy-300">
+                Status Report for {reportVessel.name}:
+                <ReportDownloads
+                  kind="vessel"
+                  id={reportVessel.id as number}
+                  label={`${reportVessel.name}'s Status Report`}
+                />
+              </span>
+            )}
           </>
         )}
       </div>

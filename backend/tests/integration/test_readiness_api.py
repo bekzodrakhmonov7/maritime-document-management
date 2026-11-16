@@ -58,7 +58,7 @@ async def world(crew, make_account, documents_cleanup, storage, owner_db):
     )
     return {
         **types,
-        "ids": {"officer_a": officer_a, "manager": manager},
+        "ids": {"officer_a": officer_a, "officer_b": officer_b, "manager": manager},
         "master": master,
         "chief_officer": chief_officer,
         "alpha": alpha,

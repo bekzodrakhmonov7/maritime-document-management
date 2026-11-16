@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useVessels } from '../hooks/useReferenceData'
+import { useCanReportOnVessel } from '../hooks/useReports'
 import { flagLabel } from '../lib/flags'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
+import { ReportDownloads } from '../components/ReportDownloads'
 import { StateBadge } from '../components/StateBadge'
 import { VesselActions, VesselDialog, type VesselDialogState } from '../components/VesselDialogs'
 
@@ -17,7 +19,8 @@ export function VesselsPage() {
   const { data: vessels, isLoading, error } = useVessels(withoutOfficer)
   const [dialog, setDialog] = useState<VesselDialogState | null>(null)
   const sorted = vessels ? [...vessels].sort((a, b) => Number(b.active) - Number(a.active)) : []
-  const columns = isAdmin ? 5 : 4
+  const canReport = useCanReportOnVessel()
+  const columns = isAdmin ? 6 : 5
 
   return (
     <div className="space-y-6">
@@ -57,6 +60,7 @@ export function VesselsPage() {
               <th scope="col" className="px-4 py-3">IMO number</th>
               <th scope="col" className="px-4 py-3">Flag</th>
               <th scope="col" className="px-4 py-3">Status</th>
+              <th scope="col" className="px-4 py-3">Status Report</th>
               {isAdmin && (
                 <th scope="col" className="px-4 py-3 text-right">Actions</th>
               )}
@@ -91,6 +95,11 @@ export function VesselsPage() {
                 <td className="px-4 py-3 text-navy-200">{flagLabel(vessel.flag)}</td>
                 <td className="px-4 py-3">
                   <StateBadge on={vessel.active} label={vessel.active ? 'Active' : 'Deactivated'} />
+                </td>
+                <td className="px-4 py-3">
+                  {canReport(vessel.id) && (
+                    <ReportDownloads kind="vessel" id={vessel.id} label={`${vessel.name}'s Status Report`} />
+                  )}
                 </td>
                 {isAdmin && (
                   <td className="px-4 py-3">

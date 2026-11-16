@@ -61,6 +61,7 @@ class AuditAction(StrEnum):
     AUDIT_SEARCHED = "audit_searched"
     AUDIT_EXPORTED = "audit_exported"
     DAILY_CHECK_RUN_MANUALLY = "daily_check_run_manually"
+    REPORT_GENERATED = "report_generated"
     # Written by the retention functions in the database, with the system as actor.
     RETENTION_REMOVAL = "retention_removal"
     # Written by the auth.audit_log_entries trigger, not by the API.

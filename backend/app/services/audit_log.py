@@ -21,6 +21,7 @@ import asyncpg
 
 from app import audit
 from app.audit import AuditAction, AuditContext
+from app.csv_cells import spreadsheet_safe
 from app.models.audit_log import AuditFilters
 
 EXPORT_CAP = 50_000
@@ -50,10 +51,6 @@ _ORDER = "ORDER BY occurred_at DESC, id DESC"
 _ZONE = "(SELECT time_zone FROM public.settings)"
 _DAY_START = f"(({{}}::date)::timestamp AT TIME ZONE {_ZONE})"
 _NEXT_DAY_START = f"(({{}}::date + 1)::timestamp AT TIME ZONE {_ZONE})"
-
-# A cell starting with one of these is a formula to a spreadsheet.
-_FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
-
 
 @dataclass(frozen=True)
 class Export:
@@ -150,8 +147,7 @@ def _cell(value: Any, zone: ZoneInfo) -> str:
         return value.astimezone(zone).isoformat(sep=" ", timespec="seconds")
     if isinstance(value, (dict, list)):
         return json.dumps(value, ensure_ascii=False)
-    text = str(value)
-    return f"'{text}" if text.startswith(_FORMULA_STARTS) else text
+    return spreadsheet_safe(str(value))
 
 
 async def export(conn: asyncpg.Connection, ctx: AuditContext, filters: AuditFilters) -> Export:

@@ -8,6 +8,7 @@ import { cn } from '../lib/cn'
 import { AssignmentStateBadge } from '../components/AssignmentDialogs'
 import { ErrorNote } from '../components/ErrorNote'
 import { EndorsementCapNote } from '../components/EndorsementCapNote'
+import { ReportDownloads } from '../components/ReportDownloads'
 import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
 import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
 import { COVERAGE_LABELS, type CoverageClass, type ReadinessEntry } from '../types'
@@ -158,6 +159,10 @@ export function ReadinessPage() {
               </Link>{' '}
               ({flagLabel(a.vessel_flag)}), {a.start_date} → {a.end_date}
             </p>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-navy-300">
+              Status Report:
+              <ReportDownloads kind="assignment" id={a.id} label="this assignment's Status Report" />
+            </div>
           </header>
 
           {view.position_notice && (

@@ -441,6 +441,7 @@ export const AUDIT_ACTION_LABELS = {
   audit_searched: 'Audit Log searched',
   audit_exported: 'Audit Log exported',
   daily_check_run_manually: 'Daily check run manually',
+  report_generated: 'Status Report generated',
   retention_removal: 'Retention removal',
 } as const
 

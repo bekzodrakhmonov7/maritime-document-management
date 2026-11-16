@@ -16,6 +16,7 @@ from app.routers import (
     internal,
     me,
     reference_data,
+    reports,
     requirements,
     seafarers,
     settings as settings_router,
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(alerts.router, prefix="/api")
     app.include_router(alerts.admin, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
+    app.include_router(reports.router, prefix="/api")
     app.include_router(internal.router, prefix="/api")
 
     return app
