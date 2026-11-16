@@ -120,7 +120,8 @@ D = date(2027, 6, 30)
     [
         (S - ONE_DAY, "runs_out_before_start"),
         (S, "runs_out_during"),
-        (D, "covers_all"),
+        (D, "runs_out_during"),
+        (D + ONE_DAY, "covers_all"),
     ],
 )
 def test_coverage_uses_the_effective_expiry(cap, expected):
@@ -185,6 +186,16 @@ def test_readiness_under_way_names_the_certificate_too():
     )
     assert _only_entry(view, "before_joining")["suggestion"] == (
         f"Renew Certificate of Competency as soon as possible (endorsement capped at {cap.isoformat()})"
+    )
+
+
+def test_readiness_an_endorsement_capped_at_the_end_date_runs_out_during():
+    own = D + 100 * ONE_DAY
+    view = readiness(ASSIGNMENT, [_required(effective_expiry(_endorsement(own), _cert(D)), own)], TODAY)
+    entry = _only_entry(view, "before_joining")
+    assert entry["coverage"] == "runs_out_during"
+    assert entry["suggestion"] == (
+        f"Renew Certificate of Competency before joining (endorsement capped at {D.isoformat()})"
     )
 
 

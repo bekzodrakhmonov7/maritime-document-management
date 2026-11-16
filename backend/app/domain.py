@@ -371,7 +371,10 @@ def coverage_class(
 ) -> CoverageClass:
     """How one required document stands against an Assignment from `start` to
     `end`, by its Effective Expiry E (valid through E; the Current Version's
-    own expiry date when `effective` isn't given). Only the expiry counts: not
+    own expiry date when `effective` isn't given). Runs out before start:
+    E < start; runs out during: start <= E <= end; covers all: E > end or no
+    expiry date. Covering all means outlasting the planned end date, because
+    Assignments often end later than planned. Only the expiry counts: not
     the issue date, the review or the verification, so a Version awaiting
     review counts too. An Endorsement with no certificate runs out before
     start."""
@@ -380,7 +383,7 @@ def coverage_class(
     if effective is not None and effective.certificate_missing:
         return "runs_out_before_start"
     expiry = current["expiry_date"] if effective is None else effective.expiry
-    if expiry is None or expiry >= end:
+    if expiry is None or expiry > end:
         return "covers_all"
     if expiry < start:
         return "runs_out_before_start"

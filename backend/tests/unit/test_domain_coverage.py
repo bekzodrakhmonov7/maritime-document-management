@@ -34,7 +34,7 @@ def _current(expiry: date | None) -> dict:
         (S - ONE_DAY, "runs_out_before_start"),
         (S, "runs_out_during"),
         (D - ONE_DAY, "runs_out_during"),
-        (D, "covers_all"),
+        (D, "runs_out_during"),
         (D + ONE_DAY, "covers_all"),
         (None, "covers_all"),
     ],
@@ -49,7 +49,7 @@ def test_no_current_version_is_missing():
 
 def test_coverage_ignores_the_issue_date():
     # Issued after the start still covers: only the expiry date counts.
-    version = {"id": 1, "issue_date": S + ONE_DAY, "expiry_date": D}
+    version = {"id": 1, "issue_date": S + ONE_DAY, "expiry_date": D + ONE_DAY}
     assert coverage_class(S, D, version) == "covers_all"
 
 
@@ -210,6 +210,27 @@ def test_runs_out_during_not_renewable_under_way_not_yet_expired():
     assert entry["suggestion"] == f"Plan relief or port renewal before {e.isoformat()}"
 
 
+# Expiring on the planned end date runs out during: Assignments often end late.
+
+
+def test_expiring_on_the_end_date_is_renew_before_joining_when_not_renewable_at_sea():
+    entry = _only(_view(_doc("CoC", D)), "before_joining")
+    assert entry["coverage"] == "runs_out_during"
+    assert entry["suggestion"] == "Renew before joining, not renewable at sea"
+
+
+def test_expiring_on_the_end_date_under_way_is_plan_relief_when_not_renewable_at_sea():
+    entry = _only(_view(_doc("CoC", D), today=UNDER_WAY_TODAY), "before_joining")
+    assert entry["coverage"] == "runs_out_during"
+    assert entry["suggestion"] == f"Plan relief or port renewal before {D.isoformat()}"
+
+
+def test_expiring_on_the_end_date_can_be_renewed_at_sea():
+    entry = _only(_view(_doc("Medical", D, renewable=True)), "renewable_at_sea")
+    assert entry["coverage"] == "runs_out_during"
+    assert entry["suggestion"] == f"Can be renewed at sea, by {D.isoformat()}"
+
+
 @pytest.mark.parametrize("renewable", [True, False])
 def test_expired_on_board_is_renew_now_and_keeps_its_coverage_class(renewable):
     e = UNDER_WAY_TODAY - ONE_DAY  # S <= E < today: ran out while on board
@@ -225,7 +246,7 @@ def test_valid_through_today_on_board_is_not_expired_yet():
     assert _only(view, "renewable_at_sea")["suggestion"].startswith("Can be renewed at sea")
 
 
-@pytest.mark.parametrize("expiry", [D, None])
+@pytest.mark.parametrize("expiry", [D + ONE_DAY, None])
 def test_covers_all_has_no_suggestion(expiry):
     view = _view(_doc("Passport", expiry))
     entry = _only(view, "covers_all")
@@ -235,7 +256,7 @@ def test_covers_all_has_no_suggestion(expiry):
 
 
 def test_an_awaiting_review_version_counts_toward_coverage():
-    view = _view(_doc("Passport", D, review="not_reviewed"))
+    view = _view(_doc("Passport", D + ONE_DAY, review="not_reviewed"))
     entry = _only(view, "not_reviewed")
     assert entry["coverage"] == "covers_all"
     assert entry["review_state"] == "not_reviewed"
@@ -258,7 +279,7 @@ def test_counters_count_the_buckets_and_entries_sort_by_name():
         _doc("Passport", missing=True),
         _doc("CoC", S - ONE_DAY),
         _doc("Medical", S, renewable=True),
-        _doc("Basic Safety", D, review="not_reviewed"),
+        _doc("Basic Safety", D + ONE_DAY, review="not_reviewed"),
         _doc("Seaman's Book", None),
     )
     assert view["counters"] == {"before_joining": 2, "renewable_at_sea": 1, "not_reviewed": 1}
@@ -296,7 +317,7 @@ def test_the_different_position_notice():
 
 
 def test_there_is_no_overall_verdict():
-    view = _view(_doc("Passport", D))
+    view = _view(_doc("Passport", D + ONE_DAY))
     assert set(view) == {
         "state", "position_notice", "before_joining_label", "counters", "buckets"
     }
