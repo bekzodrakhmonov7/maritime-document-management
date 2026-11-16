@@ -195,7 +195,8 @@ function WorkQueues() {
   const canReport = useCanReportOnVessel()
   // The vessel report is offered when exactly one vessel filter is active.
   const vesselTags = tags.filter((t) => t.kind === 'vessel')
-  const reportVessel = vesselTags.length === 1 && vesselTags[0].id !== null ? vesselTags[0] : null
+  const reportVessel =
+    vesselTags.length === 1 && vesselTags[0].id !== null ? { id: vesselTags[0].id, name: vesselTags[0].name } : null
 
   return (
     <div className="space-y-4">
@@ -252,12 +253,12 @@ function WorkQueues() {
             <button type="button" onClick={() => setTags([])} className="text-xs text-navy-400 hover:text-navy-200">
               Clear all
             </button>
-            {reportVessel && canReport(reportVessel.id as number) && (
+            {reportVessel && canReport(reportVessel.id) && (
               <span className="ml-auto inline-flex items-center gap-2 text-xs text-navy-300">
                 Status Report for {reportVessel.name}:
                 <ReportDownloads
                   kind="vessel"
-                  id={reportVessel.id as number}
+                  id={reportVessel.id}
                   label={`${reportVessel.name}'s Status Report`}
                 />
               </span>

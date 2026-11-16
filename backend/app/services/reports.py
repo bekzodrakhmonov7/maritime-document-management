@@ -122,6 +122,15 @@ async def _report_assignment_ids(
     ]
 
 
+async def _may_report_on_vessel(
+    conn: asyncpg.Connection, account: UserPayload, vessel_id: int
+) -> bool:
+    """Administrators any vessel; others only one they are a Responsible Officer for."""
+    if account.role == "administrator":
+        return True
+    return vessel_id in await responsible_officers.vessel_ids(conn, account.sub)
+
+
 async def vessel_report(
     conn: asyncpg.Connection,
     ctx: AuditContext,
@@ -132,9 +141,7 @@ async def vessel_report(
 ) -> RenderedReport:
     async with conn.transaction():
         vessel = await reference_data.get_row(conn, reference_data.VESSEL, vessel_id)
-        if account.role != "administrator" and vessel_id not in await responsible_officers.vessel_ids(
-            conn, account.sub
-        ):
+        if not await _may_report_on_vessel(conn, account, vessel_id):
             raise OutOfScope("vessel", vessel_id, seafarer_id=None)
         sections = [
             await _section(conn, scope, assignment_id)

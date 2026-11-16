@@ -104,6 +104,11 @@ class StatusReport:
         """The three readiness counters summed over the sections."""
         return {c: sum(s.view["counters"][c] for s in self.sections) for c in COUNTERS}
 
+    @property
+    def stamp(self) -> str:
+        """When it was generated, to the minute, as the PDF prints it."""
+        return self.generated_at.isoformat(sep=" ", timespec="minutes")
+
     def filename(self, target_id: int, fmt: ReportFormat) -> str:
         return f"status-report-{self.kind}-{target_id}-{self.today.isoformat()}.{fmt}"
 
@@ -210,9 +215,8 @@ class _Pdf(FPDF):
         self.set_y(-12)
         self.set_font("Helvetica", "", 8)
         self.set_text_color(110)
-        stamp = self.report.generated_at.isoformat(sep=" ", timespec="minutes")
         self.cell(0, 5, _latin1(
-            f"Status Report as of {self.report.today.isoformat()} - generated {stamp} "
+            f"Status Report as of {self.report.today.isoformat()} - generated {self.report.stamp} "
             f"by {self.report.generated_by} - page {self.page_no()}/{{nb}}"
         ), align="C")
         self.set_text_color(0)
@@ -230,7 +234,7 @@ class _Pdf(FPDF):
 
     def counters(self, labels: Sequence[tuple[str, int]]) -> None:
         self.set_font("Helvetica", "B", 10)
-        width = (self.epw) / len(labels)
+        width = self.epw / len(labels)
         for label, value in labels:
             self.cell(width, 7, _latin1(f"{label}: {value}"), border=1, align="C")
         self.ln(9)
@@ -294,9 +298,8 @@ def to_pdf(report: StatusReport) -> bytes:
     pdf.alias_nb_pages()
     pdf.add_page()
     pdf.line_of("Status Report", size=16, style="B", h=8)
-    stamp = report.generated_at.isoformat(sep=" ", timespec="minutes")
     pdf.line_of(
-        f"As of {report.today.isoformat()}. Generated {stamp} by {report.generated_by}.", size=9
+        f"As of {report.today.isoformat()}. Generated {report.stamp} by {report.generated_by}.", size=9
     )
     pdf.ln(2)
     if report.kind == "assignment":
