@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { supabase } from '../lib/supabase'
-import { apiFetch, onAccountSwitchedOff } from '../lib/api'
+import { apiFetch, onAccountSwitchedOff, onSessionRefused } from '../lib/api'
 import type { Session, User } from '@supabase/supabase-js'
 import type { AccountStatus, Me, UserRole } from '../types'
 
@@ -17,6 +17,13 @@ const SWITCHED_OFF_KEY = 'account-switched-off'
 interface SessionTokens {
   access_token: string
   refresh_token: string
+}
+
+/** What the first step (password, or Register) answers: the Sign-in
+ * Challenge the e-mailed code is checked against. */
+interface ChallengeAnswer {
+  challenge: string
+  message: string
 }
 
 interface AuthContextValue {
@@ -31,12 +38,18 @@ interface AuthContextValue {
   switchedOff: boolean
   clearSwitchedOff: () => void
   refreshAccount: () => Promise<void>
-  /** Sign in: e-mail a Sign-in Code to an existing Account. */
-  requestCode: (email: string) => Promise<void>
-  /** Register: e-mail a Sign-in Code, creating a pending Account if needed. */
-  register: (email: string, fullName: string) => Promise<void>
-  /** Check the code and start the session; throws the API's refusal. */
-  verifyCode: (email: string, code: string) => Promise<void>
+  /** Sign in, step 1: check the password; e-mails a code, returns the challenge. */
+  signIn: (email: string, password: string) => Promise<string>
+  /** Register, step 1: create the pending Account; e-mails a code, returns the challenge. */
+  register: (email: string, fullName: string, password: string) => Promise<string>
+  /** E-mail a new code for the same challenge. */
+  resendCode: (challenge: string) => Promise<void>
+  /** Step 2: check the code and start the session; throws the API's refusal. */
+  verifyCode: (email: string, challenge: string, code: string) => Promise<void>
+  /** Forgot password: e-mail a code for setting a new one. */
+  requestPasswordReset: (email: string) => Promise<void>
+  /** Set a new password with that code; every session of the Account ends. */
+  resetPassword: (email: string, code: string, password: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -93,6 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [endSession],
   )
 
+  // A session that skipped a sign-in step is refused by the API (ADR-0005):
+  // end it, so the person signs in again with password and code.
+  useEffect(() => onSessionRefused(() => void endSession()), [endSession])
+
   useEffect(() => {
     let cancelled = false
     supabase.auth.getSession().then(async ({ data }) => {
@@ -129,36 +146,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSwitchedOff(false)
   }, [])
 
-  // Every sign-in step goes through the API's sign-in proxy so failed
-  // attempts reach the Audit Log (FR-22, ADR-0004). Both code requests get
-  // the same answer whether or not the e-mail has an Account.
-  const requestCode = async (email: string) => {
-    await apiFetch('/api/auth/code', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    })
-  }
+  // Every sign-in step goes through the API's sign-in proxy (ADR-0005): it
+  // records failed attempts (FR-22) and lets only sessions that passed both
+  // the password and the e-mailed code into the API.
+  const post = <T,>(path: string, body: unknown) =>
+    apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) })
 
-  const register = async (email: string, fullName: string) => {
-    await apiFetch('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, full_name: fullName }),
-    })
+  const signIn = async (email: string, password: string) =>
+    (await post<ChallengeAnswer>('/api/auth/login', { email, password })).challenge
+
+  const register = async (email: string, fullName: string, password: string) =>
+    (
+      await post<ChallengeAnswer>('/api/auth/register', {
+        email,
+        full_name: fullName,
+        password,
+      })
+    ).challenge
+
+  const resendCode = async (challenge: string) => {
+    await post('/api/auth/code', { challenge })
   }
 
   // The session the proxy returns is handed to Supabase; the existing
   // routing then sends a pending Account to the waiting page (FR-01).
-  const verifyCode = async (email: string, code: string) => {
-    const tokens = await apiFetch<SessionTokens>('/api/auth/verify', {
-      method: 'POST',
-      body: JSON.stringify({ email, code }),
-    })
+  const verifyCode = async (email: string, challenge: string, code: string) => {
+    const tokens = await post<SessionTokens>('/api/auth/verify', { email, challenge, code })
     const { error } = await supabase.auth.setSession({
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
     })
     if (error) throw error
     clearSwitchedOff()
+  }
+
+  const requestPasswordReset = async (email: string) => {
+    await post('/api/auth/password/forgot', { email })
+  }
+
+  const resetPassword = async (email: string, code: string, password: string) => {
+    await post('/api/auth/password/reset', { email, code, password })
   }
 
   return (
@@ -172,9 +199,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         switchedOff,
         clearSwitchedOff,
         refreshAccount: fetchAccount,
-        requestCode,
+        signIn,
         register,
+        resendCode,
         verifyCode,
+        requestPasswordReset,
+        resetPassword,
         signOut,
       }}
     >

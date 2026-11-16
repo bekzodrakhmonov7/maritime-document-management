@@ -4,20 +4,23 @@ import { Anchor, Loader2, UserPlus } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { CodeStep } from '../components/auth/CodeStep'
 import { ErrorNote } from '../components/ErrorNote'
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, passwordProblem } from '../lib/signInCode'
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-navy-50 placeholder-navy-500 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50'
 
-/** Register: full name and e-mail, then the Sign-in Code e-mailed to it
- * (ADR-0004). The only place an Account comes into existence; it starts
- * pending, so the code leads to the waiting-for-approval page (FR-01). */
+/** Register: full name, e-mail and password, then the Sign-in Code e-mailed
+ * to the address (ADR-0005). The only place an Account comes into existence;
+ * it starts pending, so the code leads to the waiting-for-approval page (FR-01). */
 export function RegisterPage() {
-  const { register, verifyCode, user, loading: authLoading } = useAuth()
+  const { register, resendCode, verifyCode, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
-  const [codeSent, setCodeSent] = useState(false)
+  const [password, setPassword] = useState('')
+  const [repeated, setRepeated] = useState('')
+  const [challenge, setChallenge] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,13 +36,20 @@ export function RegisterPage() {
       setError('Enter your full name and e-mail.')
       return
     }
+    const problem = passwordProblem(password, repeated)
+    if (problem) {
+      setError(problem)
+      return
+    }
     setError(null)
     setLoading(true)
     try {
-      await register(typed, name)
+      const issued = await register(typed, name, password)
       setFullName(name)
       setEmail(typed)
-      setCodeSent(true)
+      setPassword('')
+      setRepeated('')
+      setChallenge(issued)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed.')
     } finally {
@@ -63,15 +73,19 @@ export function RegisterPage() {
         </div>
 
         <div className="rounded-xl border border-navy-800 bg-navy-900 p-8 shadow-2xl">
-          {codeSent ? (
+          {challenge ? (
             <CodeStep
               email={email}
               onVerify={async (code) => {
-                await verifyCode(email, code)
+                await verifyCode(email, challenge, code)
                 navigate('/')
               }}
-              onResend={() => register(email, fullName)}
-              onChangeEmail={() => setCodeSent(false)}
+              onResend={() => resendCode(challenge)}
+              onBack={() => setChallenge(null)}
+              onExpired={(message) => {
+                setChallenge(null)
+                setError(message)
+              }}
             />
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6" noValidate>
@@ -123,6 +137,55 @@ export function RegisterPage() {
                 />
               </div>
 
+              <div>
+                <label
+                  htmlFor="password"
+                  className="mb-2 block text-sm font-medium text-navy-100"
+                >
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  minLength={MIN_PASSWORD_LENGTH}
+                  maxLength={MAX_PASSWORD_LENGTH}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  aria-required="true"
+                  aria-describedby="password-hint"
+                  aria-invalid={error ? true : undefined}
+                  className={INPUT_CLASS}
+                />
+                <p id="password-hint" className="mt-1.5 text-xs text-navy-400">
+                  At least {MIN_PASSWORD_LENGTH} characters.
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="repeated"
+                  className="mb-2 block text-sm font-medium text-navy-100"
+                >
+                  Repeat password
+                </label>
+                <input
+                  id="repeated"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  maxLength={MAX_PASSWORD_LENGTH}
+                  value={repeated}
+                  onChange={(e) => setRepeated(e.target.value)}
+                  disabled={loading}
+                  aria-required="true"
+                  aria-invalid={error ? true : undefined}
+                  className={INPUT_CLASS}
+                />
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -130,7 +193,7 @@ export function RegisterPage() {
               >
                 {loading && <Loader2 className="h-5 w-5 animate-spin" />}
                 {loading ? (
-                  'Sending code...'
+                  'Creating account...'
                 ) : (
                   <>
                     <UserPlus className="h-5 w-5" aria-hidden="true" />

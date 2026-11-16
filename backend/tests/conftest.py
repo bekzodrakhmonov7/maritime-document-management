@@ -43,11 +43,17 @@ from app.config import settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
-def make_token(user_id: UUID, email: str = "someone@example.com") -> str:
-    """A Supabase-style access token. Its role claim is never trusted."""
+def make_token(
+    user_id: UUID, email: str = "someone@example.com", session_id: UUID | None = None
+) -> str:
+    """A Supabase-style access token. Its role claim is never trusted.
+
+    Its session is the one `make_account` marked as verified (the session id
+    is the Account id), unless another `session_id` is given."""
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
+        "session_id": str(session_id or user_id),
         "email": email,
         "role": "authenticated",
         "aud": "authenticated",
@@ -75,6 +81,9 @@ async def owner_db():
 async def make_account(owner_db):
     """Create Accounts through the real sign-up trigger, then set their state.
 
+    Each gets a verified session whose id is the Account id, which is what
+    `auth_header` sends.
+
     Returns an async factory: make_account(status="active", role=...) -> id.
     Afterwards the accounts it made are removed again. The Audit Log is
     append-only and left alone; tests look up their own records by id.
@@ -100,6 +109,11 @@ async def make_account(owner_db):
             full_name,
         )
         created.append(user_id)
+        # As if the person had signed in with password and code (ADR-0005).
+        await owner_db.execute(
+            "INSERT INTO public.verified_session (session_id, user_id) VALUES ($1, $1)",
+            user_id,
+        )
         if status != "pending":
             await owner_db.execute(
                 "UPDATE public.users SET status = $2, role = $3 WHERE id = $1",

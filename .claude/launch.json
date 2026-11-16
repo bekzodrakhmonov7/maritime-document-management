@@ -28,6 +28,23 @@
         "5177"
       ],
       "port": 5177
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "--directory",
+        "backend",
+        "run",
+        "uvicorn",
+        "app.main:app",
+        "--port",
+        "8000"
+      ],
+      "port": 8000,
+      "env": {
+        "CORS_ORIGINS": "http://localhost:5176,http://127.0.0.1:5176,http://localhost:5173,http://127.0.0.1:5173"
+      }
     }
   ]
 }

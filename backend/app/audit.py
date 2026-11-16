@@ -64,10 +64,11 @@ class AuditAction(StrEnum):
     REPORT_GENERATED = "report_generated"
     # Written by the retention functions in the database, with the system as actor.
     RETENTION_REMOVAL = "retention_removal"
-    # Written by the auth.audit_log_entries trigger, not by the API.
+    # Written by the sign-in proxy once the password and the code are both right.
     LOGIN_SUCCEEDED = "login_succeeded"
     LOGIN_FAILED = "login_failed"
     LOGOUT = "logout"
+    PASSWORD_RESET = "password_reset"
     ACCESS_REFUSED = "access_refused"
 
 

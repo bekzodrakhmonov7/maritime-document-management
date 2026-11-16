@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import jwt
 import pytest
+from fastapi import HTTPException
 
 from app.config import settings
 from app.deps import get_signed_in_user
@@ -67,7 +68,10 @@ class MockConn:
         self.email = email
 
     async def fetchrow(self, query, *args):
-        return {"email": self.email, "full_name": "Row", "status": "active", "role": "administrator"}
+        return {
+            "email": self.email, "full_name": "Row", "status": "active",
+            "role": "administrator", "verified": True,
+        }
 
 
 @pytest.mark.asyncio
@@ -245,8 +249,11 @@ class _RowConn:
         return self._row
 
 
-def _row(status: str, role: str | None) -> dict:
-    return {"email": "a@example.com", "full_name": "A", "status": status, "role": role}
+def _row(status: str, role: str | None, verified: bool = True) -> dict:
+    return {
+        "email": "a@example.com", "full_name": "A", "status": status, "role": role,
+        "verified": verified,
+    }
 
 
 @pytest.mark.asyncio
@@ -285,3 +292,15 @@ async def test_active_account_passes(valid_token: str) -> None:
         DummyRequest(valid_token), _RowConn(_row("active", "administrator"))
     )
     assert (await get_current_user(user)).role == "administrator"
+
+
+@pytest.mark.asyncio
+async def test_a_session_that_skipped_a_sign_in_step_is_refused(valid_token: str) -> None:
+    # ADR-0005: only sessions recorded by the sign-in proxy get in.
+    with pytest.raises(HTTPException) as exc_info:
+        await get_signed_in_user(
+            DummyRequest(valid_token), _RowConn(_row("active", "manager", verified=False))
+        )
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["code"] == "session_not_verified"

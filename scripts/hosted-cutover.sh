@@ -313,7 +313,7 @@ probe() {
 }
 
 # auth_smtp_values asks once for what Supabase Auth needs to send through Resend
-# (ADR-0004): a Resend API key, and the sender on the domain the Alerts use.
+# (ADR-0005): a Resend API key, and the sender on the domain the Alerts use.
 auth_smtp_values() {
   if [[ -z "$(_existing SUPABASE_AUTH_SMTP_PASSWORD || true)" ]]; then
     open_url "https://resend.com/api-keys"
@@ -363,6 +363,7 @@ body = {
     "smtp_admin_email": os.environ["MAIL_FROM"],
     "smtp_sender_name": smtp["sender_name"],
     "rate_limit_email_sent": auth["rate_limit"]["email_sent"],
+    "password_min_length": auth["minimum_password_length"],
 }
 for name, template in email["template"].items():
     body[f"mailer_subjects_{name}"] = template["subject"]
@@ -407,9 +408,10 @@ push_auth_config() {
   dir=$(mktemp -d)
   hosted_config "$dir" "$2" "$3"
   say "Pushing the Auth config to $ref. Read the diff before you confirm it: it"
-  say "should show code-only sign-in (enable_confirmations, otp_length 6,"
-  say "otp_expiry 600, max_frequency 60s), SMTP through smtp.resend.com, the"
-  say "magic_link and confirmation templates, and Site URL $2."
+  say "should show password-then-code sign-in (enable_confirmations,"
+  say "minimum_password_length 8, otp_length 6, otp_expiry 600, max_frequency"
+  say "60s), SMTP through smtp.resend.com, the magic_link, confirmation and"
+  say "recovery templates, and Site URL $2."
   note "Decline any section whose change you didn't expect."
   SUPABASE_AUTH_SMTP_PASSWORD="$SUPABASE_AUTH_SMTP_PASSWORD" MAIL_FROM="$MAIL_FROM" \
     $SUPABASE config push --workdir "$dir" --project-ref "$ref" \

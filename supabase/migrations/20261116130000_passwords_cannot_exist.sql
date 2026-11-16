@@ -1,37 +1,12 @@
--- Passwords cannot exist (ADR 0004): a Sign-in Code is the only way in.
+-- Passwords cannot exist (ADR 0004): superseded before it reached a hosted
+-- project, so it does nothing.
 --
--- Hiding the password fields is not enough: anyone holding the public key
--- could still ask Supabase Auth for a password grant, or set a password
--- through updateUser. So auth.users never keeps one. GoTrue treats an empty
--- (or NULL) encrypted_password as "no password" and refuses the password
--- grant with invalid_credentials.
---
--- The trigger blanks the hash on every insert and update, whoever writes it
--- (GoTrue as supabase_auth_admin, or a test inserting 'x'). Other columns
--- are left alone. Existing passwords are wiped below; their Accounts keep
--- working and next sign in by code to the same e-mail.
+-- ADR 0004 wanted a trigger that kept auth.users.encrypted_password empty and
+-- a one-off wipe of every stored password. ADR 0005 replaced that decision
+-- (a password, then an e-mailed code) before this migration was pushed to
+-- staging or production, so the hosted Accounts keep the passwords they
+-- registered with. Local databases that ran the earlier version of this file
+-- lost theirs; 20261116140000 drops that trigger if it is there, and those
+-- Accounts set a new password through "Forgot password?".
 
-CREATE FUNCTION public.keep_password_empty()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-    IF NEW.encrypted_password IS DISTINCT FROM '' THEN
-        NEW.encrypted_password := '';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.keep_password_empty()
-    FROM PUBLIC, anon, authenticated, service_role;
-
-CREATE TRIGGER keep_password_empty
-    BEFORE INSERT OR UPDATE ON auth.users
-    FOR EACH ROW
-    EXECUTE FUNCTION public.keep_password_empty();
-
-UPDATE auth.users
-   SET encrypted_password = ''
- WHERE encrypted_password IS DISTINCT FROM '';
+SELECT 1;

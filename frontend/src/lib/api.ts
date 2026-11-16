@@ -23,6 +23,15 @@ export function onAccountSwitchedOff(listener: Listener): () => void {
   return () => switchedOffListeners.delete(listener)
 }
 
+const sessionRefusedListeners = new Set<Listener>()
+
+/** Called whenever the API refuses the session because it did not pass both
+ * sign-in steps (ADR-0005), e.g. one started before passwords came back. */
+export function onSessionRefused(listener: Listener): () => void {
+  sessionRefusedListeners.add(listener)
+  return () => sessionRefusedListeners.delete(listener)
+}
+
 async function toApiError(res: Response): Promise<ApiError> {
   const text = await res.text()
   try {
@@ -66,6 +75,9 @@ async function authorizedFetch(path: string, options: RequestInit = {}): Promise
     const err = await toApiError(res)
     if (err.code === 'account_deactivated') {
       switchedOffListeners.forEach((listener) => listener())
+    }
+    if (err.code === 'session_not_verified') {
+      sessionRefusedListeners.forEach((listener) => listener())
     }
     throw err
   }

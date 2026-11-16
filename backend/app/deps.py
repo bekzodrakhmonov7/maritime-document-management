@@ -103,16 +103,42 @@ async def get_signed_in_user(
             detail="Invalid token",
         )
 
+    try:
+        session_id = UUID(str(payload.get("session_id")))
+    except ValueError:
+        session_id = None
+
     # Remembered for the refused-access record (app/refused_access.py).
     request.state.token_sub = sub
+    request.state.session_id = session_id
 
     # The Account row is the only source of status and role: the token's role
     # claim is never trusted, and a token with no row is refused.
     row = await db.fetchrow(
-        "SELECT email, full_name, status, role FROM public.users WHERE id = $1", sub
+        """
+        SELECT u.email, u.full_name, u.status, u.role,
+               EXISTS (SELECT 1 FROM public.verified_session AS v
+                        WHERE v.session_id = $2 AND v.user_id = u.id) AS verified
+          FROM public.users AS u
+         WHERE u.id = $1
+        """,
+        sub,
+        session_id,
     )
     if row is None:
         raise account_refused("no_account", "There is no account for this sign-in.")
+
+    # Supabase Auth hands out a session for a password alone, or for an
+    # e-mailed code alone, to anyone holding the public key. Only a session
+    # that passed both steps of the sign-in proxy gets in (ADR-0005).
+    if not row["verified"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "session_not_verified",
+                "message": "Sign in again with your password and e-mailed code.",
+            },
+        )
 
     request.state.account = UserPayload(
         sub=sub,

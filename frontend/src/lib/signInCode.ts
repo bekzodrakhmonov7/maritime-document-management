@@ -1,13 +1,36 @@
 /**
- * The code step of Register and Sign in (ADR-0004): a Sign-in Code is 6
- * digits, and a new one can be asked for at most every 60 seconds.
+ * Register and Sign in (ADR-0005): a password first, then a Sign-in Code
+ * e-mailed to the address. A code is 6 digits, and a new one can be asked
+ * for at most every 60 seconds.
  */
 
 export const CODE_LENGTH = 6
 export const RESEND_WAIT_SECONDS = 60
 
-/** What the sign-in proxy answers to every code request. */
-export const CODE_SENT_MESSAGE = "If an Account exists for this e-mail, we've sent a code."
+export const MIN_PASSWORD_LENGTH = 8
+/** bcrypt reads at most 72 bytes; Supabase Auth refuses longer passwords. */
+export const MAX_PASSWORD_LENGTH = 72
+
+/** What the sign-in proxy says once the first step is done. */
+export const CODE_SENT_MESSAGE = "We've e-mailed you a 6-digit code."
+
+/** The sign-in proxy's code for a first step that must be done again
+ * (10 minutes passed, 5 wrong codes, or already used). */
+export const CHALLENGE_EXPIRED = 'challenge_expired'
+
+/** Why a new password can't be used yet, or null when it can. */
+export function passwordProblem(password: string, repeated: string): string | null {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `Use at least ${MIN_PASSWORD_LENGTH} characters for the password.`
+  }
+  if (new TextEncoder().encode(password).length > MAX_PASSWORD_LENGTH) {
+    return `Use at most ${MAX_PASSWORD_LENGTH} characters for the password.`
+  }
+  if (password !== repeated) {
+    return 'The two passwords are not the same.'
+  }
+  return null
+}
 
 /** The digits of what was typed or pasted, at most 6. */
 export function normaliseCode(input: string): string {

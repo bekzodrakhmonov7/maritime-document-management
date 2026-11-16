@@ -6,6 +6,7 @@ import {
   codeErrorMessage,
   isCompleteCode,
   normaliseCode,
+  passwordProblem,
   secondsUntilResend,
 } from '../src/lib/signInCode.ts'
 
@@ -56,4 +57,11 @@ test('any other refusal shows the API message', () => {
     'Sign-in is unavailable.',
   )
   assert.equal(codeErrorMessage(new Error('Failed to fetch')), 'Failed to fetch')
+})
+
+test('a new password is 8 to 72 characters, typed the same twice', () => {
+  assert.match(passwordProblem('short1', 'short1') ?? '', /at least 8/)
+  assert.match(passwordProblem('x'.repeat(73), 'x'.repeat(73)) ?? '', /at most 72/)
+  assert.match(passwordProblem('long-enough-1', 'long-enough-2') ?? '', /not the same/)
+  assert.equal(passwordProblem('long-enough-1', 'long-enough-1'), null)
 })

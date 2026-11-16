@@ -54,20 +54,25 @@ The app connects as the restricted `app_backend` database role, never as the
 table owner, so it can only add to and read the Audit Log. `seed.sql` gives it
 the local password `app_backend_dev` (see `DATABASE_URL` in `.env.example`).
 
-### Signing in: only by an e-mailed code
+### Signing in: a password, then an e-mailed code
 
-There are no passwords (ADR-0004). **Register** asks for full name and e-mail;
-**Sign in** asks for the e-mail only. Both then ask for a **Sign-in Code**: 6
-digits, e-mailed, valid 10 minutes, at most one every 60 seconds (a new code
-replaces the old one). The e-mail holds only the code, never a link. Nothing
-(no env flag, dev mode or demo login) skips the code.
+Two steps (ADR-0005). **Register** asks for full name, e-mail and password;
+**Sign in** asks for e-mail and password. Both then ask for a **Sign-in
+Code**: 6 digits, e-mailed, valid 10 minutes, at most one every 60 seconds (a
+new code replaces the old one). The e-mail holds only the code, never a link.
+The API accepts only sessions that went through both steps of its sign-in
+proxy, so nothing (no env flag, dev mode, demo login or direct call to
+Supabase Auth) skips either one. **Forgot password?** on the Sign in page
+e-mails a code for setting a new password. A local database that ran the
+earlier, password-wiping version of migration `20261116130000` lost its test
+passwords; set new ones that way.
 
 Locally, Supabase doesn't send mail: its mail catcher, **Mailpit**, catches it.
 Ask for a code in the app, open <http://127.0.0.1:54324>, open the newest
-message for your address and type the 6 digits. The Auth settings and the two
+message for your address and type the 6 digits. The Auth settings and the three
 code-only e-mail templates live in `supabase/config.toml` and
 `supabase/templates/` (`confirmation.html` for Register, `magic_link.html` for
-Sign in); run `npx supabase@latest stop && npx supabase@latest start` after
+Sign in, `recovery.html` for Forgot password); run `npx supabase@latest stop && npx supabase@latest start` after
 changing them. SMTP (Resend) is off locally and only turned on for hosted.
 
 ### First administrator
@@ -260,7 +265,7 @@ For production and for staging:
 4. **Auth URLs.** Authentication → URL Configuration: production's Site URL is
    `https://<domain>`; staging's is the staging branch URL, with
    `https://*.vercel.app/**` among its Redirect URLs.
-5. **Auth config (sign in only by code).** Push `supabase/config.toml`'s Auth
+5. **Auth config (password, then code).** Push `supabase/config.toml`'s Auth
    settings and the code-only templates with `supabase config push`, **staging
    first, then production** once staging signs in by code. The wizard does it
    (also on its own, for projects already cut over):
@@ -274,18 +279,22 @@ For production and for staging:
    `SUPABASE_AUTH_SMTP_PASSWORD` (a Resend API key) and `MAIL_FROM` (the
    sender, on the domain the Alerts use) in its environment. `config push`
    prints the diff and asks before changing anything: **read it**. It should
-   show `enable_confirmations`, `otp_length` 6, `otp_expiry` 600,
-   `max_frequency` 60s, SMTP through `smtp.resend.com` and both templates. It
+   show `enable_confirmations`, `minimum_password_length` 8, `otp_length` 6,
+   `otp_expiry` 600, `max_frequency` 60s, SMTP through `smtp.resend.com` and
+   the three templates. It
    isn't confirmed that `config push` carries the SMTP, OTP and template
    fields; if the diff lacks them, the wizard sets them through the Management
    API instead: `PATCH https://api.supabase.com/v1/projects/<ref>/config/auth`
    with a personal access token and the same values (`mailer_otp_length`,
    `mailer_otp_exp`, `smtp_*`, `mailer_subjects_*`,
    `mailer_templates_magic_link_content`,
-   `mailer_templates_confirmation_content`, read from the repository).
+   `mailer_templates_confirmation_content`,
+   `mailer_templates_recovery_content`, `password_min_length`, read from the
+   repository).
    Supabase's built-in sender only delivers to project team members, so
    without SMTP nobody else gets a code.
-6. **First administrator.** Register on that environment's app, type the code
+6. **First administrator.** Register on that environment's app (with a
+   password), type the code
    from the e-mail, then run `make_admin` from your machine against its
    `DATABASE_URL`:
    `cd backend && DATABASE_URL='<that DATABASE_URL>' uv run python -m app.scripts.make_admin <email>`
@@ -383,7 +392,7 @@ wipe production data.
 │   │   ├── deps.py              # JWT + per-request account check
 │   │   ├── audit.py             # The audit helper (Audit Log writes)
 │   │   ├── refused_access.py    # Records every refused request
-│   │   ├── supabase_auth.py     # Sign-in Codes from Supabase Auth
+│   │   ├── supabase_auth.py     # Passwords and Sign-in Codes from Supabase Auth
 │   │   ├── routers/             # API endpoints (under /api)
 │   │   ├── services/            # Business logic
 │   │   └── scripts/             # make_admin

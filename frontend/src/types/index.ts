@@ -399,6 +399,7 @@ export const AUDIT_ACTION_LABELS = {
   login_succeeded: 'Login succeeded',
   login_failed: 'Login failed',
   logout: 'Logout',
+  password_reset: 'Password reset',
   access_refused: 'Access refused',
   account_approved: 'Account approved',
   account_role_changed: 'Account role changed',

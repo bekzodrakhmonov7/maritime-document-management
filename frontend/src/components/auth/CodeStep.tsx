@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { ArrowLeft, Loader2, MailCheck, RefreshCw } from 'lucide-react'
 import { ErrorNote } from '../ErrorNote'
+import { ApiError } from '../../lib/api'
 import {
+  CHALLENGE_EXPIRED,
   CODE_LENGTH,
   CODE_SENT_MESSAGE,
   codeErrorMessage,
@@ -19,20 +21,25 @@ function toError(err: unknown): Error {
 
 /**
  * The second step of Register and Sign in: type the Sign-in Code that was
- * e-mailed (ADR-0004). The page that shows it sent the first code.
+ * e-mailed (ADR-0005). The page that shows it did the first step (the
+ * password) and sent the first code.
  */
 export function CodeStep({
   email,
   onVerify,
   onResend,
-  onChangeEmail,
+  onBack,
+  onExpired,
 }: {
   email: string
   /** Checks the code and starts the session; throws the API's refusal. */
   onVerify: (code: string) => Promise<void>
-  /** Asks for a new code the same way the first one was asked for. */
+  /** Asks for a new code for the same first step. */
   onResend: () => Promise<void>
-  onChangeEmail: () => void
+  /** Back to the first step. */
+  onBack: () => void
+  /** The first step must be done again; given the message to show there. */
+  onExpired: (message: string) => void
 }) {
   const [code, setCode] = useState('')
   const [sentAt, setSentAt] = useState(() => Date.now())
@@ -49,6 +56,15 @@ export function CodeStep({
     return () => clearInterval(timer)
   }, [wait])
 
+  /** Hands an expired challenge back to the page; true when it did. */
+  const expired = (err: unknown): boolean => {
+    if (err instanceof ApiError && err.code === CHALLENGE_EXPIRED) {
+      onExpired(err.message)
+      return true
+    }
+    return false
+  }
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!isCompleteCode(code)) {
@@ -60,8 +76,10 @@ export function CodeStep({
     try {
       await onVerify(code)
     } catch (err) {
-      setError(codeErrorMessage(toError(err)))
-      setVerifying(false)
+      if (!expired(err)) {
+        setError(codeErrorMessage(toError(err)))
+        setVerifying(false)
+      }
     }
   }
 
@@ -75,7 +93,7 @@ export function CodeStep({
       setSentAt(resentAt)
       setNow(resentAt)
     } catch (err) {
-      setError(toError(err).message)
+      if (!expired(err)) setError(toError(err).message)
     } finally {
       setResending(false)
     }
@@ -134,12 +152,12 @@ export function CodeStep({
       <div className="flex items-center justify-between gap-3 text-sm">
         <button
           type="button"
-          onClick={onChangeEmail}
+          onClick={onBack}
           disabled={verifying}
           className="flex items-center gap-1 rounded font-medium text-navy-300 transition-colors hover:text-navy-50 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Change e-mail
+          Back
         </button>
         <button
           type="button"
