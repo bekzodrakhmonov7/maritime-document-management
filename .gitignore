@@ -46,3 +46,6 @@ docs/
 *.md
 !README.md
 .env.hosted
+
+.vercel
+.env.local
