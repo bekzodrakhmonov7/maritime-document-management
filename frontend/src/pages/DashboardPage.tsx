@@ -30,6 +30,7 @@ const QUEUES: DashboardQueue[] = [
   'missing',
   'expired',
   'expiring_soon',
+  'expiry_not_stated',
   'waiting_for_review',
   'starting_soon',
   'in_order',
@@ -333,6 +334,7 @@ const TOTALS_COLUMNS: { key: TotalsColumn; label: string }[] = [
   { key: 'expired', label: EXPIRY_STATUS_LABELS.expired },
   { key: 'expiring_soon', label: EXPIRY_STATUS_LABELS.expiring_soon },
   { key: 'unexpired', label: EXPIRY_STATUS_LABELS.unexpired },
+  { key: 'expiry_not_stated', label: EXPIRY_STATUS_LABELS.expiry_not_stated },
   { key: 'no_expiry_date', label: EXPIRY_STATUS_LABELS.no_expiry_date },
 ]
 

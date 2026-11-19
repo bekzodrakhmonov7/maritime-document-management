@@ -530,6 +530,7 @@ export type DashboardQueue =
   | 'missing'
   | 'expired'
   | 'expiring_soon'
+  | 'expiry_not_stated'
   | 'waiting_for_review'
   | 'starting_soon'
   | 'in_order'
@@ -538,6 +539,7 @@ export const DASHBOARD_QUEUE_LABELS: Record<DashboardQueue, string> = {
   missing: 'Missing',
   expired: 'Expired',
   expiring_soon: 'Expiring soon',
+  expiry_not_stated: EXPIRY_STATUS_LABELS.expiry_not_stated,
   waiting_for_review: 'Waiting for review',
   starting_soon: 'Starting soon',
   in_order: 'In order',
@@ -604,7 +606,13 @@ export interface Dashboard {
   }
 }
 
-export type TotalsColumn = 'missing' | 'expired' | 'expiring_soon' | 'unexpired' | 'no_expiry_date'
+export type TotalsColumn =
+  | 'missing'
+  | 'expired'
+  | 'expiring_soon'
+  | 'unexpired'
+  | 'expiry_not_stated'
+  | 'no_expiry_date'
 export type Breakdown = 'vessel' | 'position' | 'document_type'
 
 /** GET /api/dashboard/totals: counts only, no names. */

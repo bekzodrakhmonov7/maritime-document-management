@@ -576,10 +576,12 @@ def readiness(
 # --- The dashboard (FR-20, T10) --------------------------------------------------------
 
 DashboardQueue = Literal[
-    "missing", "expired", "expiring_soon", "waiting_for_review", "starting_soon", "in_order"
+    "missing", "expired", "expiring_soon", "expiry_not_stated", "waiting_for_review",
+    "starting_soon", "in_order",
 ]
 DASHBOARD_QUEUES: tuple[DashboardQueue, ...] = (
-    "missing", "expired", "expiring_soon", "waiting_for_review", "starting_soon", "in_order"
+    "missing", "expired", "expiring_soon", "expiry_not_stated", "waiting_for_review",
+    "starting_soon", "in_order",
 )
 DOCUMENT_QUEUES: tuple[DashboardQueue, ...] = tuple(q for q in DASHBOARD_QUEUES if q != "starting_soon")
 ActionHint = Literal["upload", "review", "open"]
@@ -587,12 +589,15 @@ _QUEUE_ACTIONS: dict[DashboardQueue, ActionHint] = {
     "missing": "upload",
     "expired": "upload",
     "expiring_soon": "upload",
+    "expiry_not_stated": "open",  # it may be fine: a person has to look
     "waiting_for_review": "review",
     "in_order": "open",
 }
-TotalsColumn = Literal["missing", "expired", "expiring_soon", "unexpired", "no_expiry_date"]
+TotalsColumn = Literal[
+    "missing", "expired", "expiring_soon", "unexpired", "expiry_not_stated", "no_expiry_date"
+]
 TOTALS_COLUMNS: tuple[TotalsColumn, ...] = (
-    "missing", "expired", "expiring_soon", "unexpired", "no_expiry_date"
+    "missing", "expired", "expiring_soon", "unexpired", "expiry_not_stated", "no_expiry_date"
 )
 Breakdown = Literal["vessel", "position", "document_type"]
 ASHORE_UNASSIGNED = "Ashore / Unassigned"
@@ -698,12 +703,14 @@ class DashboardFilters:
 
 def document_queues(line: DocumentLine) -> tuple[DashboardQueue, ...]:
     """The work queues a line is in: missing, or its Expiry Status's queue
-    (expired, expiring soon, or in order for unexpired and no expiry date),
+    (expired, expiring soon, expiry not stated, or in order for unexpired and
+    no expiry date),
     plus waiting for review when its Current Version has no Review yet."""
     if line.expiry_status is None:
         return ("missing",)
     expiry_queue: DashboardQueue = {
         "expired": "expired", "expiring_soon": "expiring_soon",
+        "expiry_not_stated": "expiry_not_stated",
     }.get(line.expiry_status, "in_order")
     if line.review_state == "not_reviewed":
         return expiry_queue, "waiting_for_review"
@@ -827,9 +834,6 @@ def fleet_totals(
         if s.inactive:
             continue
         column = line.expiry_status or "missing"
-        # shortcut: counted with no expiry date until issue 03 gives it its own column.
-        if column == "expiry_not_stated":
-            column = "no_expiry_date"
         totals[column] += 1
         rows.setdefault(row_key(s, line), empty())[column] += 1
     ordered = sorted(rows.items(), key=lambda r: (r[0][0] is None, r[0][1].lower(), r[0][0] or 0))
