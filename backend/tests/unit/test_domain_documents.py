@@ -71,7 +71,11 @@ def test_the_day_after_expiry_is_expired():
 
 
 def test_no_expiry_date():
-    assert expiry_status(None, E, 90) == "no_expiry_date"
+    assert expiry_status(None, E, 90, expires=False) == "no_expiry_date"
+
+
+def test_expiry_not_stated_for_an_empty_date_on_an_expiring_type():
+    assert expiry_status(None, E, 90, expires=True) == "expiry_not_stated"
 
 
 def test_expiring_soon_starts_at_the_largest_alert_step():
@@ -105,8 +109,31 @@ def test_latest_allowed_expiry_adds_whole_months(issue, months, latest):
     assert latest_allowed_expiry(issue, months) == latest
 
 
-def test_an_expiring_type_needs_an_expiry_date():
-    assert "expiry date" in version_dates_problem(date(2026, 1, 1), None, expires=True, max_validity_months=None)
+def test_an_expiring_type_needs_an_expiry_date_or_the_tick():
+    problem = version_dates_problem(date(2026, 1, 1), None, expires=True, max_validity_months=None)
+    assert problem == (
+        "This document type expires: enter the expiry date, "
+        "or tick 'Expiry not stated on the document'."
+    )
+
+
+def test_an_expiring_type_takes_no_date_with_the_tick():
+    assert version_dates_problem(
+        date(2026, 1, 1), None, expires=True, max_validity_months=60, expiry_not_stated=True
+    ) is None
+
+
+def test_the_tick_and_a_date_are_refused_together():
+    assert "one or the other" in version_dates_problem(
+        date(2026, 1, 1), date(2027, 1, 1), expires=True, max_validity_months=None,
+        expiry_not_stated=True,
+    )
+
+
+def test_the_tick_is_refused_on_a_type_that_doesnt_expire():
+    assert "doesn't expire" in version_dates_problem(
+        date(2026, 1, 1), None, expires=False, max_validity_months=None, expiry_not_stated=True
+    )
 
 
 def test_a_non_expiring_type_takes_no_expiry_date():

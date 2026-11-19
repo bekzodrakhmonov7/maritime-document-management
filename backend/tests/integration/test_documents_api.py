@@ -210,6 +210,52 @@ async def test_the_seafarer_documents_table_shows_each_current_document(client, 
     assert rows["Safety course"]["expiry_status"] == "no_expiry_date"
 
 
+async def test_an_expiring_type_takes_no_date_only_with_the_expiry_not_stated_tick(
+    client, world, owner_db
+):
+    res = await _upload(client, world["officer_a"], world["anna"], world["passport"], expiry_date=None)
+    assert res.status_code == 422
+    assert "Expiry not stated on the document" in res.text
+
+    doc = await _uploaded(
+        client, world["officer_a"], world["anna"], world["passport"],
+        expiry_date=None, expiry_not_stated="true",
+    )
+    assert doc["expiry_status"] == "expiry_not_stated"
+    assert doc["versions"][0]["expiry_date"] is None
+    # The tick only guards the form: nothing about it is stored (ADR-0006).
+    assert "expiry_not_stated" not in doc["versions"][0]
+    [record] = await _records(owner_db, "version_uploaded", seafarer_id=world["anna"])
+    assert "expiry_not_stated" not in record["after"]
+
+
+async def test_the_tick_with_a_date_or_on_a_type_that_doesnt_expire_is_refused(client, world):
+    res = await _upload(
+        client, world["officer_a"], world["anna"], world["passport"], expiry_not_stated="true"
+    )
+    assert res.status_code == 422
+    res = await _upload(
+        client, world["officer_a"], world["anna"], world["course"],
+        expiry_date=None, expiry_not_stated="true",
+    )
+    assert res.status_code == 422
+
+
+async def test_switching_a_type_to_expires_flags_its_undated_documents_and_back(
+    client, world, owner_db
+):
+    doc = await _uploaded(client, world["officer_a"], world["anna"], world["course"], expiry_date=None)
+    assert doc["expiry_status"] == "no_expiry_date"
+
+    await owner_db.execute("UPDATE public.document_type SET expires = true WHERE id = $1", world["course"])
+    res = await client.get(f"/api/documents/{doc['id']}", headers=world["officer_a"])
+    assert res.json()["expiry_status"] == "expiry_not_stated"
+
+    await owner_db.execute("UPDATE public.document_type SET expires = false WHERE id = $1", world["course"])
+    res = await client.get(f"/api/seafarers/{world['anna']}/documents", headers=world["officer_a"])
+    assert res.json()[0]["expiry_status"] == "no_expiry_date"
+
+
 async def test_expiry_status_follows_the_largest_alert_step_on_the_next_request(
     client, world, owner_db, settings_reset
 ):

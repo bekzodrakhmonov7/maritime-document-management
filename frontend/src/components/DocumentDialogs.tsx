@@ -36,6 +36,7 @@ function initialDetails(state: VersionDialogState): VersionDetails {
     issuing_authority: current.issuing_authority,
     issue_date: current.issue_date,
     expiry_date: current.expiry_date ?? '',
+    expiry_not_stated: current.expiry_date === null,
   }
 }
 
@@ -71,13 +72,18 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
   const set = (field: keyof VersionDetails) => (e: ChangeEvent<HTMLInputElement>) =>
     setDetails((d) => ({ ...d, [field]: e.target.value }))
 
-  const body: VersionDetails = { ...details, expiry_date: type?.expires ? details.expiry_date || null : null }
+  const notStated = !!type?.expires && !!details.expiry_not_stated
+  const body: VersionDetails = {
+    ...details,
+    expiry_date: type?.expires && !notStated ? details.expiry_date || null : null,
+    expiry_not_stated: notStated,
+  }
   const canSubmit =
     !!type &&
     !!details.document_number.trim() &&
     !!details.issuing_authority.trim() &&
     !!details.issue_date &&
-    (!type.expires || !!details.expiry_date) &&
+    (!type.expires || notStated || !!details.expiry_date) &&
     (!needsFile || !!file)
 
   const submit = () => {
@@ -168,10 +174,22 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
               className={FIELD_CLASS}
               value={details.expiry_date ?? ''}
               onChange={set('expiry_date')}
+              disabled={notStated}
             />
           </div>
         )}
       </div>
+      {type?.expires && (
+        <label className="flex items-center gap-2 text-sm text-navy-200">
+          <input
+            type="checkbox"
+            checked={notStated}
+            onChange={(e) => setDetails((d) => ({ ...d, expiry_not_stated: e.target.checked }))}
+            className="h-4 w-4 rounded border-navy-700 bg-navy-950"
+          />
+          Expiry not stated on the document
+        </label>
+      )}
       {type?.expires === false && <p className="text-xs text-navy-400">This document type doesn't expire.</p>}
       {type?.max_validity_months && (
         <p className="text-xs text-navy-400">

@@ -13,7 +13,9 @@ from zoneinfo import ZoneInfo
 
 AssignmentState = Literal["upcoming", "under_way", "finished"]
 Effect = Literal["add", "remove"]
-ExpiryStatus = Literal["unexpired", "expiring_soon", "expired", "no_expiry_date"]
+ExpiryStatus = Literal[
+    "unexpired", "expiring_soon", "expired", "no_expiry_date", "expiry_not_stated"
+]
 ReviewState = Literal["not_reviewed", "accepted", "rejected"]
 
 
@@ -102,12 +104,16 @@ def is_verified(
     return latest is not None and latest["result"] == "confirmed"
 
 
-def expiry_status(expiry: date | None, today: date, largest_step: int) -> ExpiryStatus:
+def expiry_status(
+    expiry: date | None, today: date, largest_step: int, *, expires: bool = False
+) -> ExpiryStatus:
     """Where an expiry date stands today (company time zone). A document is
     valid through its expiry date and expired from the next day; it is
-    expiring soon from the largest Alert Step down to the expiry day itself."""
+    expiring soon from the largest Alert Step down to the expiry day itself.
+    With no date it is expiry not stated when its type expires (ADR-0006),
+    otherwise no expiry date."""
     if expiry is None:
-        return "no_expiry_date"
+        return "expiry_not_stated" if expires else "no_expiry_date"
     days_left = (expiry - today).days
     if days_left < 0:
         return "expired"
@@ -130,6 +136,8 @@ class EffectiveExpiry:
     own_expiry: date | None
     capped_by: str | None = None
     missing_certificate: str | None = None
+    # The Document Type expires: with no date, the status is expiry not stated.
+    expires: bool = False
 
     @property
     def certificate_missing(self) -> bool:
@@ -139,7 +147,7 @@ class EffectiveExpiry:
         """The Expiry Status against the Effective Expiry."""
         if self.certificate_missing:
             return "expired"
-        return expiry_status(self.expiry, today, largest_step)
+        return expiry_status(self.expiry, today, largest_step, expires=self.expires)
 
 
 def effective_expiry(
@@ -158,15 +166,18 @@ def effective_expiry(
     if current is None:
         return None
     own = current["expiry_date"]
+    expires = bool(document.get("expires"))
     if document.get("depends_on_id") is None:
-        return EffectiveExpiry(expiry=own, own_expiry=own)
+        return EffectiveExpiry(expiry=own, own_expiry=own, expires=expires)
     certificate = document["certificate_type_name"]
     if certificate_current_version is None:
-        return EffectiveExpiry(expiry=None, own_expiry=own, missing_certificate=certificate)
+        return EffectiveExpiry(
+            expiry=None, own_expiry=own, missing_certificate=certificate, expires=expires
+        )
     cap = certificate_current_version["expiry_date"]
     if cap is not None and (own is None or cap < own):
-        return EffectiveExpiry(expiry=cap, own_expiry=own, capped_by=certificate)
-    return EffectiveExpiry(expiry=own, own_expiry=own)
+        return EffectiveExpiry(expiry=cap, own_expiry=own, capped_by=certificate, expires=expires)
+    return EffectiveExpiry(expiry=own, own_expiry=own, expires=expires)
 
 
 def latest_allowed_expiry(issue: date, max_validity_months: int) -> date:
@@ -177,12 +188,25 @@ def latest_allowed_expiry(issue: date, max_validity_months: int) -> date:
 
 
 def version_dates_problem(
-    issue: date, expiry: date | None, *, expires: bool, max_validity_months: int | None
+    issue: date,
+    expiry: date | None,
+    *,
+    expires: bool,
+    max_validity_months: int | None,
+    expiry_not_stated: bool = False,
 ) -> str | None:
     """Why a new Version's dates break its Document Type's rules, or None.
-    Rules are checked only when a Version is created (T2)."""
-    if expires and expiry is None:
-        return "This document type expires, so the expiry date is required."
+    Rules are checked only when a Version is created (T2). `expiry_not_stated`
+    is the form's tick: an expiring type takes no date only with it (ADR-0006)."""
+    if expiry_not_stated and not expires:
+        return "This document type doesn't expire, so 'Expiry not stated' doesn't apply."
+    if expiry_not_stated and expiry is not None:
+        return "Enter the expiry date or tick 'Expiry not stated on the document', one or the other."
+    if expires and expiry is None and not expiry_not_stated:
+        return (
+            "This document type expires: enter the expiry date, "
+            "or tick 'Expiry not stated on the document'."
+        )
     if not expires and expiry is not None:
         return "This document type doesn't expire, so it takes no expiry date."
     if expiry is None:
@@ -803,6 +827,9 @@ def fleet_totals(
         if s.inactive:
             continue
         column = line.expiry_status or "missing"
+        # shortcut: counted with no expiry date until issue 03 gives it its own column.
+        if column == "expiry_not_stated":
+            column = "no_expiry_date"
         totals[column] += 1
         rows.setdefault(row_key(s, line), empty())[column] += 1
     ordered = sorted(rows.items(), key=lambda r: (r[0][0] is None, r[0][1].lower(), r[0][0] or 0))

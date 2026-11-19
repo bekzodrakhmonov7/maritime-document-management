@@ -22,6 +22,9 @@ class VersionDetails(BaseModel):
     issue_date: date
     # None = no expiry date; required or refused by the Document Type.
     expiry_date: date | None = None
+    # The form's "Expiry not stated on the document" tick: lets an expiring
+    # type take no date. Checked, never stored (ADR-0006).
+    expiry_not_stated: bool = False
 
     @field_validator("expiry_date", mode="before")
     @classmethod
