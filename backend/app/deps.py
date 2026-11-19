@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import AsyncGenerator
+from typing import AsyncGenerator, NoReturn
 from uuid import UUID
 
 import asyncpg
@@ -7,6 +7,7 @@ import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
 from jwt import PyJWKClient
+from jwt.algorithms import AllowedPublicKeys
 
 from app.config import settings
 from app.models.auth import UserPayload
@@ -52,8 +53,8 @@ async def get_signed_in_user(
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
 ) -> UserPayload:
-    auth_header = request.headers.get("authorization")
-    if not auth_header:
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.strip():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authorization header",
@@ -73,11 +74,14 @@ async def get_signed_in_user(
     alg = header.get("alg")
 
     if alg == "ES256":
-        try:
-            signing_key = _jwks_client().get_signing_key_from_jwt(token)
-        except jwt.PyJWKClientConnectionError:
-            raise  # Our key endpoint is down: a server fault, not the visitor's.
-        except (jwt.InvalidTokenError, jwt.PyJWKClientError):
+        # Errors fetching our key set (down, no usable keys) are a server
+        # fault and propagate; only a kid matching none of our keys is the visitor's.
+        keys = _jwks_client()
+        kid = header.get("kid")
+        signing_key = keys.match_kid(keys.get_signing_keys(), kid) or keys.match_kid(
+            keys.get_signing_keys(refresh=True), kid
+        )
+        if signing_key is None:
             raise SessionRefused("invalid_session", "Invalid token")
         key = signing_key.key
         algorithms = ["ES256"]
@@ -95,7 +99,7 @@ async def get_signed_in_user(
             audience="authenticated",
         )
     except jwt.ExpiredSignatureError:
-        await _refuse_expired(token, key, algorithms, db)
+        raise await _refuse_expired(token, key, algorithms, db)
     except jwt.InvalidTokenError:
         raise SessionRefused("invalid_session", "Invalid token")
 
@@ -154,7 +158,9 @@ async def get_signed_in_user(
     return request.state.account
 
 
-async def _refuse_expired(token: str, key, algorithms: list[str], db: asyncpg.Connection):
+async def _refuse_expired(
+    token: str, key: str | AllowedPublicKeys, algorithms: list[str], db: asyncpg.Connection
+) -> NoReturn:
     """Refuse a genuine but expired Session, naming the Account it is for.
     Everything but the expiry is checked again, so a forged one stays invalid."""
     try:

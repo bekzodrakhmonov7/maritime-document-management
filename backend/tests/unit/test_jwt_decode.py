@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import uuid4
@@ -5,6 +6,8 @@ from uuid import uuid4
 import jwt
 import pytest
 from fastapi import HTTPException
+from jwt import PyJWKClient
+from jwt.algorithms import ECAlgorithm
 
 from app.config import settings
 from app.deps import get_signed_in_user
@@ -125,17 +128,12 @@ async def test_missing_header_rejected() -> None:
     assert exc_info.value.status_code == 401
 
 
-class _FakeSigningKey:
-    def __init__(self, key):
-        self.key = key
-
-
-class _FakeJWKSClient:
-    def __init__(self, public_key):
-        self._public_key = public_key
-
-    def get_signing_key_from_jwt(self, token):
-        return _FakeSigningKey(self._public_key)
+def _jwks_client_for(public_key) -> PyJWKClient:
+    """A real key client whose endpoint publishes `public_key` as "test-kid"."""
+    jwk = {**json.loads(ECAlgorithm.to_jwk(public_key)), "kid": "test-kid"}
+    client = PyJWKClient("http://keys.invalid/jwks.json", cache_jwk_set=False)
+    client.fetch_data = lambda: {"keys": [jwk]}
+    return client
 
 
 def _generate_es256_keypair():
@@ -171,7 +169,7 @@ async def test_es256_token_decodes(es256_keypair, monkeypatch) -> None:
     sub = str(uuid4())
     token = _build_es256_token(private_key, sub=sub, email="es256@test.com")
 
-    monkeypatch.setattr(app.deps, "_jwks_client", lambda: _FakeJWKSClient(public_key))
+    monkeypatch.setattr(app.deps, "_jwks_client", lambda: _jwks_client_for(public_key))
 
     request = DummyRequest(token)
     user = await get_signed_in_user(request, MockConn("es256@test.com"))
@@ -194,7 +192,7 @@ async def test_es256_expired_token_rejected(es256_keypair, monkeypatch) -> None:
         exp_delta=timedelta(hours=-1),
     )
 
-    monkeypatch.setattr(app.deps, "_jwks_client", lambda: _FakeJWKSClient(public_key))
+    monkeypatch.setattr(app.deps, "_jwks_client", lambda: _jwks_client_for(public_key))
 
     request = DummyRequest(token)
     with pytest.raises(HTTPException) as exc_info:
@@ -212,7 +210,7 @@ async def test_es256_wrong_audience_rejected(es256_keypair, monkeypatch) -> None
     private_key, public_key = es256_keypair
     token = _build_es256_token(private_key, sub=str(uuid4()), aud="wrong-audience")
 
-    monkeypatch.setattr(app.deps, "_jwks_client", lambda: _FakeJWKSClient(public_key))
+    monkeypatch.setattr(app.deps, "_jwks_client", lambda: _jwks_client_for(public_key))
 
     request = DummyRequest(token)
     with pytest.raises(HTTPException) as exc_info:
