@@ -4,6 +4,7 @@ A refused Session writes one *access refused* record, through the same
 handler as other refusals. The visitor sees the same 401 as before.
 """
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -203,3 +204,69 @@ async def test_an_expired_but_otherwise_bad_session_is_an_invalid_session(
     assert rec["actor_email"] is None
     assert rec["actor_role"] is None
     _assert_request_target(rec)
+
+
+def _stub_signing_keys(monkeypatch, fetch=None):
+    """The project's key endpoint, stubbed: it publishes one ES256 key, not the signer's."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from jwt import PyJWKClient
+    from jwt.algorithms import ECAlgorithm
+
+    import app.deps
+
+    public = ec.generate_private_key(ec.SECP256R1()).public_key()
+    jwks = {"keys": [{**json.loads(ECAlgorithm.to_jwk(public)), "kid": "published-kid"}]}
+    keys = PyJWKClient("http://keys.invalid/jwks.json", cache_jwk_set=False)
+    monkeypatch.setattr(keys, "fetch_data", fetch or (lambda: jwks))
+    monkeypatch.setattr(app.deps, "_jwks_client", lambda: keys)
+
+
+def _es256_session(account) -> dict[str, str]:
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    token = jwt.encode(
+        _claims(sub=str(account)), ec.generate_private_key(ec.SECP256R1()), "ES256",
+        headers={"kid": "unknown-kid"},
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def test_a_session_under_an_unknown_es256_key_is_recorded_as_invalid_session(
+    client, owner_db, make_account, monkeypatch
+):
+    account = await make_account()
+    _stub_signing_keys(monkeypatch)
+
+    res = await client.get("/api/me", headers=_es256_session(account))
+
+    assert res.status_code == 401
+    assert res.json() == {"detail": "Invalid token"}
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "invalid_session"
+    assert rec["actor_id"] is None
+
+
+async def test_unreachable_signing_keys_are_not_the_visitors_fault(
+    app, make_account, monkeypatch
+):
+    from httpx import ASGITransport, AsyncClient
+    from jwt import PyJWKClientConnectionError
+
+    def unreachable():
+        raise PyJWKClientConnectionError("Fail to fetch data from the url")
+
+    recorded = []
+
+    async def record(*args, **kwargs):
+        recorded.append(kwargs)
+
+    monkeypatch.setattr(refused_access.audit, "record", record)
+    account = await make_account()
+    _stub_signing_keys(monkeypatch, fetch=unreachable)
+
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        res = await c.get("/api/me", headers=_es256_session(account))
+
+    assert res.status_code == 500
+    assert recorded == []
