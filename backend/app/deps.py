@@ -16,12 +16,22 @@ security = HTTPBearer(auto_error=False)
 
 class SessionRefused(HTTPException):
     """A Session refused with a 401, recorded as refused access (ADR-0006).
-    `account_id` is set only when the signature checked out."""
+    The actor fields are set only when the signature checked out."""
 
-    def __init__(self, reason: str, detail: object, *, account_id: UUID | None = None) -> None:
+    def __init__(
+        self,
+        reason: str,
+        detail: object,
+        *,
+        account_id: UUID | None = None,
+        email: str | None = None,
+        role: str | None = None,
+    ) -> None:
         super().__init__(status.HTTP_401_UNAUTHORIZED, detail)
         self.reason = reason
         self.account_id = account_id
+        self.email = email
+        self.role = role
 
 
 @lru_cache(maxsize=1)
@@ -83,10 +93,7 @@ async def get_signed_in_user(
             audience="authenticated",
         )
     except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
-        )
+        await _refuse_expired(token, key, algorithms, db)
     except jwt.InvalidTokenError:
         raise SessionRefused("invalid_session", "Invalid token")
 
@@ -140,6 +147,24 @@ async def get_signed_in_user(
         role=row["role"],
     )
     return request.state.account
+
+
+async def _refuse_expired(token: str, key, algorithms: list[str], db: asyncpg.Connection):
+    """Refuse a genuine but expired Session, naming the Account it is for.
+    Everything but the expiry is checked again, so a forged one stays invalid."""
+    try:
+        payload = jwt.decode(
+            token, key, algorithms=algorithms, audience="authenticated",
+            options={"verify_exp": False},
+        )
+        sub = UUID(str(payload.get("sub")))
+    except (jwt.InvalidTokenError, ValueError):
+        raise SessionRefused("invalid_session", "Invalid token")
+    row = await db.fetchrow("SELECT email, role FROM public.users WHERE id = $1", sub)
+    raise SessionRefused(
+        "session_expired", "Token has expired", account_id=sub,
+        email=row["email"] if row else None, role=row["role"] if row else None,
+    )
 
 
 def account_refused(code: str, message: str) -> HTTPException:

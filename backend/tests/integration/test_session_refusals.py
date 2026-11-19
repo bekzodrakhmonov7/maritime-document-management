@@ -128,3 +128,78 @@ async def test_a_record_that_cannot_be_written_still_refuses_and_is_logged(
     assert res.status_code == 401
     assert res.json() == {"detail": "Invalid token"}
     assert "Refused access could not be recorded" in caplog.text
+
+
+def _expired(**overrides) -> dict:
+    now = datetime.now(timezone.utc)
+    return _claims(**{"iat": now - timedelta(hours=2), "exp": now - timedelta(hours=1), **overrides})
+
+
+def _bearer(claims: dict, key: str | None = None) -> dict[str, str]:
+    token = jwt.encode(claims, key or settings.supabase_jwt_secret, "HS256")
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _assert_request_target(rec) -> None:
+    assert rec["outcome"] == "refused"
+    assert rec["target_type"] == "request"
+    assert rec["target_id"] == "GET /api/me"
+    assert str(rec["ip"]) == "127.0.0.1"
+
+
+async def test_an_expired_session_is_recorded_with_its_account(
+    client, owner_db, make_account
+):
+    account = await make_account(role="crewing_officer")
+    headers = _bearer(_expired(sub=str(account)))
+
+    res = await client.get("/api/me", headers=headers)
+
+    assert res.status_code == 401
+    assert res.json() == {"detail": "Token has expired"}
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "session_expired"
+    assert rec["actor_id"] == account
+    email = await owner_db.fetchval("SELECT email FROM public.users WHERE id = $1", account)
+    assert rec["actor_email"] == email
+    assert rec["actor_role"] == "crewing_officer"
+    _assert_request_target(rec)
+    token = headers["Authorization"].split()[-1]
+    assert token not in " ".join(str(v) for v in rec.values())
+
+
+async def test_an_expired_session_without_an_account_names_only_its_subject(client, owner_db):
+    sub = uuid4()
+
+    res = await client.get("/api/me", headers=_bearer(_expired(sub=str(sub))))
+
+    assert res.status_code == 401
+    assert res.json() == {"detail": "Token has expired"}
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "session_expired"
+    assert rec["actor_id"] == sub
+    assert rec["actor_email"] is None
+    assert rec["actor_role"] is None
+    _assert_request_target(rec)
+
+
+@pytest.mark.parametrize("case", ["unusable subject", "wrong key", "wrong audience"])
+async def test_an_expired_but_otherwise_bad_session_is_an_invalid_session(
+    client, owner_db, make_account, case
+):
+    account = await make_account()
+    headers = {
+        "unusable subject": _bearer(_expired(sub="not-a-uuid")),
+        "wrong key": _bearer(_expired(sub=str(account)), "not-the-secret-" * 3),
+        "wrong audience": _bearer(_expired(sub=str(account), aud="elsewhere")),
+    }[case]
+
+    res = await client.get("/api/me", headers=headers)
+
+    assert res.status_code == 401
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "invalid_session"
+    assert rec["actor_id"] is None
+    assert rec["actor_email"] is None
+    assert rec["actor_role"] is None
+    _assert_request_target(rec)
