@@ -18,10 +18,20 @@ class SessionRefused(HTTPException):
     """A Session refused with a 401, recorded as refused access (ADR-0006).
     `account_id` is set only when the signature checked out."""
 
-    def __init__(self, reason: str, detail: object, *, account_id: UUID | None = None) -> None:
+    def __init__(
+        self,
+        reason: str,
+        detail: object,
+        *,
+        account_id: UUID | None = None,
+        email: str | None = None,
+        role: str | None = None,
+    ) -> None:
         super().__init__(status.HTTP_401_UNAUTHORIZED, detail)
         self.reason = reason
         self.account_id = account_id
+        self.email = email
+        self.role = role
 
 
 @lru_cache(maxsize=1)
@@ -124,12 +134,15 @@ async def get_signed_in_user(
     # e-mailed code alone, to anyone holding the public key. Only a session
     # that passed both steps of the sign-in proxy gets in (ADR-0005).
     if not row["verified"]:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
+        raise SessionRefused(
+            "session_not_verified",
+            {
                 "code": "session_not_verified",
                 "message": "Sign in again with your password and e-mailed code.",
             },
+            account_id=sub,
+            email=row["email"],
+            role=row["role"],
         )
 
     request.state.account = UserPayload(

@@ -128,3 +128,31 @@ async def test_a_record_that_cannot_be_written_still_refuses_and_is_logged(
     assert res.status_code == 401
     assert res.json() == {"detail": "Invalid token"}
     assert "Refused access could not be recorded" in caplog.text
+
+
+async def test_a_session_that_skipped_a_sign_in_step_is_recorded_with_its_account(
+    client, owner_db, make_account
+):
+    account = await make_account(role="crewing_officer")
+    email = await owner_db.fetchval("SELECT email FROM public.users WHERE id = $1", account)
+    token = make_token(account, session_id=uuid4())
+
+    res = await client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert res.status_code == 401
+    assert res.json() == {
+        "detail": {
+            "code": "session_not_verified",
+            "message": "Sign in again with your password and e-mailed code.",
+        }
+    }
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "session_not_verified"
+    assert rec["outcome"] == "refused"
+    assert rec["actor_id"] == account
+    assert rec["actor_email"] == email
+    assert rec["actor_role"] == "crewing_officer"
+    assert rec["target_type"] == "request"
+    assert rec["target_id"] == "GET /api/me"
+    assert str(rec["ip"]) == "127.0.0.1"
+    assert token not in " ".join(str(v) for v in rec.values())
