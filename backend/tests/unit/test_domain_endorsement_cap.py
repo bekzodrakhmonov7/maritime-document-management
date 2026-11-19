@@ -7,10 +7,12 @@ from datetime import date, timedelta
 import pytest
 
 from app.domain import (
+    DocumentLine,
     EffectiveExpiry,
     RequiredDocument,
     coverage_class,
     current_version,
+    document_queues,
     effective_expiry,
     readiness,
     step_to_raise,
@@ -59,14 +61,14 @@ def test_an_endorsement_with_no_own_expiry_is_capped_by_the_certificate_and_not_
     assert effective.expiry == OWN
     assert effective.capped_by == "Certificate of Competency"
     assert effective.own_not_stated is True
-    assert effective.unstated_certificate is None
+    assert effective.certificate_not_stated is None
 
 
 def test_a_certificate_with_no_date_is_not_stated_and_named():
     effective = effective_expiry(_endorsement(OWN), _cert(None))
     assert effective.expiry == OWN
     assert effective.own_not_stated is False
-    assert effective.unstated_certificate == "Certificate of Competency"
+    assert effective.certificate_not_stated == "Certificate of Competency"
 
 
 def test_no_certificate_counts_as_expired_with_a_certificate_missing_note():
@@ -108,6 +110,27 @@ def test_the_status_follows_the_effective_expiry():
     assert found.status(TODAY, 90) == "expired"
     found = effective_expiry(_endorsement(OWN), _cert(TODAY + 30 * ONE_DAY))
     assert found.status(TODAY, 90) == "expiring_soon"
+
+
+# Bad news wins (ADR-0006): a date not stated on either side lands the
+# Endorsement in the expiry not stated queue unless the known date is worse.
+@pytest.mark.parametrize(
+    "own, cap, expected",
+    [
+        (OWN, None, ("expiry_not_stated",)),
+        (None, OWN, ("expiry_not_stated",)),
+        (None, None, ("expiry_not_stated",)),
+        (TODAY - ONE_DAY, None, ("expired",)),
+        (None, TODAY + 30 * ONE_DAY, ("expiring_soon",)),
+    ],
+)
+def test_the_dashboard_queue_of_an_endorsement_with_a_date_not_stated(own, cap, expected):
+    status = effective_expiry(_endorsement(own), _cert(cap)).status(TODAY, 90)
+    line = DocumentLine(
+        seafarer_id=1, document_type_id=9, document_type_name="Flag Endorsement",
+        document_id=7, expiry_status=status, review_state="accepted",
+    )
+    assert document_queues(line) == expected
 
 
 def test_alerts_stay_on_the_endorsements_own_date():
@@ -248,7 +271,7 @@ def test_readiness_names_the_certificate_with_no_stated_expiry():
     own = D + 100 * ONE_DAY
     view = readiness(ASSIGNMENT, [_required(effective_expiry(_endorsement(own), _cert(None)), own)], TODAY)
     entry = _only_entry(view, "expiry_not_stated")
-    assert entry["suggestion"] == "Certificate of Competency has no stated expiry, check manually"
+    assert entry["suggestion"] == "Certificate of Competency: expiry not stated, check manually"
 
 
 def test_readiness_an_endorsement_with_no_own_date_shows_its_issue_date():

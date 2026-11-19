@@ -214,4 +214,4 @@ def test_expiry_not_stated_is_counted_and_titled_in_both_pdfs():
         # The PDF escapes parentheses in its text.
         assert r"Expiry not stated - check manually \(1\)" in text
         assert f"Expiry not stated: {counter}" in text
-        assert "[Expiry not stated]" in text
+        assert "[Expiry not stated - check manually]" in text

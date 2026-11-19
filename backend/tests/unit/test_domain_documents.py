@@ -63,11 +63,11 @@ def test_versions_uploaded_at_the_same_time_are_ordered_by_id():
 
 
 def test_the_expiry_day_itself_is_expiring_soon_and_still_valid():
-    assert expiry_status(E, E, 90) == "expiring_soon"
+    assert expiry_status(E, E, 90, expires=True) == "expiring_soon"
 
 
 def test_the_day_after_expiry_is_expired():
-    assert expiry_status(E, date(2026, 7, 1), 90) == "expired"
+    assert expiry_status(E, date(2026, 7, 1), 90, expires=True) == "expired"
 
 
 def test_no_expiry_date():
@@ -79,18 +79,18 @@ def test_expiry_not_stated_for_an_empty_date_on_an_expiring_type():
 
 
 def test_expiring_soon_starts_at_the_largest_alert_step():
-    assert expiry_status(E, date(2026, 4, 1), 90) == "expiring_soon"  # 90 days left
-    assert expiry_status(E, date(2026, 3, 31), 90) == "unexpired"  # 91 days left
+    assert expiry_status(E, date(2026, 4, 1), 90, expires=True) == "expiring_soon"  # 90 days left
+    assert expiry_status(E, date(2026, 3, 31), 90, expires=True) == "unexpired"  # 91 days left
 
 
 def test_a_smaller_largest_step_moves_the_boundary():
-    assert expiry_status(E, date(2026, 4, 1), 30) == "unexpired"
-    assert expiry_status(E, date(2026, 5, 31), 30) == "expiring_soon"
+    assert expiry_status(E, date(2026, 4, 1), 30, expires=True) == "unexpired"
+    assert expiry_status(E, date(2026, 5, 31), 30, expires=True) == "expiring_soon"
 
 
 def test_with_only_the_expiry_day_as_a_step_only_that_day_is_expiring_soon():
-    assert expiry_status(E, E, 0) == "expiring_soon"
-    assert expiry_status(E, date(2026, 6, 29), 0) == "unexpired"
+    assert expiry_status(E, E, 0, expires=True) == "expiring_soon"
+    assert expiry_status(E, date(2026, 6, 29), 0, expires=True) == "unexpired"
 
 
 # --- Version date rules (T2) ---------------------------------------------------------------

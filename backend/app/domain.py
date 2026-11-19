@@ -105,7 +105,7 @@ def is_verified(
 
 
 def expiry_status(
-    expiry: date | None, today: date, largest_step: int, *, expires: bool = False
+    expiry: date | None, today: date, largest_step: int, *, expires: bool
 ) -> ExpiryStatus:
     """Where an expiry date stands today (company time zone). A document is
     valid through its expiry date and expired from the next day; it is
@@ -130,7 +130,7 @@ class EffectiveExpiry:
     date (which Alerts keep following). `capped_by` names the certificate's
     Document Type when its date is the earlier one; `missing_certificate`
     names it when an Endorsement has no certificate behind it, which counts as
-    expired. `unstated_certificate` names the certificate when its Current
+    expired. `certificate_not_stated` names the certificate when its Current
     Version has no expiry date (ADR-0006)."""
 
     expiry: date | None
@@ -139,7 +139,7 @@ class EffectiveExpiry:
     missing_certificate: str | None = None
     # The Document Type expires: with no date, the status is expiry not stated.
     expires: bool = False
-    unstated_certificate: str | None = None
+    certificate_not_stated: str | None = None
 
     @property
     def certificate_missing(self) -> bool:
@@ -152,13 +152,16 @@ class EffectiveExpiry:
     @property
     def not_stated(self) -> bool:
         """Some date it depends on is Expiry Not Stated (ADR-0006)."""
-        return self.own_not_stated or self.unstated_certificate is not None
+        return self.own_not_stated or self.certificate_not_stated is not None
 
     def status(self, today: date, largest_step: int) -> ExpiryStatus:
-        """The Expiry Status against the Effective Expiry."""
+        """The Expiry Status against the Effective Expiry. When a date it
+        depends on is not stated, it is expiry not stated unless the known
+        date is already expired or expiring soon (bad news wins, ADR-0006)."""
         if self.certificate_missing:
             return "expired"
-        return expiry_status(self.expiry, today, largest_step, expires=self.expires)
+        status = expiry_status(self.expiry, today, largest_step, expires=self.expires)
+        return "expiry_not_stated" if self.not_stated and status == "unexpired" else status
 
 
 def effective_expiry(
@@ -169,9 +172,10 @@ def effective_expiry(
     For an Endorsement (`depends_on_id` set) it is the earlier of its own and
     its certificate's Current Version expiry date, ignoring a date not stated
     (both types expire, so a NULL on either side is Expiry Not Stated). The
-    certificate's Current Version is already the newest one not rejected (awaiting review counts); with none, the Endorsement is
-    treated as expired. Any other document keeps its own expiry date. There
-    is no upload check: an Endorsement may expire after its certificate.
+    certificate's Current Version is already the newest one not rejected
+    (awaiting review counts); with none, the Endorsement is treated as
+    expired. Any other document keeps its own expiry date. There is no
+    upload check: an Endorsement may expire after its certificate.
     """
     current = document["current_version"]
     if current is None:
@@ -186,10 +190,10 @@ def effective_expiry(
             expiry=None, own_expiry=own, missing_certificate=certificate, expires=True
         )
     cap = certificate_current_version["expiry_date"]
-    unstated = certificate if cap is None else None
+    not_stated = certificate if cap is None else None
     if cap is not None and (own is None or cap < own):
         return EffectiveExpiry(expiry=cap, own_expiry=own, capped_by=certificate, expires=True)
-    return EffectiveExpiry(expiry=own, own_expiry=own, expires=True, unstated_certificate=unstated)
+    return EffectiveExpiry(expiry=own, own_expiry=own, expires=True, certificate_not_stated=not_stated)
 
 
 def latest_allowed_expiry(issue: date, max_validity_months: int) -> date:
@@ -489,7 +493,7 @@ def _certificate_advice(
     if bucket == "expiry_not_stated":
         if effective.own_not_stated:
             return None
-        return f"{effective.unstated_certificate} has no stated expiry, check manually"
+        return f"{effective.certificate_not_stated}: expiry not stated, check manually"
     if effective.capped_by is None or effective.expiry is None:
         return None
     cap = effective.expiry.isoformat()
@@ -505,7 +509,7 @@ def _advice(
     renewable_at_sea: bool,
     under_way: bool,
     today: date,
-    issued: date | None = None,
+    issued: date | None,
 ) -> tuple[ReadinessBucket | None, str | None]:
     """T4's suggestion rule: the action bucket (None: covers all) and its text."""
     e = expiry.isoformat() if expiry else ""
