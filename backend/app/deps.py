@@ -133,12 +133,15 @@ async def get_signed_in_user(
     # e-mailed code alone, to anyone holding the public key. Only a session
     # that passed both steps of the sign-in proxy gets in (ADR-0005).
     if not row["verified"]:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
+        raise SessionRefused(
+            "session_not_verified",
+            {
                 "code": "session_not_verified",
                 "message": "Sign in again with your password and e-mailed code.",
             },
+            account_id=sub,
+            email=row["email"],
+            role=row["role"],
         )
 
     request.state.account = UserPayload(
