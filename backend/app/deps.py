@@ -75,7 +75,9 @@ async def get_signed_in_user(
     if alg == "ES256":
         try:
             signing_key = _jwks_client().get_signing_key_from_jwt(token)
-        except jwt.InvalidTokenError:
+        except jwt.PyJWKClientConnectionError:
+            raise  # Our key endpoint is down: a server fault, not the visitor's.
+        except (jwt.InvalidTokenError, jwt.PyJWKClientError):
             raise SessionRefused("invalid_session", "Invalid token")
         key = signing_key.key
         algorithms = ["ES256"]
