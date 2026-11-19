@@ -64,6 +64,7 @@ class QueueCounts(BaseModel):
     missing: int
     expired: int
     expiring_soon: int
+    expiry_not_stated: int
     waiting_for_review: int
     starting_soon: int
     in_order: int
@@ -73,6 +74,7 @@ class Queues(BaseModel):
     missing: list[SeafarerGroup]
     expired: list[SeafarerGroup]
     expiring_soon: list[SeafarerGroup]
+    expiry_not_stated: list[SeafarerGroup]
     # Overlaps the expiry queues.
     waiting_for_review: list[SeafarerGroup]
     # By start date.
@@ -93,6 +95,7 @@ class StatusCounts(BaseModel):
     expired: int
     expiring_soon: int
     unexpired: int
+    expiry_not_stated: int
     no_expiry_date: int
 
 
