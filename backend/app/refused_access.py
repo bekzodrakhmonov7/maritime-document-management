@@ -2,7 +2,8 @@
 
 The one exception-handling point for refusals. It writes *access refused*
 for every 403 (wrong role, no account, pending or deactivated account) and
-every `OutOfScope` 404, then answers as FastAPI normally would. A plain 404
+every `OutOfScope` 404 and every refused Session (`SessionRefused` 401,
+ADR-0006), then answers as FastAPI normally would. A plain 404
 (the id doesn't exist) writes nothing.
 
 The record is written on its own connection and in its own transaction,
@@ -18,6 +19,7 @@ from starlette.responses import Response
 
 from app import audit
 from app.audit import AuditAction, audit_context_for, request_audit_context
+from app.deps import SessionRefused
 from app.models.auth import UserPayload
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,7 @@ def install(app: FastAPI) -> None:
 
 
 async def _handle_http_exception(request: Request, exc: StarletteHTTPException) -> Response:
-    if isinstance(exc, OutOfScope) or exc.status_code == status.HTTP_403_FORBIDDEN:
+    if isinstance(exc, (OutOfScope, SessionRefused)) or exc.status_code == status.HTTP_403_FORBIDDEN:
         try:
             await _record_refusal(request, exc)
         except Exception:
@@ -53,6 +55,8 @@ async def _handle_http_exception(request: Request, exc: StarletteHTTPException) 
 def _reason(exc: StarletteHTTPException) -> str:
     if isinstance(exc, OutOfScope):
         return "out_of_scope"
+    if isinstance(exc, SessionRefused):
+        return exc.reason
     detail = exc.detail
     if isinstance(detail, dict) and "code" in detail:
         return str(detail["code"])
@@ -65,7 +69,10 @@ async def _record_refusal(request: Request, exc: StarletteHTTPException) -> None
     # Set by the sign-in dependency: the Account, or just the token's subject
     # when the token has no Account.
     account: UserPayload | None = getattr(request.state, "account", None)
-    if account is not None:
+    if isinstance(exc, SessionRefused):
+        # Never the Session's own claims: a forged one could name anyone.
+        ctx = request_audit_context(request, exc.account_id, None, None)
+    elif account is not None:
         ctx = audit_context_for(request, account)
     else:
         ctx = request_audit_context(request, getattr(request.state, "token_sub", None), None, None)

@@ -14,6 +14,16 @@ from app.models.auth import UserPayload
 security = HTTPBearer(auto_error=False)
 
 
+class SessionRefused(HTTPException):
+    """A Session refused with a 401, recorded as refused access (ADR-0006).
+    `account_id` is set only when the signature checked out."""
+
+    def __init__(self, reason: str, detail: object, *, account_id: UUID | None = None) -> None:
+        super().__init__(status.HTTP_401_UNAUTHORIZED, detail)
+        self.reason = reason
+        self.account_id = account_id
+
+
 @lru_cache(maxsize=1)
 def _jwks_client() -> PyJWKClient:
     base = settings.supabase_url.rstrip("/")
@@ -41,20 +51,14 @@ async def get_signed_in_user(
 
     parts = auth_header.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
-        )
+        raise SessionRefused("invalid_session", "Invalid authorization header format")
 
     token = parts[1]
 
     try:
         header = jwt.get_unverified_header(token)
     except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise SessionRefused("invalid_session", "Invalid token")
 
     alg = header.get("alg")
 
@@ -62,20 +66,14 @@ async def get_signed_in_user(
         try:
             signing_key = _jwks_client().get_signing_key_from_jwt(token)
         except jwt.InvalidTokenError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-            )
+            raise SessionRefused("invalid_session", "Invalid token")
         key = signing_key.key
         algorithms = ["ES256"]
     elif alg == "HS256":
         key = settings.supabase_jwt_secret
         algorithms = ["HS256"]
     else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise SessionRefused("invalid_session", "Invalid token")
 
     try:
         payload = jwt.decode(
@@ -90,18 +88,12 @@ async def get_signed_in_user(
             detail="Token has expired",
         )
     except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise SessionRefused("invalid_session", "Invalid token")
 
     try:
         sub = UUID(str(payload.get("sub")))
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise SessionRefused("invalid_session", "Invalid token")
 
     try:
         session_id = UUID(str(payload.get("session_id")))
