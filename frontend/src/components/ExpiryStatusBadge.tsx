@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, CircleSlash, Infinity as NoExpiry, XCircle, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, CheckCircle, CircleHelp, CircleSlash, Infinity as NoExpiry, XCircle, type LucideIcon } from 'lucide-react'
 import { cn } from '../lib/cn'
 import { EXPIRY_STATUS_LABELS, type ExpiryStatus } from '../types'
 
@@ -7,6 +7,7 @@ const STYLE: Record<ExpiryStatus, { icon: LucideIcon; className: string }> = {
   expiring_soon: { icon: AlertTriangle, className: 'text-status-expiring bg-status-expiring-bg/10' },
   expired: { icon: XCircle, className: 'text-status-expired bg-status-expired-bg/10' },
   no_expiry_date: { icon: NoExpiry, className: 'text-navy-300 bg-navy-800' },
+  expiry_not_stated: { icon: CircleHelp, className: 'text-status-expiring bg-status-expiring-bg/10' },
 }
 
 /** A document's Expiry Status, whether or not it is reviewed. `null` means it

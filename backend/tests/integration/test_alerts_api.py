@@ -265,7 +265,7 @@ async def test_a_renewal_with_a_new_expiry_restarts_the_steps_and_a_details_only
     ]
 
 
-async def test_inactive_seafarers_and_documents_without_expiry_are_not_watched(
+async def test_inactive_seafarers_and_expiry_not_stated_documents_are_not_watched(
     client, world, mailer, owner_db
 ):
     await owner_db.execute(
@@ -273,7 +273,7 @@ async def test_inactive_seafarers_and_documents_without_expiry_are_not_watched(
         world.boris,
     )
     await world.document(world.boris, 5)
-    await world.document(world.anna, None)
+    await world.document(world.anna, None)  # Passport expires: expiry not stated
     assert (await _ran(client, world))["raised"] == 0
     assert mailer.sent == []
 

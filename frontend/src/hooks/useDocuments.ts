@@ -46,7 +46,7 @@ function request(action: VersionAction) {
   }
   const form = new FormData()
   Object.entries(action.details).forEach(([key, value]) => {
-    if (value) form.append(key, value)
+    if (value) form.append(key, String(value))
   })
   form.append('file', action.file)
   return apiFetch<DocumentDetail>(

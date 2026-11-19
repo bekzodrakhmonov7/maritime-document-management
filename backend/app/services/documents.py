@@ -322,6 +322,7 @@ async def check_details(conn: asyncpg.Connection, document_type_id: int, details
         details["expiry_date"],
         expires=rules["expires"],
         max_validity_months=rules["max_validity_months"],
+        expiry_not_stated=details.get("expiry_not_stated", False),
     )
     if problem:
         raise Invalid(problem)

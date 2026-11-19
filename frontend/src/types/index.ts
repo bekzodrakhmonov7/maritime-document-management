@@ -1,11 +1,12 @@
 /** Where a document's Current Version stands against its expiry date (S7). */
-export type ExpiryStatus = 'unexpired' | 'expiring_soon' | 'expired' | 'no_expiry_date'
+export type ExpiryStatus = 'unexpired' | 'expiring_soon' | 'expired' | 'no_expiry_date' | 'expiry_not_stated'
 
 export const EXPIRY_STATUS_LABELS: Record<ExpiryStatus, string> = {
   unexpired: 'Unexpired',
   expiring_soon: 'Expiring soon',
   expired: 'Expired',
   no_expiry_date: 'No expiry date',
+  expiry_not_stated: 'Expiry not stated — check manually',
 }
 
 export type AccountStatus = 'pending' | 'active' | 'deactivated'
@@ -290,6 +291,8 @@ export interface VersionDetails {
   /** ISO dates (YYYY-MM-DD); no expiry date for a type that doesn't expire. */
   issue_date: string
   expiry_date: string | null
+  /** The form's tick that lets an expiring type take no date; checked, never stored (ADR-0006). */
+  expiry_not_stated?: boolean
 }
 
 /** A Version's latest Review decides (S8). The Current Version is never rejected. */

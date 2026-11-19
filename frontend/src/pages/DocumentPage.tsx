@@ -11,7 +11,7 @@ import { effectiveExpiryOf } from '../lib/effectiveExpiry'
 import { VersionDialog, type VersionDialogState } from '../components/DocumentDialogs'
 import { ReviewDialog, VerificationDialog } from '../components/ReviewDialogs'
 import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
-import type { Version } from '../types'
+import { EXPIRY_STATUS_LABELS, type Version } from '../types'
 
 type CheckDialog = { kind: 'review' | 'verify'; version: Version }
 
@@ -132,7 +132,10 @@ export function DocumentPage() {
                     </div>
                     <div>
                       <dt className="text-xs text-navy-400">Expires</dt>
-                      <dd className="text-navy-100">{v.expiry_date ?? 'No expiry date'}</dd>
+                      <dd className="text-navy-100">
+                        {v.expiry_date ??
+                          EXPIRY_STATUS_LABELS[document.expires ? 'expiry_not_stated' : 'no_expiry_date']}
+                      </dd>
                     </div>
                   </dl>
                   {v.file_from_version_number && (
