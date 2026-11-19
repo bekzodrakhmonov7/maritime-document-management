@@ -153,12 +153,18 @@ export interface SeafarerRecord extends Seafarer {
 }
 
 /** How one required document stands against an Assignment's dates (T3). */
-export type CoverageClass = 'missing' | 'runs_out_before_start' | 'runs_out_during' | 'covers_all'
+export type CoverageClass =
+  | 'missing'
+  | 'runs_out_before_start'
+  | 'runs_out_during'
+  | 'expiry_not_stated'
+  | 'covers_all'
 
 export const COVERAGE_LABELS: Record<CoverageClass, string> = {
   missing: 'Missing',
   runs_out_before_start: 'Runs out before start',
   runs_out_during: 'Runs out during',
+  expiry_not_stated: 'Expiry not stated',
   covers_all: 'Covers all',
 }
 
@@ -183,7 +189,7 @@ export interface ReadinessEntry {
   verified: boolean
 }
 
-export type ReadinessBucket = 'before_joining' | 'renewable_at_sea' | 'not_reviewed' | 'covers_all'
+export type ReadinessBucket = 'before_joining' | 'renewable_at_sea' | 'expiry_not_stated' | 'not_reviewed' | 'covers_all'
 
 /** GET /api/assignments/{id}/readiness (T4 variant B). Advice only: it approves
  * and blocks nothing, and gives no overall verdict. */

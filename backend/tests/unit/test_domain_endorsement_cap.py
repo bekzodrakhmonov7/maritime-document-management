@@ -40,13 +40,13 @@ def _cert(expiry: date | None) -> dict:
 def test_the_certificate_caps_an_endorsement_that_outlives_it():
     cap = OWN - 30 * ONE_DAY
     assert effective_expiry(_endorsement(OWN), _cert(cap)) == EffectiveExpiry(
-        expiry=cap, own_expiry=OWN, capped_by="Certificate of Competency"
+        expiry=cap, own_expiry=OWN, capped_by="Certificate of Competency", expires=True
     )
 
 
 def test_an_endorsement_that_runs_out_first_keeps_its_own_date():
     assert effective_expiry(_endorsement(OWN), _cert(OWN + ONE_DAY)) == EffectiveExpiry(
-        expiry=OWN, own_expiry=OWN
+        expiry=OWN, own_expiry=OWN, expires=True
     )
 
 
@@ -54,10 +54,19 @@ def test_the_same_date_is_not_a_cap():
     assert effective_expiry(_endorsement(OWN), _cert(OWN)).capped_by is None
 
 
-def test_an_endorsement_with_no_own_expiry_takes_the_certificates_date():
-    assert effective_expiry(_endorsement(None), _cert(OWN)) == EffectiveExpiry(
-        expiry=OWN, own_expiry=None, capped_by="Certificate of Competency"
-    )
+def test_an_endorsement_with_no_own_expiry_is_capped_by_the_certificate_and_not_stated():
+    effective = effective_expiry(_endorsement(None), _cert(OWN))
+    assert effective.expiry == OWN
+    assert effective.capped_by == "Certificate of Competency"
+    assert effective.own_not_stated is True
+    assert effective.unstated_certificate is None
+
+
+def test_a_certificate_with_no_date_is_not_stated_and_named():
+    effective = effective_expiry(_endorsement(OWN), _cert(None))
+    assert effective.expiry == OWN
+    assert effective.own_not_stated is False
+    assert effective.unstated_certificate == "Certificate of Competency"
 
 
 def test_no_certificate_counts_as_expired_with_a_certificate_missing_note():
@@ -126,6 +135,24 @@ D = date(2027, 6, 30)
 )
 def test_coverage_uses_the_effective_expiry(cap, expected):
     endorsement = _endorsement(D + 100 * ONE_DAY)
+    effective = effective_expiry(endorsement, _cert(cap))
+    assert coverage_class(S, D, endorsement["current_version"], effective) == expected
+
+
+# Bad news wins: a known date that runs out first beats "not stated" (ADR-0006).
+@pytest.mark.parametrize(
+    "own, cap, expected",
+    [
+        (None, D + ONE_DAY, "expiry_not_stated"),
+        (None, D, "runs_out_during"),
+        (None, None, "expiry_not_stated"),
+        (D + ONE_DAY, None, "expiry_not_stated"),
+        (S - ONE_DAY, None, "runs_out_before_start"),
+        (S, None, "runs_out_during"),
+    ],
+)
+def test_an_endorsement_with_a_date_not_stated(own, cap, expected):
+    endorsement = _endorsement(own)
     effective = effective_expiry(endorsement, _cert(cap))
     assert coverage_class(S, D, endorsement["current_version"], effective) == expected
 
@@ -215,3 +242,26 @@ def test_readiness_keeps_its_own_advice_when_the_endorsement_runs_out_first():
     assert _only_entry(view, "before_joining")["suggestion"] == (
         f"Renew before joining (runs out {own.isoformat()})"
     )
+
+
+def test_readiness_names_the_certificate_with_no_stated_expiry():
+    own = D + 100 * ONE_DAY
+    view = readiness(ASSIGNMENT, [_required(effective_expiry(_endorsement(own), _cert(None)), own)], TODAY)
+    entry = _only_entry(view, "expiry_not_stated")
+    assert entry["suggestion"] == "Certificate of Competency has no stated expiry, check manually"
+
+
+def test_readiness_an_endorsement_with_no_own_date_shows_its_issue_date():
+    endorsement = _endorsement(None)
+    endorsement["current_version"]["issue_date"] = date(2025, 4, 2)
+    required = RequiredDocument(
+        document_type_id=9,
+        name="Flag Endorsement",
+        renewable_at_sea=False,
+        document_id=7,
+        current_version=endorsement["current_version"],
+        review_state="accepted",
+        effective=effective_expiry(endorsement, _cert(D + ONE_DAY)),
+    )
+    entry = _only_entry(readiness(ASSIGNMENT, [required], TODAY), "expiry_not_stated")
+    assert entry["suggestion"] == "Issued 2025-04-02: expiry not stated, check manually"

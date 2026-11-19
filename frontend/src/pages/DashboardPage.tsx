@@ -168,6 +168,7 @@ function StartingSoonRow({ entry, onAdd }: { entry: StartingSoonEntry; onAdd: (t
         <div className="flex flex-wrap gap-4">
           <Counter label="Before joining" value={entry.counters.before_joining} />
           <Counter label="Can be renewed at sea" value={entry.counters.renewable_at_sea} />
+          <Counter label="Expiry not stated" value={entry.counters.expiry_not_stated} />
           <Counter label="Not reviewed" value={entry.counters.not_reviewed} />
         </div>
       </div>
