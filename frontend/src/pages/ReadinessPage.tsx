@@ -185,7 +185,7 @@ export function ReadinessPage() {
           <dl className="grid gap-3 sm:grid-cols-4">
             <Counter label={view.before_joining_label} value={view.counters.before_joining} />
             <Counter label="Can be renewed at sea" value={view.counters.renewable_at_sea} />
-            <Counter label="Expiry not stated" value={view.counters.expiry_not_stated} />
+            <Counter label={EXPIRY_STATUS_LABELS.expiry_not_stated} value={view.counters.expiry_not_stated} />
             <Counter label="Not reviewed" value={view.counters.not_reviewed} />
           </dl>
 

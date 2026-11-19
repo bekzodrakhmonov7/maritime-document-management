@@ -46,7 +46,7 @@ COVERAGE_LABELS = {
     "missing": "Missing",
     "runs_out_before_start": "Runs out before start",
     "runs_out_during": "Runs out during",
-    "expiry_not_stated": "Expiry not stated",
+    "expiry_not_stated": EXPIRY_NOT_STATED,
     "covers_all": "Covers all",
 }
 STATE_LABELS = {"upcoming": "upcoming", "under_way": "under way"}

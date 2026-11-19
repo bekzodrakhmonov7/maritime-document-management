@@ -164,7 +164,7 @@ export const COVERAGE_LABELS: Record<CoverageClass, string> = {
   missing: 'Missing',
   runs_out_before_start: 'Runs out before start',
   runs_out_during: 'Runs out during',
-  expiry_not_stated: 'Expiry not stated',
+  expiry_not_stated: EXPIRY_STATUS_LABELS.expiry_not_stated,
   covers_all: 'Covers all',
 }
 
