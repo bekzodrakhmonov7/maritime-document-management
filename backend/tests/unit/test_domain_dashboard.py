@@ -83,10 +83,12 @@ def _names(board, queue) -> list[str]:
         ("expiring_soon", "accepted", ("expiring_soon",)),
         ("unexpired", "accepted", ("in_order",)),
         ("no_expiry_date", "accepted", ("in_order",)),
+        ("expiry_not_stated", "accepted", ("expiry_not_stated",)),
         # Waiting for review overlaps the expiry queues.
         ("expired", "not_reviewed", ("expired", "waiting_for_review")),
         ("expiring_soon", "not_reviewed", ("expiring_soon", "waiting_for_review")),
         ("unexpired", "not_reviewed", ("in_order", "waiting_for_review")),
+        ("expiry_not_stated", "not_reviewed", ("expiry_not_stated", "waiting_for_review")),
     ],
 )
 def test_each_document_lands_in_its_queues(status, review, expected):
@@ -107,9 +109,15 @@ def test_action_hints():
     board = _board(lines=[
         _line(ANNA, PASSPORT, status=None),
         _line(ANNA, MEDICAL, status="unexpired"),
+        _line(IVAN, MEDICAL, status="expiry_not_stated"),
     ])
     assert board["queues"]["missing"][0]["entries"][0]["action"] == "upload"
     assert board["queues"]["in_order"][0]["entries"][0]["action"] == "open"
+    assert board["queues"]["expiry_not_stated"][0]["entries"][0]["action"] == "open"
+    assert list(board["counts"]) == [
+        "missing", "expired", "expiring_soon", "expiry_not_stated",
+        "waiting_for_review", "starting_soon", "in_order",
+    ]
 
 
 def test_entries_are_grouped_by_seafarer_by_name():
@@ -229,18 +237,25 @@ def test_fleet_totals_per_expiry_status_plus_missing_without_names():
         _line(ANNA, MEDICAL, status=None),
         _line(IVAN, PASSPORT, status="unexpired"),
         _line(IVAN, MEDICAL, status="no_expiry_date"),
+        _line(IVAN, PASSPORT, status="expiry_not_stated"),
         _line(OLGA, PASSPORT, status="expired"),  # Inactive: left out.
     ]
     totals = fleet_totals([ANNA, IVAN, OLGA], lines, "vessel")
     assert totals["totals"] == {
-        "missing": 1, "expired": 1, "expiring_soon": 0, "unexpired": 1, "no_expiry_date": 1,
+        "missing": 1, "expired": 1, "expiring_soon": 0, "unexpired": 1,
+        "expiry_not_stated": 1, "no_expiry_date": 1,
     }
+    assert list(totals["totals"]) == [
+        "missing", "expired", "expiring_soon", "unexpired", "expiry_not_stated", "no_expiry_date",
+    ]
     assert totals["breakdown"] == "vessel"
     assert totals["rows"] == [
         {"id": ALPHA, "name": "Alpha",
-         "counts": {"missing": 1, "expired": 1, "expiring_soon": 0, "unexpired": 0, "no_expiry_date": 0}},
+         "counts": {"missing": 1, "expired": 1, "expiring_soon": 0, "unexpired": 0,
+                    "expiry_not_stated": 0, "no_expiry_date": 0}},
         {"id": None, "name": "Ashore / Unassigned",
-         "counts": {"missing": 0, "expired": 0, "expiring_soon": 0, "unexpired": 1, "no_expiry_date": 1}},
+         "counts": {"missing": 0, "expired": 0, "expiring_soon": 0, "unexpired": 1,
+                    "expiry_not_stated": 1, "no_expiry_date": 1}},
     ]
     assert "Petrova" not in repr(totals) and "Anna" not in repr(totals)
 
@@ -255,6 +270,20 @@ def test_fleet_totals_by_position_and_document_type():
     assert [(r["id"], r["counts"]["expired"], r["counts"]["missing"]) for r in by_type["rows"]] == [
         (PASSPORT, 1, 1),
     ]
+
+
+def test_every_breakdown_counts_expiry_not_stated_and_sums_match_the_required_documents():
+    lines = [
+        _line(ANNA, PASSPORT, status="expiry_not_stated"),
+        _line(ANNA, MEDICAL, status=None),
+        _line(IVAN, PASSPORT, status="expiry_not_stated"),
+        _line(IVAN, MEDICAL, status="unexpired"),
+    ]
+    for breakdown in ("vessel", "position", "document_type"):
+        totals = fleet_totals([ANNA, IVAN], lines, breakdown)
+        assert totals["totals"]["expiry_not_stated"] == 2
+        assert sum(r["counts"]["expiry_not_stated"] for r in totals["rows"]) == 2
+        assert sum(sum(r["counts"].values()) for r in totals["rows"]) == 4
 
 
 def test_small_counts_are_not_suppressed():
