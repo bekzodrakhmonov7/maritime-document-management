@@ -71,7 +71,7 @@ async def _record_refusal(request: Request, exc: StarletteHTTPException) -> None
     account: UserPayload | None = getattr(request.state, "account", None)
     if isinstance(exc, SessionRefused):
         # Never the Session's own claims: a forged one could name anyone.
-        ctx = request_audit_context(request, exc.account_id, None, None)
+        ctx = request_audit_context(request, exc.account_id, exc.email, exc.role)
     elif account is not None:
         ctx = audit_context_for(request, account)
     else:
