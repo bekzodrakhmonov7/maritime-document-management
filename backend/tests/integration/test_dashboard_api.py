@@ -170,7 +170,9 @@ async def test_starting_soon_lists_upcoming_assignments_within_the_horizon(clien
     [entry] = board["queues"]["starting_soon"]
     assert entry["assignment_id"] == soon
     assert entry["vessel_name"] == "Alpha"
-    assert entry["counters"] == {"before_joining": 2, "renewable_at_sea": 0, "not_reviewed": 0}
+    assert entry["counters"] == {
+        "before_joining": 2, "renewable_at_sea": 0, "expiry_not_stated": 0, "not_reviewed": 0
+    }
     assert board["counts"]["starting_soon"] == 1
 
 

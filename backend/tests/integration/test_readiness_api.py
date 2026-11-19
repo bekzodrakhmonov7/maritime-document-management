@@ -182,7 +182,25 @@ async def test_the_readiness_view_of_an_upcoming_assignment(client, world, owner
     [passport] = [e for e in view["buckets"]["before_joining"] if e["name"] == "Passport"]
     assert passport["coverage"] == "runs_out_before_start"
     assert passport["suggestion"] == f"Renew before joining (runs out {day(5)})"
-    assert view["counters"] == {"before_joining": 2, "renewable_at_sea": 1, "not_reviewed": 1}
+    assert view["counters"] == {
+        "before_joining": 2, "renewable_at_sea": 1, "expiry_not_stated": 0, "not_reviewed": 1
+    }
+
+
+async def test_a_document_with_no_stated_expiry_is_checked_by_hand(client, world):
+    planned = await _plan(client, world, start=10, end=100)
+    await _uploaded(
+        client, world["officer_a"], world["anna"], world["passport"],
+        issue_date=day(-400), expiry_date=None, expiry_not_stated="true",
+    )
+    view = (await _readiness(client, world["officer_a"], planned["id"])).json()
+    assert _names(view, "expiry_not_stated") == ["Passport"]
+    assert "Passport" in _names(view, "not_reviewed")
+    assert _names(view, "covers_all") == []
+    [passport] = view["buckets"]["expiry_not_stated"]
+    assert passport["coverage"] == "expiry_not_stated"
+    assert passport["suggestion"] == f"Issued {day(-400)}: expiry not stated, check manually"
+    assert view["counters"]["expiry_not_stated"] == 1
 
 
 async def test_an_under_way_assignment_gets_the_under_way_advice(client, world, owner_db):

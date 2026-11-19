@@ -11,12 +11,13 @@ import { EndorsementCapNote } from '../components/EndorsementCapNote'
 import { ReportDownloads } from '../components/ReportDownloads'
 import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
 import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
-import { COVERAGE_LABELS, type CoverageClass, type ReadinessEntry } from '../types'
+import { COVERAGE_LABELS, EXPIRY_STATUS_LABELS, type CoverageClass, type ReadinessEntry } from '../types'
 
 const COVERAGE_STYLE: Record<CoverageClass, string> = {
   missing: 'bg-navy-800 text-navy-300',
   runs_out_before_start: 'bg-status-expired-bg/10 text-status-expired',
   runs_out_during: 'bg-status-expiring-bg/10 text-status-expiring',
+  expiry_not_stated: 'bg-status-expiring-bg/10 text-status-expiring',
   covers_all: 'bg-status-valid-bg/10 text-status-valid',
 }
 
@@ -181,9 +182,10 @@ export function ReadinessPage() {
             nothing; whether the seafarer may serve is decided by crewing staff.
           </p>
 
-          <dl className="grid gap-3 sm:grid-cols-3">
+          <dl className="grid gap-3 sm:grid-cols-4">
             <Counter label={view.before_joining_label} value={view.counters.before_joining} />
             <Counter label="Can be renewed at sea" value={view.counters.renewable_at_sea} />
+            <Counter label="Expiry not stated" value={view.counters.expiry_not_stated} />
             <Counter label="Not reviewed" value={view.counters.not_reviewed} />
           </dl>
 
@@ -197,6 +199,11 @@ export function ReadinessPage() {
               title="Can be renewed at sea"
               entries={view.buckets.renewable_at_sea}
               empty="Nothing to renew at sea."
+            />
+            <Bucket
+              title={EXPIRY_STATUS_LABELS.expiry_not_stated}
+              entries={view.buckets.expiry_not_stated}
+              empty="Every expiry is stated."
             />
             <Bucket
               title="Uploaded, not yet reviewed"

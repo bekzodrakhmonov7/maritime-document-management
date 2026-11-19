@@ -40,11 +40,13 @@ CSV_COLUMNS = (
     "document_type", "bucket", "coverage", "expiry", "reviewed", "verified",
     "suggestion", "generated_at",
 )
-COUNTERS = ("before_joining", "renewable_at_sea", "not_reviewed")
+COUNTERS = ("before_joining", "renewable_at_sea", "expiry_not_stated", "not_reviewed")
+EXPIRY_NOT_STATED = "Expiry not stated — check manually"
 COVERAGE_LABELS = {
     "missing": "Missing",
     "runs_out_before_start": "Runs out before start",
     "runs_out_during": "Runs out during",
+    "expiry_not_stated": "Expiry not stated",
     "covers_all": "Covers all",
 }
 STATE_LABELS = {"upcoming": "upcoming", "under_way": "under way"}
@@ -70,6 +72,7 @@ class ReportSection:
         return {
             "before_joining": self.view["before_joining_label"],
             "renewable_at_sea": "Can be renewed at sea",
+            "expiry_not_stated": EXPIRY_NOT_STATED,
             "not_reviewed": "Not reviewed",
             "covers_all": "Covers all",
         }[bucket]
@@ -101,7 +104,7 @@ class StatusReport:
 
     @property
     def totals(self) -> dict[str, int]:
-        """The three readiness counters summed over the sections."""
+        """The readiness counters summed over the sections."""
         return {c: sum(s.view["counters"][c] for s in self.sections) for c in COUNTERS}
 
     @property
@@ -256,12 +259,14 @@ class _Pdf(FPDF):
         self.counters([
             (view["before_joining_label"], c["before_joining"]),
             ("Can be renewed at sea", c["renewable_at_sea"]),
+            ("Expiry not stated", c["expiry_not_stated"]),
             ("Not reviewed", c["not_reviewed"]),
         ])
         under_way = view["state"] == "under_way"
         titles = {
             "before_joining": "Act now: sort out as soon as possible" if under_way else "Before joining",
             "renewable_at_sea": "Can be renewed at sea",
+            "expiry_not_stated": EXPIRY_NOT_STATED,
             "not_reviewed": "Uploaded, not yet reviewed",
             "covers_all": "Covers the whole assignment",
         }
@@ -316,6 +321,7 @@ def to_pdf(report: StatusReport) -> bytes:
         pdf.counters([
             ("Before joining / Act now", t["before_joining"]),
             ("Can be renewed at sea", t["renewable_at_sea"]),
+            ("Expiry not stated", t["expiry_not_stated"]),
             ("Not reviewed", t["not_reviewed"]),
         ])
         if not report.sections:

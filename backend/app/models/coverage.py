@@ -52,12 +52,15 @@ class ReadinessAssignment(AssignmentRead):
 class ReadinessCounters(BaseModel):
     before_joining: int
     renewable_at_sea: int
+    expiry_not_stated: int
     not_reviewed: int
 
 
 class ReadinessBuckets(BaseModel):
     before_joining: list[ReadinessEntry]
     renewable_at_sea: list[ReadinessEntry]
+    # No stated expiry on an expiring type: a person checks it (ADR-0006).
+    expiry_not_stated: list[ReadinessEntry]
     # Can overlap the first two: awaiting review still counts toward coverage.
     not_reviewed: list[ReadinessEntry]
     covers_all: list[ReadinessEntry]

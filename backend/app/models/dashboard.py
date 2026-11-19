@@ -44,6 +44,7 @@ class SeafarerGroup(BaseModel):
 class ReadinessCounters(BaseModel):
     before_joining: int
     renewable_at_sea: int
+    expiry_not_stated: int
     not_reviewed: int
 
 
