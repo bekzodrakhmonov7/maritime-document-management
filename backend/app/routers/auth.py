@@ -30,7 +30,10 @@ common list and not known to Pwned Passwords (SR-02, `app.password_policy`,
 is asked. Signing in accepts any length, so older Accounts still get in.
 
 Wrong passwords, wrong codes and an unreachable Supabase Auth are recorded as
-*Login failed*.
+*Login failed*. Ten wrong passwords or authenticator codes for one e-mail or
+from one address within 15 minutes block both steps for that e-mail or
+address for 15 minutes: 429 with `Retry-After`, recorded as `login_blocked`,
+and Supabase Auth is not asked (SR-18, `app.services.login_block`).
 """
 
 from typing import Annotated, Any
@@ -47,7 +50,7 @@ from app.deps import get_db
 from app import password_policy
 from app.models.auth import UserPayload
 from app.pwned_passwords import PwnedPasswords, get_pwned_passwords
-from app.services import sign_in
+from app.services import login_block, sign_in
 from app.supabase_auth import (
     AuthUnavailable,
     SignInRefused,
@@ -92,6 +95,9 @@ WEAK_PASSWORD = "weak_password"
 TOTP_REFUSED = "mfa_verification_failed"
 # Recorded and answered for a wrong authenticator code.
 TOTP_INVALID = "totp_invalid"
+# Too many failed sign-ins for the e-mail or from the address (SR-18).
+LOGIN_BLOCKED = "login_blocked"
+BLOCKED_MESSAGE = "Too many failed sign-in attempts. Wait 15 minutes, then try again."
 
 
 class LoginRequest(BaseModel):
@@ -139,6 +145,7 @@ async def login(
 ) -> dict[str, str]:
     """Check the password and answer with a challenge for the TOTP step:
     the code of the enrolled authenticator, or an enrolment first."""
+    await _refuse_if_blocked(db, request, body.email)
     ip = client_ip(request)
     try:
         session = await supabase_auth.password_grant(body.email, body.password, ip)
@@ -328,6 +335,7 @@ async def verify(
     """Check the code against the challenge. The e-mailed code of a Register
     leads on to the TOTP step; the right TOTP code returns Supabase's aal2
     session for `setSession`."""
+    await _refuse_if_blocked(db, request, body.email)
     challenge = await sign_in.open_challenge(db, body.challenge, body.email)
     if challenge is None:
         await _record_failure(db, request, body.email, "challenge_expired")
@@ -601,6 +609,21 @@ async def _record_failure(
             reason=error_code,
             outcome="refused",
         )
+        await login_block.count_failure(db, email, ctx.ip, error_code)
+
+
+async def _refuse_if_blocked(db: asyncpg.Connection, request: Request, email: str) -> None:
+    """429 while the e-mail or the address is blocked (SR-18). The same
+    answer for known and unknown e-mails; Supabase Auth is not asked."""
+    retry_after = await login_block.retry_after(db, email, client_ip(request))
+    if retry_after is None:
+        return
+    await _record_failure(db, request, email, LOGIN_BLOCKED)
+    raise HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        {"code": LOGIN_BLOCKED, "message": BLOCKED_MESSAGE},
+        headers={"Retry-After": str(max(retry_after, 1))},
+    )
 
 
 # --- logout ---------------------------------------------------------------------

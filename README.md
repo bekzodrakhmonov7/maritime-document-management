@@ -79,6 +79,20 @@ removed when the challenge is used or ended, an owner `pg_cron` job
 (`sign-in-challenge-cleanup`, every 5 minutes) deletes expired challenges, and
 the token is never logged or returned.
 
+**Blocked after failed sign-ins (SR-18):** 10 failed sign-ins (wrong
+password, unknown e-mail or wrong authenticator code, together) for one e-mail
+(any case) or from one address within 15 minutes block both steps (`/api/auth/login`,
+`/api/auth/verify`) for that e-mail or address for 15 minutes: 429
+`login_blocked` with `Retry-After`, the same answer for known and unknown
+e-mails, Supabase Auth not asked, recorded as *login failed* with reason
+`login_blocked`. Blocked attempts and Supabase Auth being unavailable are not
+counted, so they never extend a block. Blocks live in `public.login_block`;
+an owner `pg_cron` job (`login-block-cleanup`, hourly) removes those that
+ended over a day ago. To lift one locally:
+`DELETE FROM public.login_block WHERE key = 'someone@example.com';`. The
+address is the visitor's as the backend sees it (ADR-0006). Uploads are not
+rate-limited.
+
 **Lost authenticator:** an administrator presses **Reset authenticator** on the
 **Accounts** page (`POST /api/accounts/{id}/second-factor/reset`, recorded as
 *second factor reset*). The Account is signed out and enrols a new app at its

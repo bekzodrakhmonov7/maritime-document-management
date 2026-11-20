@@ -81,16 +81,31 @@ export function secondsUntilResend(sentAt: number | null, now: number): number {
 /** Supabase Auth's codes for an e-mailed code that doesn't match or ran out. */
 const WRONG_OR_EXPIRED = new Set(['otp_expired', 'otp_invalid', 'invalid_credentials'])
 
+type Refusal = { code?: string | null; status?: number; message: string }
+
+/** SR-18: 10 failed sign-ins for the e-mail or from the address within
+ * 15 minutes block both steps for 15 minutes (429 login_blocked). */
+export const LOGIN_BLOCKED = 'login_blocked'
+export const LOGIN_BLOCKED_MESSAGE =
+  'Too many failed sign-in attempts. Wait 15 minutes, then try again.'
+const TOO_MANY_MESSAGE = 'Too many attempts. Wait a minute, then try again.'
+
+/** What the person sees when the API refused their e-mail and password. */
+export function signInErrorMessage(err: Refusal): string {
+  if (err.code === LOGIN_BLOCKED) return LOGIN_BLOCKED_MESSAGE
+  if (err.status === 429) return TOO_MANY_MESSAGE
+  return err.message
+}
+
 /** What the person sees when the API refused their code. */
-export function codeErrorMessage(err: { code?: string | null; status?: number; message: string }): string {
+export function codeErrorMessage(err: Refusal): string {
+  if (err.code === LOGIN_BLOCKED) return LOGIN_BLOCKED_MESSAGE
   if (err.code === 'totp_invalid') {
     return 'That code is wrong. Enter the code your authenticator app shows now.'
   }
   if (err.code && WRONG_OR_EXPIRED.has(err.code)) {
     return 'That code is wrong or has expired. Check it, or send a new code.'
   }
-  if (err.status === 429) {
-    return 'Too many attempts. Wait a minute, then try again.'
-  }
+  if (err.status === 429) return TOO_MANY_MESSAGE
   return err.message
 }

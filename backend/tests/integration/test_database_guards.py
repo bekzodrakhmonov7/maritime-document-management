@@ -194,6 +194,7 @@ async def test_app_backend_cannot_delete_accounts_or_settings(make_account):
         "daily_check_run",
         "sign_in_challenge",
         "verified_session",
+        "login_block",
     ],
 )
 async def test_every_table_denies_anon_and_authenticated(owner_db, make_account, role, table):

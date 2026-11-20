@@ -21,6 +21,7 @@ from uuid import UUID, uuid4
 import httpx
 import jwt
 import pytest
+from httpx import ASGITransport, AsyncClient
 from app.config import settings as app_settings
 from app.pwned_passwords import PwnedPasswords, get_pwned_passwords
 from app.supabase_auth import AuthUnavailable, SignInRefused, get_supabase_auth
@@ -244,6 +245,22 @@ async def fake_auth(app, owner_db):
         await owner_db.execute("DELETE FROM auth.users WHERE id = ANY($1::uuid[])", created)
 
 
+def _unique_ip() -> str:
+    n = uuid4().int
+    return f"198.{18 + n % 2}.{(n >> 8) % 256}.{(n >> 16) % 254 + 1}"
+
+
+@pytest.fixture
+async def client(app):
+    """The app over HTTP from an address of its own: failed sign-ins are
+    also counted per address (SR-18), so tests must not share one."""
+    ip = _unique_ip()
+    transport = ASGITransport(app=app, client=(ip, 123))
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        c.ip = ip
+        yield c
+
+
 async def _records(owner_db, action: str, email: str) -> list[dict]:
     rows = await owner_db.fetch(
         "SELECT * FROM public.audit_log WHERE action = $1 AND actor_email = $2 ORDER BY id",
@@ -397,7 +414,7 @@ async def test_a_wrong_password_and_an_unknown_email_get_the_same_answer(
     assert rec["actor_id"] == user_id
     assert rec["reason"] == "invalid_credentials"
     assert rec["outcome"] == "refused"
-    assert str(rec["ip"]) == "127.0.0.1"
+    assert str(rec["ip"]) == client.ip
     [rec] = await _records(owner_db, "login_failed", unknown)
     assert rec["actor_id"] is None
 
@@ -451,7 +468,7 @@ async def test_register_creates_the_account_with_its_full_name_and_password(
     assert set(res.json()) == {"challenge", "step", "message"}
     assert res.json()["step"] == "email"
     assert fake_auth.called("sign_up") == [
-        ("sign_up", email, PASSWORD, "Ana Kovač", "127.0.0.1")
+        ("sign_up", email, PASSWORD, "Ana Kovač", client.ip)
     ]
     assert fake_auth.codes[email] == CODE
 
