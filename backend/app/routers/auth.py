@@ -42,7 +42,7 @@ from pydantic import BaseModel, StringConstraints
 
 from app import audit
 from app.audit import AuditAction, audit_context_for, client_ip, request_audit_context
-from app.deps import get_account
+from app.deps import SessionRefused, account_refused, get_account
 from app.deps import get_db
 from app import password_policy
 from app.models.auth import UserPayload
@@ -603,7 +603,71 @@ async def _record_failure(
         )
 
 
-# --- logout ---------------------------------------------------------------------
+# --- refresh and logout: the browser never calls Supabase Auth (SR-01) -----------
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+
+
+@router.post("/refresh")
+async def refresh(
+    body: RefreshRequest,
+    request: Request,
+    db: asyncpg.Connection = Depends(get_db),
+    supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
+) -> dict[str, Any]:
+    """Renew the session with its refresh token. The new session is returned
+    only while it is a verified aal2 session of an Account that is not
+    switched off; otherwise 401 (403 when switched off) and *access refused*."""
+    ip = client_ip(request)
+    try:
+        session = await supabase_auth.refresh(body.refresh_token, ip)
+    except SignInRefused:
+        # Unknown, used or revoked: nothing names an Account.
+        raise SessionRefused("invalid_session", _sign_in_again("invalid_session"))
+    except AuthUnavailable:
+        raise _unavailable()
+
+    claims = sign_in.claims(session)
+    session_id, user_id = UUID(str(claims["session_id"])), UUID(str(claims["sub"]))
+    row = await db.fetchrow(
+        """
+        SELECT u.email, u.role, u.status,
+               EXISTS (SELECT 1 FROM public.verified_session AS v
+                        WHERE v.session_id = $2 AND v.user_id = u.id) AS verified
+          FROM public.users AS u
+         WHERE u.id = $1
+        """,
+        user_id, session_id,
+    )
+    reason = (
+        "invalid_session" if row is None
+        else "second_factor_missing" if claims.get("aal") != AAL2
+        else "session_not_verified" if not row["verified"]
+        else None
+    )
+    if reason is not None:
+        # Of no use to anyone: end it at Supabase Auth as well.
+        await _sign_out_quietly(supabase_auth, session, ip)
+        raise SessionRefused(
+            reason, _sign_in_again(reason),
+            account_id=user_id if row else None,
+            email=row["email"] if row else None,
+            role=row["role"] if row else None,
+        )
+    if row["status"] == "deactivated":
+        await _sign_out_quietly(supabase_auth, session, ip)
+        request.state.account = UserPayload(
+            sub=user_id, email=row["email"],
+            status=row["status"], role=row["role"],
+        )
+        raise account_refused("account_deactivated", "Your account has been switched off.")
+    return session
+
+
+def _sign_in_again(code: str) -> dict[str, str]:
+    return {"code": code, "message": "Sign in again with your password and authenticator code."}
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -611,13 +675,16 @@ async def logout(
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     user: UserPayload = Depends(get_account),
+    supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
 ) -> Response:
-    """Record *logout* and stop accepting the session. The frontend ends the
-    Supabase session itself."""
+    """Record *logout*, stop accepting the session and end it at Supabase
+    Auth (this session only, so its refresh token stops working)."""
     async with db.transaction():
         await sign_in.end_session(db, request.state.session_id)
         await audit.record(
             db, audit_context_for(request, user), AuditAction.LOGOUT,
             target_type="account", target_id=user.sub,
         )
+    token = request.headers["authorization"].split()[1]
+    await _sign_out_quietly(supabase_auth, {"access_token": token}, client_ip(request))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

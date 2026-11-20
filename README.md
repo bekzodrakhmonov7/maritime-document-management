@@ -142,11 +142,18 @@ Every sign-in step goes through the backend's sign-in proxy
 (`POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/code`,
 `POST /api/auth/verify`) so failed attempts are recorded, including wrong
 passwords, wrong authenticator codes (`totp_invalid`) and wrong or expired
-e-mailed codes; the frontend then calls `setSession`. Successful sign-ins are
-recorded by the proxy once the authenticator code is right, sign-outs by
-`POST /api/auth/logout`, and every refused request (401 for a refused
-session, 403, or a 404 on a record outside the caller's Scope) by one
-exception handler.
+e-mailed codes. Successful sign-ins are recorded by the proxy once the
+authenticator code is right, sign-outs by `POST /api/auth/logout`, and every
+refused request (401 for a refused session, 403, or a 404 on a record outside
+the caller's Scope) by one exception handler.
+
+The web client never calls Supabase Auth itself (SR-01) and has no Supabase
+client, URL or key. It keeps the session the proxy returns in `localStorage`
+(key `mdm.session`), renews it through `POST /api/auth/refresh` shortly before
+it expires and after a 401, and `POST /api/auth/logout` ends it at Supabase
+Auth too. The refresh answers a new session only while it is a verified `aal2`
+session of an Account that is not switched off; otherwise 401 (403 when
+switched off) and an *access refused* record.
 
 Stated limits:
 
@@ -219,8 +226,6 @@ Frontend variables in `frontend/.env`:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `VITE_SUPABASE_URL` | Supabase local API URL | `http://127.0.0.1:54321` |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key | `eyJhbG...` |
 | `VITE_API_BASE` | Backend API base URL. Unset means `http://localhost:8000`; empty means the page's own origin (the Vercel build sets it empty) | `http://localhost:8000` |
 
 ## Hosting (Vercel + Supabase)
@@ -258,13 +263,13 @@ region and the rewrites.
 
 ### Environment variables
 
-Set these eleven in Vercel. Production gets the production Supabase project's
+Set these nine in Vercel. Production gets the production Supabase project's
 values, Preview gets the staging project's. Mark the secret ones Sensitive.
 
 | Variable | Value |
 |----------|-------|
-| `SUPABASE_URL`, `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
-| `SUPABASE_ANON_KEY`, `VITE_SUPABASE_ANON_KEY` | the project's anon (public) key |
+| `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `SUPABASE_ANON_KEY` | the project's anon (public) key |
 | `SUPABASE_SERVICE_ROLE_KEY` | the project's service_role key |
 | `SUPABASE_JWT_SECRET` | the project's (legacy) JWT secret |
 | `DATABASE_URL` | the **transaction pooler**, as `app_backend`: `postgresql://app_backend.<project-ref>:<password>@<region>.pooler.supabase.com:6543/postgres` |
