@@ -365,6 +365,12 @@ async def test_the_daily_check_leaves_old_audit_records_alone(w, owner_db):
     assert run["retention_finished_at"] is not None
     assert run["removed_audit_records"] is None
 
+    # Leave no old record behind for a later clean-up to find.
+    async with owner_db.transaction():
+        await owner_db.execute("SELECT private.retention_raise_bypass()")
+        await owner_db.execute("DELETE FROM public.audit_log WHERE id = $1", old)
+        await owner_db.execute("SELECT private.retention_lower_bypass()")
+
 
 async def test_old_audit_records_go_with_one_summary(w, owner_db):
     insert = """

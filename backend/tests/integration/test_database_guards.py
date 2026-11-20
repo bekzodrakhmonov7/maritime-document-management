@@ -232,6 +232,16 @@ async def test_app_backend_role_is_restricted(owner_db):
     assert owned == 0
 
 
+async def test_files_stay_in_the_private_bucket_without_storage_policies(owner_db):
+    # SR-10: only the backend's signed URLs reach a file.
+    assert await owner_db.fetchval(
+        "SELECT public FROM storage.buckets WHERE id = 'crew-documents'"
+    ) is False
+    assert await owner_db.fetchval(
+        "SELECT count(*) FROM pg_policies WHERE schemaname = 'storage'"
+    ) == 0
+
+
 async def test_the_database_calls_the_daily_check_every_5_minutes(owner_db):
     job = await owner_db.fetchrow(
         "SELECT schedule, active FROM cron.job WHERE jobname = 'daily-check'"
