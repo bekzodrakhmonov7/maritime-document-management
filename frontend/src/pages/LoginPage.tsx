@@ -4,12 +4,14 @@ import { Anchor, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { CodeStep } from '../components/auth/CodeStep'
 import { ErrorNote } from '../components/ErrorNote'
+import type { SignInStep } from '../lib/signInCode'
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-navy-50 placeholder-navy-500 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50'
 
-/** Sign in: e-mail and password, then the Sign-in Code e-mailed to the
- * address (ADR-0005). Never creates an Account. */
+/** Sign in: e-mail and password, then the code from the authenticator app,
+ * enrolling the app at the first sign-in (ADR 0005, ADR 0007, SR-03). Never
+ * creates an Account. */
 export function LoginPage() {
   const { signIn, resendCode, verifyCode, user, loading: authLoading, switchedOff } = useAuth()
   const navigate = useNavigate()
@@ -18,7 +20,7 @@ export function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [challenge, setChallenge] = useState<string | null>(null)
+  const [step, setStep] = useState<SignInStep | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,7 +41,7 @@ export function LoginPage() {
       const issued = await signIn(typed, password)
       setEmail(typed)
       setPassword('')
-      setChallenge(issued)
+      setStep(issued)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed.')
     } finally {
@@ -63,17 +65,20 @@ export function LoginPage() {
         </div>
 
         <div className="rounded-xl border border-navy-800 bg-navy-900 p-8 shadow-2xl">
-          {challenge ? (
+          {step ? (
             <CodeStep
+              key={step.challenge}
               email={email}
+              step={step}
               onVerify={async (code) => {
-                await verifyCode(email, challenge, code)
-                navigate('/')
+                const next = await verifyCode(email, step.challenge, code)
+                if (next) setStep(next)
+                else navigate('/')
               }}
-              onResend={() => resendCode(challenge)}
-              onBack={() => setChallenge(null)}
+              onResend={() => resendCode(step.challenge)}
+              onBack={() => setStep(null)}
               onExpired={(message) => {
-                setChallenge(null)
+                setStep(null)
                 setError(message)
               }}
             />

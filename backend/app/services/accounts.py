@@ -9,6 +9,7 @@ link vessels, and any change away from crewing officer drops the links (each
 with its own Audit Record). Deactivating keeps them.
 """
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
@@ -122,6 +123,34 @@ async def reactivate(
             conn, ctx, current, AuditAction.ACCOUNT_REACTIVATED,
             {"status": "active", "role": new_role}, reason,
         )
+
+
+async def reset_second_factor(
+    conn: asyncpg.Connection,
+    ctx: AuditContext,
+    account_id: UUID,
+    reason: str,
+    remove_factors: Callable[[UUID], Awaitable[None]],
+) -> dict:
+    """A lost authenticator (SR-03, ADR 0007): remove the Account's TOTP
+    factors at Supabase Auth, end its sessions and open sign-ins, so its next
+    sign-in enrols a new authenticator."""
+    if ctx.actor_id is not None and ctx.actor_id == account_id:
+        raise AccountConflict("You can't reset your own second factor.")
+    row = await conn.fetchrow(
+        f"SELECT {ACCOUNT_COLUMNS} FROM public.users WHERE id = $1", account_id
+    )
+    if row is None:
+        raise AccountNotFound()
+    await remove_factors(account_id)
+    async with conn.transaction():
+        await conn.execute("DELETE FROM public.verified_session WHERE user_id = $1", account_id)
+        await conn.execute("DELETE FROM public.sign_in_challenge WHERE user_id = $1", account_id)
+        await audit.record(
+            conn, ctx, AuditAction.SECOND_FACTOR_RESET,
+            target_type="account", target_id=account_id, reason=reason,
+        )
+    return dict(row)
 
 
 async def _lock(conn: asyncpg.Connection, ctx: AuditContext, account_id: UUID) -> asyncpg.Record:

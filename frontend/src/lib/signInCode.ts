@@ -1,7 +1,8 @@
 /**
- * Register and Sign in (ADR-0005): a password first, then a Sign-in Code
- * e-mailed to the address. A code is 6 digits, and a new one can be asked
- * for at most every 60 seconds.
+ * Register and Sign in (ADR 0005, ADR 0007, SR-03): a password first, then
+ * a 6-digit code from an authenticator app (TOTP). The first sign-in enrols
+ * the app; Register is finished with a code e-mailed to the address first,
+ * and a new one of those can be asked for at most every 60 seconds.
  */
 
 export const CODE_LENGTH = 6
@@ -12,8 +13,34 @@ export const MIN_PASSWORD_LENGTH = 12
 /** bcrypt reads at most 72 bytes; Supabase Auth refuses longer passwords. */
 export const MAX_PASSWORD_LENGTH = 72
 
-/** What the sign-in proxy says once the first step is done. */
+/** What the sign-in proxy says once Register's first step is done. */
 export const CODE_SENT_MESSAGE = "We've e-mailed you a 6-digit code."
+
+/** The step after the password (or after Register), as the sign-in proxy
+ * answers it: the e-mailed code that finishes Register, the code of the
+ * enrolled authenticator, or enrolling one first. */
+export type SignInStep =
+  | { challenge: string; step: 'email' | 'totp'; message: string }
+  | {
+      challenge: string
+      step: 'enrol'
+      message: string
+      /** An SVG image of the otpauth URI. */
+      qr_code: string
+      /** The same key, for typing into the app by hand. */
+      secret: string
+      uri: string
+    }
+
+/** The QR code SVG as an image source; an <img> runs no script in it. */
+export function qrCodeSource(svg: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+/** The key in groups of four, easier to type by hand. */
+export function groupSecret(secret: string): string {
+  return secret.replace(/\s+/g, '').match(/.{1,4}/g)?.join(' ') ?? ''
+}
 
 /** The sign-in proxy's code for a first step that must be done again
  * (10 minutes passed, 5 wrong codes, or already used). */
@@ -51,11 +78,14 @@ export function secondsUntilResend(sentAt: number | null, now: number): number {
   return left <= 0 ? 0 : Math.ceil(left / 1000)
 }
 
-/** Supabase Auth's codes for a code that doesn't match or ran out. */
+/** Supabase Auth's codes for an e-mailed code that doesn't match or ran out. */
 const WRONG_OR_EXPIRED = new Set(['otp_expired', 'otp_invalid', 'invalid_credentials'])
 
 /** What the person sees when the API refused their code. */
 export function codeErrorMessage(err: { code?: string | null; status?: number; message: string }): string {
+  if (err.code === 'totp_invalid') {
+    return 'That code is wrong. Enter the code your authenticator app shows now.'
+  }
   if (err.code && WRONG_OR_EXPIRED.has(err.code)) {
     return 'That code is wrong or has expired. Check it, or send a new code.'
   }

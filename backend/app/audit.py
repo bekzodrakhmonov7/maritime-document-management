@@ -24,6 +24,7 @@ class AuditAction(StrEnum):
     ACCOUNT_ROLE_CHANGED = "account_role_changed"
     ACCOUNT_DEACTIVATED = "account_deactivated"
     ACCOUNT_REACTIVATED = "account_reactivated"
+    SECOND_FACTOR_RESET = "second_factor_reset"
     VESSEL_CREATED = "vessel_created"
     VESSEL_EDITED = "vessel_edited"
     VESSEL_DEACTIVATED = "vessel_deactivated"

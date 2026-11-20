@@ -28,6 +28,7 @@ const FORM_TITLE: Record<FormKind, string> = {
   role: 'Change role',
   deactivate: 'Switch off account',
   reactivate: 'Switch account back on',
+  'second-factor/reset': 'Reset authenticator',
 }
 
 const ROLES = Object.keys(ROLE_LABELS) as UserRole[]
@@ -36,16 +37,19 @@ const ROLES = Object.keys(ROLE_LABELS) as UserRole[]
 const ACTIONS: Record<AccountStatus, { kind: FormKind; label: string }[]> = {
   pending: [
     { kind: 'approve', label: 'Approve' },
+    { kind: 'second-factor/reset', label: 'Reset authenticator' },
     { kind: 'deactivate', label: 'Reject' },
   ],
   active: [
     { kind: 'role', label: 'Change role' },
+    { kind: 'second-factor/reset', label: 'Reset authenticator' },
     { kind: 'deactivate', label: 'Switch off' },
   ],
   deactivated: [{ kind: 'reactivate', label: 'Switch on' }],
 }
 
-/** Administrators approve, re-role and switch accounts off/on (FR-02). */
+/** Administrators approve, re-role and switch accounts off/on (FR-02), and
+ * reset a lost authenticator (SR-03). */
 export function AccountsPage() {
   const [filter, setFilter] = useState<Filter>('pending')
   const [form, setForm] = useState<{ account: Account; kind: FormKind } | null>(null)
@@ -150,7 +154,7 @@ export function AccountsPage() {
                             type="button"
                             onClick={() => setForm({ account, kind })}
                             className={cn(
-                              'rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-navy-400/40',
+                              'whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-navy-400/40',
                               kind === 'deactivate'
                                 ? 'bg-navy-800 text-status-expired hover:bg-navy-700'
                                 : 'bg-navy-700 text-navy-50 hover:bg-navy-600',
@@ -190,6 +194,7 @@ function buildAction(
 ): AccountAction | null {
   switch (kind) {
     case 'deactivate':
+    case 'second-factor/reset':
       return { kind, reason }
     case 'reactivate':
       return role ? { kind, reason, role } : { kind, reason }
@@ -290,6 +295,13 @@ function AccountForm({
               ))}
           </div>
         </fieldset>
+      )}
+
+      {kind === 'second-factor/reset' && (
+        <p className="text-sm text-navy-300">
+          Use this when they have lost their authenticator app. They are signed out, and at their
+          next sign-in they set up a new authenticator with their password.
+        </p>
       )}
 
       {kind === 'deactivate' && (

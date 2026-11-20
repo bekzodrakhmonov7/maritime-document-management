@@ -426,6 +426,7 @@ export const AUDIT_ACTION_LABELS = {
   account_role_changed: 'Account role changed',
   account_deactivated: 'Account deactivated',
   account_reactivated: 'Account reactivated',
+  second_factor_reset: 'Authenticator reset',
   vessel_created: 'Vessel created',
   vessel_edited: 'Vessel edited',
   vessel_deactivated: 'Vessel deactivated',

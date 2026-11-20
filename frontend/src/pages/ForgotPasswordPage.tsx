@@ -21,8 +21,8 @@ const BUTTON_CLASS =
   'flex w-full items-center justify-center gap-2 rounded-lg bg-navy-600 px-4 py-2.5 font-medium text-navy-50 transition-colors hover:bg-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:cursor-not-allowed disabled:opacity-50'
 
 /** Forgot password: e-mail, then the code e-mailed to it and a new password
- * (ADR-0005). Every session of the Account ends; the person then signs in
- * with the new password and a Sign-in Code as usual. */
+ * (ADR 0005). Every session of the Account ends; the person then signs in
+ * with the new password and their authenticator code as usual (ADR 0007). */
 export function ForgotPasswordPage() {
   const { requestPasswordReset, resetPassword, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()

@@ -227,7 +227,7 @@ async def test_a_session_that_skipped_a_sign_in_step_is_recorded_with_its_accoun
     assert res.json() == {
         "detail": {
             "code": "session_not_verified",
-            "message": "Sign in again with your password and e-mailed code.",
+            "message": "Sign in again with your password and authenticator code.",
         }
     }
     [rec] = await _refusals_for(owner_db, res)
@@ -299,3 +299,63 @@ async def test_broken_signing_keys_are_not_the_visitors_fault(
 
     assert res.status_code == 500
     assert recorded == []
+
+
+# --- SR-03: a session without the second factor ----------------------------------
+
+# Not behind a Session: the health check, the sign-in proxy (but logout) and
+# the daily check (its own secret).
+_OPEN = ("/health", "/api/internal/")
+
+
+def _protected_routes(app) -> list[tuple[str, str]]:
+    found = []
+    for path, operations in app.openapi()["paths"].items():
+        if path.startswith(_OPEN) or (
+            path.startswith("/api/auth/") and path != "/api/auth/logout"
+        ):
+            continue
+        for method in sorted(operations):
+            found.append((method.upper(), path))
+    return found
+
+
+def _concrete(path: str) -> str:
+    """A path with every parameter filled: UUIDs for Accounts, 1 elsewhere."""
+    import re
+
+    def fill(match: re.Match) -> str:
+        name = match.group(1)
+        return str(uuid4()) if name in ("account_id", "user_id") else "1"
+
+    return re.sub(r"\{([^}:]+)(?::[^}]*)?\}", fill, path)
+
+
+async def test_a_password_only_session_is_refused_on_every_protected_endpoint(
+    app, client, owner_db, make_account
+):
+    account = await make_account()
+    headers = _bearer(make_token(account, aal="aal1"))
+    routes = _protected_routes(app)
+    assert len(routes) > 60  # the sweep really walks the API
+
+    for method, path in routes:
+        res = await client.request(method, _concrete(path), headers=headers)
+
+        assert res.status_code == 401, (method, path, res.text)
+        assert res.json()["detail"]["code"] == "second_factor_missing", (method, path)
+        [rec] = await _refusals_for(owner_db, res)
+        assert rec["reason"] == "second_factor_missing"
+        assert rec["actor_id"] == account
+
+
+async def test_a_token_without_aal_counts_as_password_only(client, owner_db, make_account):
+    account = await make_account()
+
+    res = await client.get("/api/me", headers=_bearer(make_token(account, aal=None)))
+
+    assert res.status_code == 401
+    assert res.json()["detail"]["code"] == "second_factor_missing"
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "second_factor_missing"
+    _assert_request_target(rec)

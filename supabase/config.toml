@@ -197,8 +197,8 @@ password_requirements = ""
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
-# Every sign-in sends a Sign-in Code, so a working day's sign-ins must fit; with custom SMTP
-# the hosted default is 30.
+# Registering and a forgotten password send a code (signing in uses TOTP, ADR 0007); with
+# custom SMTP the hosted default is 30.
 email_sent = 100
 # Number of SMS messages that can be sent per hour. Requires auth.sms to be enabled.
 sms_sent = 30
@@ -231,7 +231,8 @@ enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
-# A Sign-in Code: one at most every 60 seconds, 6 digits, valid 10 minutes (ADR-0005).
+# An e-mailed code (Register, forgotten password): one at most every 60 seconds, 6 digits,
+# valid 10 minutes (ADR 0005, ADR 0007).
 max_frequency = "60s"
 # Number of characters used in the email OTP.
 otp_length = 6
@@ -319,10 +320,11 @@ auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
 # Control how many MFA factors can be enrolled at once per user.
 max_enrolled_factors = 10
 
-# Control MFA via App Authenticator (TOTP)
+# Control MFA via App Authenticator (TOTP). Every Account enrols one at its
+# first sign-in; the API accepts only sessions at aal2 (SR-03, ADR 0007).
 [auth.mfa.totp]
-enroll_enabled = false
-verify_enabled = false
+enroll_enabled = true
+verify_enabled = true
 
 # Configure MFA via Phone Messaging
 [auth.mfa.phone]

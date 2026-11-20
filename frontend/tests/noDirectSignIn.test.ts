@@ -4,10 +4,11 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// ADR-0005: signing in is a password, then an e-mailed code, and both steps go
-// through the API's sign-in proxy. A session from Supabase Auth directly
-// (password alone or code alone) is refused by the API, so the app must never
-// ask Supabase Auth for one, nor change a password behind the proxy's back.
+// ADR 0005, ADR 0007: signing in is a password, then an authenticator (TOTP)
+// code, and both steps go through the API's sign-in proxy. A session from
+// Supabase Auth directly is refused by the API, so the app must never ask
+// Supabase Auth for one, enrol or verify a factor itself, nor change a
+// password behind the proxy's back.
 const SRC = fileURLToPath(new URL('../src/', import.meta.url))
 
 function sourceFiles(dir: string): string[] {
@@ -25,6 +26,7 @@ const FORBIDDEN = [
   /\bverifyOtp\b/,
   /\bupdateUser\b/,
   /\bresetPasswordForEmail\b/,
+  /\bmfa\./,
 ]
 
 test('no direct Supabase Auth sign-in or password call remains in frontend/src', () => {
