@@ -18,6 +18,7 @@ from app.models.auth import UserPayload
 from app.models.responsible_officer import AddResponsibleOfficer, ResponsibleOfficerRead
 from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
 from app.services import assignments, responsible_officers as svc
+from app.routers.params import Id
 
 admin_only = require_role("administrator")
 fleet_readers = require_role("administrator", "crewing_officer")
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/vessels/{vessel_id}", tags=["vessels"])
 
 @router.get("/crew", response_model=list[AssignmentRead])
 async def list_crew(
-    vessel_id: int,
+    vessel_id: Id,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
@@ -37,7 +38,7 @@ async def list_crew(
 
 @router.get("/responsible-officers", response_model=list[ResponsibleOfficerRead])
 async def list_responsible_officers(
-    vessel_id: int,
+    vessel_id: Id,
     db: asyncpg.Connection = Depends(get_db),
     _: UserPayload = Depends(fleet_readers),
 ):
@@ -51,7 +52,7 @@ async def list_responsible_officers(
     status_code=status.HTTP_201_CREATED,
 )
 async def add_responsible_officer(
-    vessel_id: int,
+    vessel_id: Id,
     body: AddResponsibleOfficer,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
@@ -63,7 +64,7 @@ async def add_responsible_officer(
 
 @router.delete("/responsible-officers/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_responsible_officer(
-    vessel_id: int,
+    vessel_id: Id,
     account_id: UUID,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),

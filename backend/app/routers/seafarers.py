@@ -15,6 +15,7 @@ from app.models.seafarer import SeafarerRead, SeafarerWrite, SetInactive
 from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
 from app.services import assignments, coverage
 from app.services import seafarers as svc
+from app.routers.params import Id
 
 router = APIRouter(prefix="/seafarers", tags=["seafarers"])
 
@@ -33,7 +34,7 @@ async def list_seafarers(
 
 @router.get("/{seafarer_id}", response_model=SeafarerRecord)
 async def get_seafarer(
-    seafarer_id: int,
+    seafarer_id: Id,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
@@ -57,7 +58,7 @@ async def create_seafarer(
 
 @router.put("/{seafarer_id}", response_model=SeafarerRead)
 async def edit_seafarer(
-    seafarer_id: int,
+    seafarer_id: Id,
     body: SeafarerWrite,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
@@ -71,7 +72,7 @@ async def edit_seafarer(
 
 @router.post("/{seafarer_id}/set-inactive", response_model=SeafarerRead)
 async def set_seafarer_inactive(
-    seafarer_id: int,
+    seafarer_id: Id,
     body: SetInactive,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
@@ -85,7 +86,7 @@ async def set_seafarer_inactive(
 
 @router.post("/{seafarer_id}/reactivate", response_model=SeafarerRead)
 async def reactivate_seafarer(
-    seafarer_id: int,
+    seafarer_id: Id,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
@@ -98,7 +99,7 @@ async def reactivate_seafarer(
 
 @router.get("/{seafarer_id}/assignments", response_model=list[AssignmentRead])
 async def list_seafarer_assignments(
-    seafarer_id: int,
+    seafarer_id: Id,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):

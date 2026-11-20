@@ -14,6 +14,7 @@ from app.audit import AuditAction, Outcome, audit_context_for
 from app.deps import get_db, require_role
 from app.models.audit_log import MAX_PAGE_SIZE, AuditFilters, AuditPage
 from app.models.auth import UserPayload
+from app.routers.params import MAX_ID
 from app.services import audit_log as svc
 
 router = APIRouter(prefix="/audit", tags=["audit"])
@@ -27,7 +28,7 @@ def audit_filters(
     actor_id: UUID | None = None,
     actor_email: str | None = Query(None, max_length=320),
     action: list[AuditAction] = Query([]),
-    seafarer_id: int | None = None,
+    seafarer_id: int | None = Query(None, ge=1, le=MAX_ID),
     target_type: str | None = Query(None, max_length=100),
     target_id: str | None = Query(None, max_length=200),
     outcome: Outcome | None = None,

@@ -20,13 +20,14 @@ from app.models.coverage import ReadinessRead
 from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
 from app.services import assignments as svc
 from app.services import coverage
+from app.routers.params import Id
 
 router = APIRouter(prefix="/assignments", tags=["assignments"])
 
 
 @router.get("/{assignment_id}", response_model=AssignmentRead)
 async def get_assignment(
-    assignment_id: int,
+    assignment_id: Id,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
@@ -36,7 +37,7 @@ async def get_assignment(
 
 @router.get("/{assignment_id}/readiness", response_model=ReadinessRead)
 async def get_readiness(
-    assignment_id: int,
+    assignment_id: Id,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
@@ -62,7 +63,7 @@ async def plan_assignment(
 
 @router.put("/{assignment_id}", response_model=AssignmentRead)
 async def edit_assignment(
-    assignment_id: int,
+    assignment_id: Id,
     body: AssignmentEdit,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
@@ -77,7 +78,7 @@ async def edit_assignment(
 
 @router.post("/{assignment_id}/cancel", response_model=AssignmentRead)
 async def cancel_assignment(
-    assignment_id: int,
+    assignment_id: Id,
     body: CancelAssignment,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
