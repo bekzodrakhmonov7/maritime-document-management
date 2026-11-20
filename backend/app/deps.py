@@ -138,15 +138,30 @@ async def get_signed_in_user(
     if row is None:
         raise account_refused("no_account", "There is no account for this sign-in.")
 
-    # Supabase Auth hands out a session for a password alone, or for an
-    # e-mailed code alone, to anyone holding the public key. Only a session
-    # that passed both steps of the sign-in proxy gets in (ADR-0005).
+    # Only a session that passed the second factor gets in (SR-03, ADR 0007):
+    # Supabase Auth marks it aal2 once a TOTP code was verified. A token
+    # without `aal` counts as aal1.
+    if payload.get("aal") != "aal2":
+        raise SessionRefused(
+            "second_factor_missing",
+            {
+                "code": "second_factor_missing",
+                "message": "Sign in again with your password and authenticator code.",
+            },
+            account_id=sub,
+            email=row["email"],
+            role=row["role"],
+        )
+
+    # Supabase Auth hands out a session to anyone holding the public key who
+    # goes to it directly. Only a session that passed both steps of the
+    # sign-in proxy gets in (ADR 0005, ADR 0007).
     if not row["verified"]:
         raise SessionRefused(
             "session_not_verified",
             {
                 "code": "session_not_verified",
-                "message": "Sign in again with your password and e-mailed code.",
+                "message": "Sign in again with your password and authenticator code.",
             },
             account_id=sub,
             email=row["email"],

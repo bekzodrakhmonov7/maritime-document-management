@@ -41,6 +41,10 @@ class Deactivate(BaseModel):
     reason: Reason
 
 
+class SecondFactorReset(BaseModel):
+    reason: Reason
+
+
 class Reactivate(BaseModel):
     reason: Reason
     # Needed only when the account never had a role (a rejected sign-up).

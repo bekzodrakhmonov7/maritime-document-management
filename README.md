@@ -56,16 +56,45 @@ Audit Records either: the owner's nightly `audit-retention` `pg_cron` job
 (03:17 UTC) does that (SR-14, ADR 0008). `seed.sql` gives it
 the local password `app_backend_dev` (see `DATABASE_URL` in `.env.example`).
 
-### Signing in: a password, then an e-mailed code
+### Signing in: a password, then an authenticator code
 
-Two steps (ADR-0005). **Register** asks for full name, e-mail and password;
-**Sign in** asks for e-mail and password. Both then ask for a **Sign-in
-Code**: 6 digits, e-mailed, valid 10 minutes, at most one every 60 seconds (a
-new code replaces the old one). The e-mail holds only the code, never a link.
-The API accepts only sessions that went through both steps of its sign-in
-proxy, so nothing (no env flag, dev mode, demo login or direct call to
-Supabase Auth) skips either one. **Forgot password?** on the Sign in page
-e-mails a code for setting a new password.
+Two steps (ADR-0005, ADR-0007, SR-03). **Sign in** asks for e-mail and
+password, then the 6-digit code from an **authenticator app** (TOTP, Supabase
+Auth MFA). At the first sign-in every Account, pending ones too, enrols the
+app: the page shows a QR code and the key for typing by hand, and the first
+right code finishes both the enrolment and the sign-in. **Register** asks for
+full name, e-mail and password, then a code e-mailed to the address (6 digits,
+valid 10 minutes, at most one every 60 seconds; the e-mail holds only the
+code, never a link), and then goes on to the enrolment. Five wrong codes end
+the sign-in; start again with the password.
+
+The API accepts only `aal2` sessions (the TOTP code was verified) that went
+through both steps of its sign-in proxy: an `aal1` (password-only) token gets
+401 `second_factor_missing` on every protected endpoint and an *access
+refused* record, and a session completed directly at Supabase Auth gets 401
+`session_not_verified`. So nothing (no env flag, dev mode, demo login or
+direct call to Supabase Auth) skips either step. Between the two steps the
+proxy keeps Supabase's `aal1` access token in the sign-in challenge row; it is
+removed when the challenge is used or ended, an owner `pg_cron` job
+(`sign-in-challenge-cleanup`, every 5 minutes) deletes expired challenges, and
+the token is never logged or returned.
+
+**Lost authenticator:** an administrator presses **Reset authenticator** on the
+**Accounts** page (`POST /api/accounts/{id}/second-factor/reset`, recorded as
+*second factor reset*). The Account is signed out and enrols a new app at its
+next sign-in. **Forgot password?** on the Sign in page e-mails a code for
+setting a new password; the next sign-in still needs the authenticator.
+
+Locally, any authenticator app works (scan the QR code from the browser), or
+generate the code from the key shown on the enrolment step:
+
+```bash
+cd backend
+uv run python -c "import pyotp; print(pyotp.TOTP('THE KEY SHOWN'.replace(' ', '')).now())"
+```
+
+`pyotp` is a dev dependency only; the real-GoTrue tests in
+`tests/integration/test_sign_in_api.py` use it the same way.
 
 A new password (Register, Forgot password) has 12 to 72 characters and is
 refused with 422 `weak_password` when it is on the bundled list of common
@@ -81,11 +110,12 @@ earlier, password-wiping version of migration `20261116130000` lost its test
 passwords; set new ones that way.
 
 Locally, Supabase doesn't send mail: its mail catcher, **Mailpit**, catches it.
-Ask for a code in the app, open <http://127.0.0.1:54324>, open the newest
-message for your address and type the 6 digits. The Auth settings and the three
-code-only e-mail templates live in `supabase/config.toml` and
-`supabase/templates/` (`confirmation.html` for Register, `magic_link.html` for
-Sign in, `recovery.html` for Forgot password); run `npx supabase@latest stop && npx supabase@latest start` after
+Register (or ask for a password reset) in the app, open
+<http://127.0.0.1:54324>, open the newest message for your address and type the
+6 digits. The Auth settings (TOTP on under `[auth.mfa.totp]`) and the code-only
+e-mail templates live in `supabase/config.toml` and `supabase/templates/`
+(`confirmation.html` for Register, `recovery.html` for Forgot password;
+`magic_link.html` is no longer used for signing in); run `npx supabase@latest stop && npx supabase@latest start` after
 changing them. SMTP (Resend) is off locally and only turned on for hosted.
 
 ### First administrator
@@ -94,7 +124,8 @@ New Accounts start **pending** with no role and see only a "waiting for
 approval" page. Make the first one an administrator:
 
 1. **Register** in the app with your e-mail and full name.
-2. Type the **code** from the e-mail (locally: from Mailpit). You land on
+2. Type the **code** from the e-mail (locally: from Mailpit), then enrol an
+   authenticator app (QR code or key) and type its code. You land on
    "waiting for approval".
 3. Run `make_admin`:
 
@@ -108,24 +139,25 @@ choosing a role (administrator, crewing officer or manager) and giving a
 reason. Every approval, role change and switch-off/on is audited.
 
 Every sign-in step goes through the backend's sign-in proxy
-(`POST /api/auth/register`, `POST /api/auth/code`, `POST /api/auth/verify`)
-so failed attempts are recorded, including codes asked for unknown e-mails and
-wrong or expired codes; the frontend then calls `setSession`. Successful
-sign-ins (including the first one that completes registration) are copied into
-the Audit Log by a trigger on `auth.audit_log_entries`, sign-outs by
-`POST /api/auth/logout`, and every refused request (403, or a 404 on a record
-outside the caller's Scope) by one exception handler.
+(`POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/code`,
+`POST /api/auth/verify`) so failed attempts are recorded, including wrong
+passwords, wrong authenticator codes (`totp_invalid`) and wrong or expired
+e-mailed codes; the frontend then calls `setSession`. Successful sign-ins are
+recorded by the proxy once the authenticator code is right, sign-outs by
+`POST /api/auth/logout`, and every refused request (401 for a refused
+session, 403, or a 404 on a record outside the caller's Scope) by one
+exception handler.
 
 Stated limits:
 
 - A direct call to Supabase Auth with the public key skips the failed-login
   record.
-- A session lasts until sign-out; there is no periodic re-proof of the e-mail
-  (time-boxed sessions need Supabase Pro). Switching an Account off still cuts
+- A session lasts until sign-out; there is no periodic re-proof of the second
+  factor (time-boxed sessions need Supabase Pro). Switching an Account off still cuts
   it off on its next request (FR-02).
 - A direct call to Supabase's `/otp` with the public key reveals whether an
   e-mail has an Account (422 for unknown, 200 for known). Only our proxy hides
-  it.
+  it. A session it gives is `aal1` and not verified, so it gets nowhere.
 - Changing an Account's e-mail has no screen. Through Supabase directly, it
   needs confirmation from both the old and the new inbox.
 
@@ -179,7 +211,7 @@ Key variables in `.env` (project root):
 | `SUPABASE_JWT_SECRET` | JWT signing secret | `super-secret-jwt-token-with-at-least-32-characters-long` |
 | `RESEND_API_KEY` | Resend API key for e-mail | `re_...` |
 | `MAIL_FROM` | Sender email | `noreply@maritime.local` |
-| `SUPABASE_AUTH_SMTP_PASSWORD` | Hosted only: the Resend API key Supabase Auth sends the sign-in codes with, read by `supabase config push` (`env(...)` in `supabase/config.toml`). Empty locally, where Mailpit catches the mail | `re_...` |
+| `SUPABASE_AUTH_SMTP_PASSWORD` | Hosted only: the Resend API key Supabase Auth sends the Register and password-reset codes with, read by `supabase config push` (`env(...)` in `supabase/config.toml`). Empty locally, where Mailpit catches the mail | `re_...` |
 | `FRONTEND_URL` | The app's address, for links in e-mails | `http://localhost:5173` |
 | `CRON_SECRET` | Shared with the database's `daily-check` job (Vault `cron_secret`); empty means `/api/internal/daily-check` always answers 404 | `local-dev-cron-secret` |
 
@@ -417,7 +449,7 @@ wipe production data.
 │   │   ├── audit.py             # The audit helper (Audit Log writes)
 │   │   ├── refused_access.py    # Records every refused request
 │   │   ├── errors.py            # 422 without input echo; logged generic 500
-│   │   ├── supabase_auth.py     # Passwords and Sign-in Codes from Supabase Auth
+│   │   ├── supabase_auth.py     # Passwords, e-mailed codes and TOTP (MFA) at Supabase Auth
 │   │   ├── routers/             # API endpoints (under /api)
 │   │   ├── services/            # Business logic
 │   │   └── scripts/             # make_admin

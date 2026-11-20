@@ -28,6 +28,8 @@ export type AccountAction =
   | { kind: 'role'; role: UserRole; reason: string }
   | { kind: 'deactivate'; reason: string }
   | { kind: 'reactivate'; reason: string; role?: UserRole }
+  /** A lost authenticator: the Account enrols a new one at its next sign-in (SR-03). */
+  | { kind: 'second-factor/reset'; reason: string }
 
 export function useAccountAction() {
   const queryClient = useQueryClient()

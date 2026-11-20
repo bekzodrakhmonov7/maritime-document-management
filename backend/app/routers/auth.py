@@ -1,20 +1,28 @@
-"""The sign-in proxy: a password, then an e-mailed Sign-in Code (R1, T7,
-ADR 0002, ADR 0005).
+"""The sign-in proxy: a password, then a TOTP code from an authenticator
+app (R1, T7, ADR 0002, ADR 0005, ADR 0007, SR-03).
 
 Signing in is two steps, and no session leaves here before both are done:
 
-- `POST /api/auth/login` checks the e-mail and password with Supabase Auth,
-  e-mails a Sign-in Code and answers with a Sign-in Challenge.
+- `POST /api/auth/login` checks the e-mail and password with Supabase Auth
+  (an aal1 session, which stays here) and answers with a Sign-in Challenge
+  and its step: `totp` when the Account has an authenticator, otherwise
+  `enrol` with the QR code (SVG), the secret and the otpauth URI of a new
+  TOTP factor. No e-mail is sent.
 - `POST /api/auth/register` creates the (pending) Account with its full name
   and password, e-mails the code that finishes registering, and answers with
-  a challenge too. An e-mail that already has an Account gets a decoy
-  challenge, so the answer never reveals whether an Account exists.
-- `POST /api/auth/code` sends a new code for a challenge.
-- `POST /api/auth/verify` checks the code against the challenge, records the
-  session as verified (only verified sessions get past `get_signed_in_user`),
-  records *Login succeeded* and returns Supabase's session for `setSession`.
+  a challenge whose step is `email`. An e-mail that already has an Account
+  gets a decoy challenge, so the answer never reveals whether an Account
+  exists. The right code leads on to the `enrol` step.
+- `POST /api/auth/code` sends the registration code again.
+- `POST /api/auth/verify` checks the code against the challenge. For the
+  TOTP step it asks Supabase Auth for an MFA challenge and verifies the
+  code, which raises the session to aal2; the session is then recorded as
+  verified (only verified aal2 sessions get past `get_signed_in_user`),
+  *Login succeeded* is recorded and Supabase's session is returned for
+  `setSession`. Five wrong codes end the challenge.
 - `POST /api/auth/password/forgot` and `/password/reset` replace a forgotten
   password with an e-mailed code; every session of the Account then ends.
+  The next sign-in still needs the authenticator.
 
 A new password (register, reset) has at least 12 characters, is not on the
 common list and not known to Pwned Passwords (SR-02, `app.password_policy`,
@@ -62,6 +70,17 @@ Code = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[0-9]{
 ChallengeToken = Annotated[str, StringConstraints(min_length=1, max_length=200)]
 
 CODE_SENT = "We've e-mailed you a 6-digit code."
+TOTP_ASKED = "Enter the 6-digit code from your authenticator app."
+ENROL_ASKED = (
+    "Set up two-step sign-in: scan the QR code with an authenticator app, or type the key,"
+    " then enter the 6-digit code it shows."
+)
+
+# The step a challenge is for, as the frontend shows it.
+STEP_EMAIL = "email"
+STEP_TOTP = "totp"
+STEP_ENROL = "enrol"
+AAL2 = "aal2"
 RESET_SENT = "If an Account exists for this e-mail, we've sent a code."
 
 # Supabase Auth's answers that the proxy acts on.
@@ -70,6 +89,9 @@ NOT_CONFIRMED = "email_not_confirmed"
 ALREADY_REGISTERED = "user_already_exists"
 SEND_RATE_LIMITED = "over_email_send_rate_limit"
 WEAK_PASSWORD = "weak_password"
+TOTP_REFUSED = "mfa_verification_failed"
+# Recorded and answered for a wrong authenticator code.
+TOTP_INVALID = "totp_invalid"
 
 
 class LoginRequest(BaseModel):
@@ -115,7 +137,8 @@ async def login(
     db: asyncpg.Connection = Depends(get_db),
     supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
 ) -> dict[str, str]:
-    """Check the password, e-mail a Sign-in Code, answer with a challenge."""
+    """Check the password and answer with a challenge for the TOTP step:
+    the code of the enrolled authenticator, or an enrolment first."""
     ip = client_ip(request)
     try:
         session = await supabase_auth.password_grant(body.email, body.password, ip)
@@ -130,12 +153,7 @@ async def login(
         await _record_failure(db, request, body.email, AuthUnavailable.code)
         raise _unavailable()
 
-    # The password alone opens no session: this one ends now.
-    await _sign_out_quietly(supabase_auth, session, ip)
-    user = session.get("user") or {}
-    return await _send_sign_in_code(
-        db, request, supabase_auth, UUID(str(user["id"])), str(user.get("email") or body.email)
-    )
+    return await _second_factor_step(db, request, supabase_auth, session, body.email)
 
 
 @router.post("/register")
@@ -163,13 +181,9 @@ async def register(
         raise _unavailable()
 
     if created.get("access_token"):
-        # E-mail confirmation is off (local Supabase): the Account exists and
-        # is confirmed, so the second step is an ordinary Sign-in Code.
-        await _sign_out_quietly(supabase_auth, created, ip)
-        user = created.get("user") or {}
-        return await _send_sign_in_code(
-            db, request, supabase_auth, UUID(str(user["id"])), body.email
-        )
+        # E-mail confirmation is off: the Account exists and is confirmed,
+        # so Register goes straight on to enrolling the authenticator.
+        return await _second_factor_step(db, request, supabase_auth, created, body.email)
 
     if not created.get("identities"):
         # Supabase Auth's answer for an e-mail that already has an Account:
@@ -178,7 +192,7 @@ async def register(
 
     # Supabase Auth e-mailed the code that confirms the address.
     token = await sign_in.create_challenge(db, UUID(str(created["id"])), body.email, "register")
-    return _challenge_answer(token)
+    return _email_step(token)
 
 
 async def _finish_registering(
@@ -190,63 +204,90 @@ async def _finish_registering(
     if account is None:
         await _record_failure(db, request, email, NOT_CONFIRMED)
         raise _refusal(SignInRefused(400, WRONG_PASSWORD, ""), "Wrong e-mail or password.")
+    await _resend_confirmation(db, request, supabase_auth, account["email"])
+    token = await sign_in.create_challenge(db, account["id"], account["email"], "register")
+    return _email_step(token)
+
+
+async def _resend_confirmation(
+    db: asyncpg.Connection, request: Request, supabase_auth: SupabaseAuth, email: str
+) -> None:
+    """E-mail the code that finishes a Register again. Asked again within a
+    minute, Supabase Auth sends nothing, but the code already sent still works."""
     try:
-        await supabase_auth.resend_confirmation(account["email"], client_ip(request))
+        await supabase_auth.resend_confirmation(email, client_ip(request))
     except SignInRefused as exc:
-        # Asked again within a minute: the code already sent still works.
         if exc.code != SEND_RATE_LIMITED:
             await _record_failure(db, request, email, exc.code)
             raise _refusal(exc)
     except AuthUnavailable:
         await _record_failure(db, request, email, AuthUnavailable.code)
         raise _unavailable()
-    token = await sign_in.create_challenge(db, account["id"], account["email"], "register")
-    return _challenge_answer(token)
 
 
-async def _send_sign_in_code(
+async def _second_factor_step(
     db: asyncpg.Connection,
     request: Request,
     supabase_auth: SupabaseAuth,
-    user_id: UUID,
+    session: dict[str, Any],
     email: str,
 ) -> dict[str, str]:
-    await _send_code(db, request, supabase_auth, email, "sign_in")
-    token = await sign_in.create_challenge(db, user_id, email, "sign_in")
-    return _challenge_answer(token)
-
-
-async def _send_code(
-    db: asyncpg.Connection,
-    request: Request,
-    supabase_auth: SupabaseAuth,
-    email: str,
-    purpose: sign_in.Purpose,
-) -> None:
-    """E-mail the code for this step. Asked again within a minute, Supabase
-    Auth sends nothing, but the code already sent still works."""
+    """The TOTP step for an aal1 session (ADR 0007). With a verified TOTP
+    factor: ask for its code. Without one: drop unfinished enrolments and
+    start a new one. The aal1 token stays in the challenge row only."""
     ip = client_ip(request)
+    access_token = str(session["access_token"])
+    user = session.get("user") or {}
+    user_id = UUID(str(user["id"]))
+    email = str(user.get("email") or email)
     try:
-        if purpose == "register":
-            await supabase_auth.resend_confirmation(email, ip)
-        else:
-            await supabase_auth.send_code(email, ip)
+        factors = [
+            f for f in await supabase_auth.list_factors(access_token, ip)
+            if f.get("factor_type") == "totp"
+        ]
+        verified = next((f for f in factors if f.get("status") == "verified"), None)
+        if verified is None:
+            for factor in factors:
+                await supabase_auth.unenroll(access_token, str(factor["id"]), ip)
+            enrolled = await supabase_auth.enroll_totp(access_token, ip)
     except SignInRefused as exc:
-        if exc.code != SEND_RATE_LIMITED:
-            await _record_failure(db, request, email, exc.code)
-            raise _refusal(exc)
+        await _sign_out_quietly(supabase_auth, session, ip)
+        await _record_failure(db, request, email, exc.code)
+        raise _refusal(exc)
     except AuthUnavailable:
+        await _sign_out_quietly(supabase_auth, session, ip)
         await _record_failure(db, request, email, AuthUnavailable.code)
         raise _unavailable()
+
+    if verified is not None:
+        token = await sign_in.create_challenge(
+            db, user_id, email, "sign_in",
+            factor_id=UUID(str(verified["id"])), access_token=access_token,
+        )
+        return {"challenge": token, "step": STEP_TOTP, "message": TOTP_ASKED}
+
+    token = await sign_in.create_challenge(
+        db, user_id, email, "sign_in",
+        factor_id=UUID(str(enrolled["id"])), access_token=access_token,
+    )
+    totp = enrolled.get("totp") or {}
+    return {
+        "challenge": token,
+        "step": STEP_ENROL,
+        "message": ENROL_ASKED,
+        "qr_code": str(totp.get("qr_code") or ""),
+        "secret": str(totp.get("secret") or ""),
+        "uri": str(totp.get("uri") or ""),
+    }
 
 
 async def _decoy(db: asyncpg.Connection, email: str) -> dict[str, str]:
     """A challenge no code can complete, answered exactly like a real one."""
-    return _challenge_answer(await sign_in.create_challenge(db, None, email, "register"))
+    return _email_step(await sign_in.create_challenge(db, None, email, "register"))
 
 
-def _challenge_answer(token: str) -> dict[str, str]:
-    return {"challenge": token, "message": CODE_SENT}
+def _email_step(token: str) -> dict[str, str]:
+    return {"challenge": token, "step": STEP_EMAIL, "message": CODE_SENT}
 
 
 # --- step 2 -----------------------------------------------------------------------
@@ -259,12 +300,21 @@ async def resend_code(
     db: asyncpg.Connection = Depends(get_db),
     supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
 ) -> dict[str, str]:
-    """E-mail a new Sign-in Code for a challenge that is still open."""
+    """E-mail the code that finishes a Register again. The TOTP step has no
+    e-mailed code."""
     challenge = await sign_in.open_challenge(db, body.challenge)
     if challenge is None:
         raise _challenge_expired()
+    if challenge.purpose != "register":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            {
+                "code": "no_emailed_code",
+                "message": "This step needs the code from your authenticator app.",
+            },
+        )
     if challenge.user_id is not None:
-        await _send_code(db, request, supabase_auth, challenge.email, challenge.purpose)
+        await _resend_confirmation(db, request, supabase_auth, challenge.email)
     return {"message": CODE_SENT}
 
 
@@ -275,8 +325,9 @@ async def verify(
     db: asyncpg.Connection = Depends(get_db),
     supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
 ) -> dict[str, Any]:
-    """Check the Sign-in Code and return Supabase's session for `setSession`."""
-    ip = client_ip(request)
+    """Check the code against the challenge. The e-mailed code of a Register
+    leads on to the TOTP step; the right TOTP code returns Supabase's aal2
+    session for `setSession`."""
     challenge = await sign_in.open_challenge(db, body.challenge, body.email)
     if challenge is None:
         await _record_failure(db, request, body.email, "challenge_expired")
@@ -289,6 +340,20 @@ async def verify(
             status.HTTP_403_FORBIDDEN, {"code": "otp_invalid", "message": "Token is invalid"}
         )
 
+    if challenge.purpose == "register":
+        return await _verify_emailed_code(db, request, supabase_auth, challenge, body)
+    return await _verify_totp(db, request, supabase_auth, challenge, body)
+
+
+async def _verify_emailed_code(
+    db: asyncpg.Connection,
+    request: Request,
+    supabase_auth: SupabaseAuth,
+    challenge: sign_in.Challenge,
+    body: VerifyRequest,
+) -> dict[str, Any]:
+    """The confirmation code that finishes a Register; then the enrolment."""
+    ip = client_ip(request)
     try:
         session = await supabase_auth.verify_code(challenge.email, body.code, ip)
     except SignInRefused as exc:
@@ -299,7 +364,7 @@ async def verify(
         await _record_failure(db, request, body.email, AuthUnavailable.code)
         raise _unavailable()
 
-    session_id, user_id = sign_in.session_ids(session)
+    _, user_id = sign_in.session_ids(session)
     if user_id != challenge.user_id:
         # A code for someone else's address: never let it in.
         await _sign_out_quietly(supabase_auth, session, ip)
@@ -308,6 +373,58 @@ async def verify(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, {"code": "otp_invalid", "message": "Token is invalid"}
         )
+
+    await sign_in.use_up(db, challenge)
+    return await _second_factor_step(db, request, supabase_auth, session, challenge.email)
+
+
+async def _verify_totp(
+    db: asyncpg.Connection,
+    request: Request,
+    supabase_auth: SupabaseAuth,
+    challenge: sign_in.Challenge,
+    body: VerifyRequest,
+) -> dict[str, Any]:
+    """The authenticator's code: challenge and verify at Supabase Auth with
+    the aal1 token the challenge row keeps; the session becomes aal2."""
+    ip = client_ip(request)
+    access_token = challenge.access_token
+    if access_token is None or challenge.factor_id is None:
+        await _record_failure(db, request, body.email, "challenge_expired")
+        raise _challenge_expired()
+    factor_id = str(challenge.factor_id)
+    try:
+        challenge_id = await supabase_auth.challenge(access_token, factor_id, ip)
+        session = await supabase_auth.verify_totp(
+            access_token, factor_id, challenge_id, body.code, ip
+        )
+    except SignInRefused as exc:
+        if exc.code == TOTP_REFUSED:
+            if await sign_in.count_wrong_code(db, challenge):
+                # Five wrong codes: the aal1 session is of no further use.
+                await _sign_out_quietly(supabase_auth, {"access_token": access_token}, ip)
+            await _record_failure(db, request, body.email, TOTP_INVALID)
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                {"code": TOTP_INVALID, "message": "That code is wrong. Check the app and try again."},
+            )
+        await _record_failure(db, request, body.email, exc.code)
+        if exc.status_code in (401, 403, 404):
+            # The aal1 session or the factor is gone: start again.
+            await sign_in.use_up(db, challenge)
+            raise _challenge_expired()
+        raise HTTPException(exc.status_code, {"code": exc.code, "message": exc.message})
+    except AuthUnavailable:
+        await _record_failure(db, request, body.email, AuthUnavailable.code)
+        raise _unavailable()
+
+    claims = sign_in.claims(session)
+    session_id, user_id = UUID(str(claims["session_id"])), UUID(str(claims["sub"]))
+    if user_id != challenge.user_id or claims.get("aal") != AAL2:
+        await _sign_out_quietly(supabase_auth, session, ip)
+        await sign_in.use_up(db, challenge)
+        await _record_failure(db, request, body.email, TOTP_INVALID)
+        raise _challenge_expired()
 
     account = await db.fetchrow(
         "SELECT email, role FROM public.users WHERE id = $1", user_id

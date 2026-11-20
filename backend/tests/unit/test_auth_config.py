@@ -1,8 +1,10 @@
-"""The Supabase Auth settings in the repository (ADR-0004, email-code-sign-in 04).
+"""The Supabase Auth settings in the repository (ADR 0005, ADR 0007).
 
-A Sign-in Code is the only way in: 6 digits, valid 10 minutes, at most one
-every 60 seconds, e-mailed without a link. These tests read the files the
-Supabase CLI reads; `supabase start` and the Mailpit check are by hand.
+Signing in is a password, then a TOTP code from an authenticator app; the
+code that finishes a Register and the one for a forgotten password are
+e-mailed: 6 digits, valid 10 minutes, at most one every 60 seconds, without
+a link. These tests read the files the Supabase CLI reads; `supabase start`
+and the Mailpit check are by hand.
 """
 
 import re
@@ -67,10 +69,23 @@ def test_every_other_way_in_stays_off():
         assert provider["enabled"] is False, name
     assert AUTH.get("web3", {}).get("solana", {}).get("enabled", False) is False
     assert AUTH.get("passkey", {}).get("enabled", False) is False
-    for factor in ("totp", "phone", "web_authn"):
+    for factor in ("phone", "web_authn"):
         settings = AUTH["mfa"].get(factor, {})
         assert settings.get("enroll_enabled", False) is False, factor
         assert settings.get("verify_enabled", False) is False, factor
+
+
+def test_the_second_factor_is_totp():
+    # SR-03, ADR 0007.
+    totp = AUTH["mfa"]["totp"]
+    assert totp["enroll_enabled"] is True
+    assert totp["verify_enabled"] is True
+    # The cutover wizard's fallback pushes the same values.
+    wizard = (REPO / "scripts" / "hosted-cutover.sh").read_text(encoding="utf-8")
+    assert '"mfa_totp_enroll_enabled": auth["mfa"]["totp"]["enroll_enabled"]' in wizard
+    assert '"mfa_totp_verify_enabled": auth["mfa"]["totp"]["verify_enabled"]' in wizard
+    assert '"mfa_phone_enroll_enabled": False' in wizard
+    assert '"mfa_web_authn_enroll_enabled": False' in wizard
 
 
 def _secrets(table, path=""):

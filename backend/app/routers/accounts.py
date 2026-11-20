@@ -1,4 +1,4 @@
-"""Administrator-only account management (FR-02)."""
+"""Administrator-only account management (FR-02, SR-03)."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -16,11 +16,13 @@ from app.models.account import (
     Deactivate,
     PendingCount,
     Reactivate,
+    SecondFactorReset,
 )
 from app.models.auth import AccountStatus, UserPayload
 from app.services import accounts
 from app.services.accounts import AccountConflict, AccountNotFound
 from app.services.errors import Invalid
+from app.supabase_auth import AuthUnavailable, SignInRefused, SupabaseAuth, get_supabase_auth
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -111,4 +113,30 @@ async def reactivate(
     with _account_errors_as_http():
         return await accounts.reactivate(
             db, audit_context_for(request, admin), account_id, body.reason, body.role
+        )
+
+
+@router.post("/{account_id}/second-factor/reset", response_model=AccountRead)
+async def reset_second_factor(
+    account_id: UUID,
+    body: SecondFactorReset,
+    request: Request,
+    db: asyncpg.Connection = Depends(get_db),
+    admin: UserPayload = Depends(admin_only),
+    supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
+):
+    """A lost authenticator: the Account enrols a new one at its next sign-in."""
+
+    async def remove_factors(user_id: UUID) -> None:
+        try:
+            await supabase_auth.delete_factors(str(user_id))
+        except (AuthUnavailable, SignInRefused):
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                {"code": "auth_unavailable", "message": "Supabase Auth is unavailable. Try again later."},
+            )
+
+    with _account_errors_as_http():
+        return await accounts.reset_second_factor(
+            db, audit_context_for(request, admin), account_id, body.reason, remove_factors
         )

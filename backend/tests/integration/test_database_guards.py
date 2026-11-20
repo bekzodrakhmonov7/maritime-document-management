@@ -239,6 +239,16 @@ async def test_the_database_calls_the_daily_check_every_5_minutes(owner_db):
     assert (job["schedule"], job["active"]) == ("*/5 * * * *", True)
 
 
+async def test_expired_sign_in_challenges_and_their_tokens_are_deleted_every_5_minutes(owner_db):
+    # SR-03, ADR 0007: the aal1 token a challenge keeps does not outlive it.
+    job = await owner_db.fetchrow(
+        "SELECT schedule, command, active FROM cron.job WHERE jobname = 'sign-in-challenge-cleanup'"
+    )
+    assert job is not None
+    assert (job["schedule"], job["active"]) == ("*/5 * * * *", True)
+    assert "DELETE FROM public.sign_in_challenge WHERE expires_at < now()" in job["command"]
+
+
 # --- SR-14: the Audit Log is append-only for the application -----------------------
 
 

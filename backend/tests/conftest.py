@@ -52,12 +52,17 @@ class _NeverBreached:
 
 
 def make_token(
-    user_id: UUID, email: str = "someone@example.com", session_id: UUID | None = None
+    user_id: UUID,
+    email: str = "someone@example.com",
+    session_id: UUID | None = None,
+    aal: str | None = "aal2",
 ) -> str:
     """A Supabase-style access token. Its role claim is never trusted.
 
     Its session is the one `make_account` marked as verified (the session id
-    is the Account id), unless another `session_id` is given."""
+    is the Account id), unless another `session_id` is given. It passed the
+    second factor (`aal2`) unless another `aal` is given; None leaves the
+    claim out (SR-03)."""
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
@@ -68,6 +73,8 @@ def make_token(
         "iat": now,
         "exp": now + timedelta(hours=1),
     }
+    if aal is not None:
+        payload["aal"] = aal
     return jwt.encode(payload, settings.supabase_jwt_secret, algorithm="HS256")
 
 
@@ -117,7 +124,7 @@ async def make_account(owner_db):
             full_name,
         )
         created.append(user_id)
-        # As if the person had signed in with password and code (ADR-0005).
+        # As if the person had signed in with password and authenticator code.
         await owner_db.execute(
             "INSERT INTO public.verified_session (session_id, user_id) VALUES ($1, $1)",
             user_id,

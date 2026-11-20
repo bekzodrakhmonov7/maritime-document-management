@@ -4,6 +4,8 @@ import assert from 'node:assert/strict'
 import {
   RESEND_WAIT_SECONDS,
   codeErrorMessage,
+  groupSecret,
+  qrCodeSource,
   isCompleteCode,
   normaliseCode,
   passwordProblem,
@@ -16,7 +18,7 @@ test('a typed or pasted code keeps only its first 6 digits', () => {
   assert.equal(normaliseCode('abc'), '')
 })
 
-test('only 6 digits make a complete Sign-in Code', () => {
+test('only 6 digits make a complete code', () => {
   assert.equal(isCompleteCode('123456'), true)
   assert.equal(isCompleteCode('12345'), false)
   assert.equal(isCompleteCode('12345a'), false)
@@ -66,4 +68,22 @@ test('a new password is 12 to 72 characters, typed the same twice', () => {
   assert.match(passwordProblem('x'.repeat(73), 'x'.repeat(73)) ?? '', /at most 72/)
   assert.match(passwordProblem('long-enough-1', 'long-enough-2') ?? '', /not the same/)
   assert.equal(passwordProblem('long-enough-1', 'long-enough-1'), null)
+})
+
+test('a wrong authenticator code says so, without offering an e-mail', () => {
+  const message = codeErrorMessage({ status: 403, code: 'totp_invalid', message: 'x' })
+  assert.match(message, /authenticator/)
+  assert.doesNotMatch(message, /send a new code/)
+})
+
+test('the QR code SVG becomes an image source', () => {
+  const src = qrCodeSource('<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>')
+  assert.ok(src.startsWith('data:image/svg+xml;charset=utf-8,'))
+  assert.equal(decodeURIComponent(src.split(',')[1]), '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>')
+})
+
+test('the key is shown in groups of four', () => {
+  assert.equal(groupSecret('A535CNTD555SWDNGVB3NUO3BEQYJ6QXB'), 'A535 CNTD 555S WDNG VB3N UO3B EQYJ 6QXB')
+  assert.equal(groupSecret('ABCDE'), 'ABCD E')
+  assert.equal(groupSecret(''), '')
 })

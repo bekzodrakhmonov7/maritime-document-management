@@ -321,7 +321,7 @@ auth_smtp_values() {
   fi
   ask_secret SUPABASE_AUTH_SMTP_PASSWORD "Resend API key for Supabase Auth SMTP:"
   write_env SUPABASE_AUTH_SMTP_PASSWORD "$SUPABASE_AUTH_SMTP_PASSWORD"
-  ask MAIL_FROM "Sender of the sign-in codes (e.g. alerts@<domain>, the MAIL_FROM on Vercel):"
+  ask MAIL_FROM "Sender of the Register and reset codes (e.g. alerts@<domain>, the MAIL_FROM on Vercel):"
   write_env MAIL_FROM "$MAIL_FROM"
 }
 
@@ -364,6 +364,13 @@ body = {
     "smtp_sender_name": smtp["sender_name"],
     "rate_limit_email_sent": auth["rate_limit"]["email_sent"],
     "password_min_length": auth["minimum_password_length"],
+    # The second factor is TOTP only (SR-03, ADR 0007).
+    "mfa_totp_enroll_enabled": auth["mfa"]["totp"]["enroll_enabled"],
+    "mfa_totp_verify_enabled": auth["mfa"]["totp"]["verify_enabled"],
+    "mfa_phone_enroll_enabled": False,
+    "mfa_phone_verify_enabled": False,
+    "mfa_web_authn_enroll_enabled": False,
+    "mfa_web_authn_verify_enabled": False,
 }
 for name, template in email["template"].items():
     body[f"mailer_subjects_{name}"] = template["subject"]
@@ -417,7 +424,7 @@ push_auth_config() {
     $SUPABASE config push --workdir "$dir" --project-ref "$ref" \
     || warn "config push failed (see above)."
   rm -rf "$dir"
-  if ! confirm "Did the diff carry the SMTP, OTP and template fields (or were they already equal)?"; then
+  if ! confirm "Did the diff carry the SMTP, OTP, MFA (TOTP) and template fields (or were they already equal)?"; then
     say "Setting them through the Management API instead."
     patch_auth_config "$ref"
   fi
@@ -431,7 +438,7 @@ push_auth_config() {
 # that were cut over already: bash scripts/hosted-cutover.sh auth-config
 run_auth_config() {
 TOTAL_STAGES=2
-banner "Push the Auth config: sign in only by an e-mailed code"
+banner "Push the Auth config: e-mailed codes, TOTP second factor"
 say "Push the migrations first (db push to staging, then production), then this."
 
 stage "Staging: push the Auth config"
@@ -636,8 +643,8 @@ note "  (or the narrower https://*-<team>.vercel.app/**)."
 pause "Both saved? Press Enter to continue"
 
 # ── 12 ────────────────────────────────────────────────────────────────────
-stage "Staging: push the Auth config (sign in only by code)"
-say "Supabase Auth sends the 6-digit Sign-in Code through Resend's SMTP, with the"
+stage "Staging: push the Auth config (e-mailed codes, TOTP)"
+say "Supabase Auth sends the 6-digit Register and reset codes through Resend's SMTP, with the"
 say "code-only templates from supabase/templates (ADR-0004)."
 auth_smtp_values
 push_auth_config "$STAGING_REF" "$PREVIEW_URL" "https://*.vercel.app/**"
@@ -691,7 +698,7 @@ note "  and open the Version. Check that no e-mail reaches anyone but you."
 pause "Preview works end to end? Press Enter to continue"
 
 # ── 15 ────────────────────────────────────────────────────────────────────
-stage "Production: push the Auth config (sign in only by code)"
+stage "Production: push the Auth config (e-mailed codes, TOTP)"
 say "Staging signs in by code, so production gets the same Auth config."
 push_auth_config "$PROD_REF" "https://$DOMAIN" "https://$DOMAIN/**"
 

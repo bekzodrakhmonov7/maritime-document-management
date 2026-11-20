@@ -22,6 +22,7 @@ def valid_token() -> str:
         "email": "test@example.com",
         "role": "admin",
         "aud": "authenticated",
+        "aal": "aal2",
         "iat": now,
         "exp": now + timedelta(hours=1),
     }
@@ -36,6 +37,7 @@ def expired_token() -> str:
         "email": "test@example.com",
         "role": "admin",
         "aud": "authenticated",
+        "aal": "aal2",
         "iat": now - timedelta(hours=2),
         "exp": now - timedelta(hours=1),
     }
@@ -155,6 +157,7 @@ def _build_es256_token(private_key, *, sub: str, aud: str = "authenticated", ema
         "email": email,
         "role": "authenticated",
         "aud": aud,
+        "aal": "aal2",
         "iat": now,
         "exp": now + exp_delta,
     }
@@ -228,6 +231,7 @@ async def test_unsupported_alg_rejected() -> None:
         "email": "none@test.com",
         "role": "authenticated",
         "aud": "authenticated",
+        "aal": "aal2",
         "iat": now,
         "exp": now + timedelta(hours=1),
     }
@@ -302,3 +306,31 @@ async def test_a_session_that_skipped_a_sign_in_step_is_refused(valid_token: str
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail["code"] == "session_not_verified"
+
+
+def _token_with_aal(aal: str | None) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(uuid4()),
+        "aud": "authenticated",
+        "iat": now,
+        "exp": now + timedelta(hours=1),
+    }
+    if aal is not None:
+        payload["aal"] = aal
+    return jwt.encode(payload, settings.supabase_jwt_secret, algorithm="HS256")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("aal", ["aal1", None, "aal3", ""])
+async def test_a_session_without_the_second_factor_is_refused(aal) -> None:
+    # SR-03: only aal2 (a verified TOTP code) gets in; no `aal` counts as aal1.
+    with pytest.raises(HTTPException) as exc_info:
+        await get_signed_in_user(
+            DummyRequest(_token_with_aal(aal)), _RowConn(_row("active", "manager"))
+        )
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["code"] == "second_factor_missing"
+    assert exc_info.value.reason == "second_factor_missing"
+    assert exc_info.value.email == "a@example.com"
