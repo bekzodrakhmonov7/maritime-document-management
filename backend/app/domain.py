@@ -13,7 +13,9 @@ from zoneinfo import ZoneInfo
 
 AssignmentState = Literal["upcoming", "under_way", "finished"]
 Effect = Literal["add", "remove"]
-ExpiryStatus = Literal["unexpired", "expiring_soon", "expired", "no_expiry_date"]
+ExpiryStatus = Literal[
+    "unexpired", "expiring_soon", "expired", "no_expiry_date", "expiry_not_stated"
+]
 ReviewState = Literal["not_reviewed", "accepted", "rejected"]
 
 
@@ -102,12 +104,16 @@ def is_verified(
     return latest is not None and latest["result"] == "confirmed"
 
 
-def expiry_status(expiry: date | None, today: date, largest_step: int) -> ExpiryStatus:
+def expiry_status(
+    expiry: date | None, today: date, largest_step: int, *, expires: bool
+) -> ExpiryStatus:
     """Where an expiry date stands today (company time zone). A document is
     valid through its expiry date and expired from the next day; it is
-    expiring soon from the largest Alert Step down to the expiry day itself."""
+    expiring soon from the largest Alert Step down to the expiry day itself.
+    With no date it is expiry not stated when its type expires (ADR-0006),
+    otherwise no expiry date."""
     if expiry is None:
-        return "no_expiry_date"
+        return "expiry_not_stated" if expires else "no_expiry_date"
     days_left = (expiry - today).days
     if days_left < 0:
         return "expired"
@@ -124,22 +130,38 @@ class EffectiveExpiry:
     date (which Alerts keep following). `capped_by` names the certificate's
     Document Type when its date is the earlier one; `missing_certificate`
     names it when an Endorsement has no certificate behind it, which counts as
-    expired."""
+    expired. `certificate_not_stated` names the certificate when its Current
+    Version has no expiry date (ADR-0006)."""
 
     expiry: date | None
     own_expiry: date | None
     capped_by: str | None = None
     missing_certificate: str | None = None
+    # The Document Type expires: with no date, the status is expiry not stated.
+    expires: bool = False
+    certificate_not_stated: str | None = None
 
     @property
     def certificate_missing(self) -> bool:
         return self.missing_certificate is not None
 
+    @property
+    def own_not_stated(self) -> bool:
+        return self.expires and self.own_expiry is None
+
+    @property
+    def not_stated(self) -> bool:
+        """Some date it depends on is Expiry Not Stated (ADR-0006)."""
+        return self.own_not_stated or self.certificate_not_stated is not None
+
     def status(self, today: date, largest_step: int) -> ExpiryStatus:
-        """The Expiry Status against the Effective Expiry."""
+        """The Expiry Status against the Effective Expiry. When a date it
+        depends on is not stated, it is expiry not stated unless the known
+        date is already expired or expiring soon (bad news wins, ADR-0006)."""
         if self.certificate_missing:
             return "expired"
-        return expiry_status(self.expiry, today, largest_step)
+        status = expiry_status(self.expiry, today, largest_step, expires=self.expires)
+        return "expiry_not_stated" if self.not_stated and status == "unexpired" else status
 
 
 def effective_expiry(
@@ -148,25 +170,30 @@ def effective_expiry(
     """A Document's Effective Expiry, or None when it has no Current Version.
 
     For an Endorsement (`depends_on_id` set) it is the earlier of its own and
-    its certificate's Current Version expiry date; a NULL own expiry takes the
-    certificate's. The certificate's Current Version is already the newest
-    one not rejected (awaiting review counts); with none, the Endorsement is
-    treated as expired. Any other document keeps its own expiry date. There
-    is no upload check: an Endorsement may expire after its certificate.
+    its certificate's Current Version expiry date, ignoring a date not stated
+    (both types expire, so a NULL on either side is Expiry Not Stated). The
+    certificate's Current Version is already the newest one not rejected
+    (awaiting review counts); with none, the Endorsement is treated as
+    expired. Any other document keeps its own expiry date. There is no
+    upload check: an Endorsement may expire after its certificate.
     """
     current = document["current_version"]
     if current is None:
         return None
     own = current["expiry_date"]
+    expires = bool(document.get("expires"))
     if document.get("depends_on_id") is None:
-        return EffectiveExpiry(expiry=own, own_expiry=own)
+        return EffectiveExpiry(expiry=own, own_expiry=own, expires=expires)
     certificate = document["certificate_type_name"]
     if certificate_current_version is None:
-        return EffectiveExpiry(expiry=None, own_expiry=own, missing_certificate=certificate)
+        return EffectiveExpiry(
+            expiry=None, own_expiry=own, missing_certificate=certificate, expires=True
+        )
     cap = certificate_current_version["expiry_date"]
+    not_stated = certificate if cap is None else None
     if cap is not None and (own is None or cap < own):
-        return EffectiveExpiry(expiry=cap, own_expiry=own, capped_by=certificate)
-    return EffectiveExpiry(expiry=own, own_expiry=own)
+        return EffectiveExpiry(expiry=cap, own_expiry=own, capped_by=certificate, expires=True)
+    return EffectiveExpiry(expiry=own, own_expiry=own, expires=True, certificate_not_stated=not_stated)
 
 
 def latest_allowed_expiry(issue: date, max_validity_months: int) -> date:
@@ -177,12 +204,25 @@ def latest_allowed_expiry(issue: date, max_validity_months: int) -> date:
 
 
 def version_dates_problem(
-    issue: date, expiry: date | None, *, expires: bool, max_validity_months: int | None
+    issue: date,
+    expiry: date | None,
+    *,
+    expires: bool,
+    max_validity_months: int | None,
+    expiry_not_stated: bool = False,
 ) -> str | None:
     """Why a new Version's dates break its Document Type's rules, or None.
-    Rules are checked only when a Version is created (T2)."""
-    if expires and expiry is None:
-        return "This document type expires, so the expiry date is required."
+    Rules are checked only when a Version is created (T2). `expiry_not_stated`
+    is the form's tick: an expiring type takes no date only with it (ADR-0006)."""
+    if expiry_not_stated and not expires:
+        return "This document type doesn't expire, so 'Expiry not stated' doesn't apply."
+    if expiry_not_stated and expiry is not None:
+        return "Enter the expiry date or tick 'Expiry not stated on the document', one or the other."
+    if expires and expiry is None and not expiry_not_stated:
+        return (
+            "This document type expires: enter the expiry date, "
+            "or tick 'Expiry not stated on the document'."
+        )
     if not expires and expiry is not None:
         return "This document type doesn't expire, so it takes no expiry date."
     if expiry is None:
@@ -356,10 +396,14 @@ class RequirementRows:
 
 # --- Coverage, missing documents and readiness (FR-17, FR-18, FR-19; T3, T4) --------------
 
-CoverageClass = Literal["missing", "runs_out_before_start", "runs_out_during", "covers_all"]
-ReadinessBucket = Literal["before_joining", "renewable_at_sea", "not_reviewed", "covers_all"]
+CoverageClass = Literal[
+    "missing", "runs_out_before_start", "runs_out_during", "expiry_not_stated", "covers_all"
+]
+ReadinessBucket = Literal[
+    "before_joining", "renewable_at_sea", "expiry_not_stated", "not_reviewed", "covers_all"
+]
 READINESS_BUCKETS: tuple[ReadinessBucket, ...] = (
-    "before_joining", "renewable_at_sea", "not_reviewed", "covers_all"
+    "before_joining", "renewable_at_sea", "expiry_not_stated", "not_reviewed", "covers_all"
 )
 
 
@@ -372,9 +416,11 @@ def coverage_class(
     """How one required document stands against an Assignment from `start` to
     `end`, by its Effective Expiry E (valid through E; the Current Version's
     own expiry date when `effective` isn't given). Runs out before start:
-    E < start; runs out during: start <= E <= end; covers all: E > end or no
-    expiry date. Covering all means outlasting the planned end date, because
-    Assignments often end later than planned. Only the expiry counts: not
+    E < start; runs out during: start <= E <= end; expiry not stated: no E
+    on an expiring type, or E > end while a date it depends on is not stated
+    (bad news wins, ADR-0006); covers all: E > end, or no expiry date on a
+    type that doesn't expire. Covering all means outlasting the planned end
+    date, because Assignments often end later than planned. Only the expiry counts: not
     the issue date, the review or the verification, so a Version awaiting
     review counts too. An Endorsement with no certificate runs out before
     start."""
@@ -384,7 +430,7 @@ def coverage_class(
         return "runs_out_before_start"
     expiry = current["expiry_date"] if effective is None else effective.expiry
     if expiry is None or expiry > end:
-        return "covers_all"
+        return "expiry_not_stated" if effective is not None and effective.not_stated else "covers_all"
     if expiry < start:
         return "runs_out_before_start"
     return "runs_out_during"
@@ -444,6 +490,10 @@ def _certificate_advice(
     when = "as soon as possible" if under_way else "before joining"
     if effective.certificate_missing:
         return f"Obtain {effective.missing_certificate} {when} (certificate missing)"
+    if bucket == "expiry_not_stated":
+        if effective.own_not_stated:
+            return None
+        return f"{effective.certificate_not_stated}: expiry not stated, check manually"
     if effective.capped_by is None or effective.expiry is None:
         return None
     cap = effective.expiry.isoformat()
@@ -459,9 +509,13 @@ def _advice(
     renewable_at_sea: bool,
     under_way: bool,
     today: date,
+    issued: date | None,
 ) -> tuple[ReadinessBucket | None, str | None]:
-    """T4's suggestion rule: the action bucket (1 or 2, None: covers all) and its text."""
+    """T4's suggestion rule: the action bucket (None: covers all) and its text."""
     e = expiry.isoformat() if expiry else ""
+    if coverage == "expiry_not_stated":
+        # Never a calculated date (issue + maximum validity): a person decides (ADR-0006).
+        return "expiry_not_stated", f"Issued {issued}: expiry not stated, check manually"
     if coverage == "missing":
         return "before_joining", (
             "Obtain as soon as possible" if under_way else "Obtain before joining"
@@ -490,8 +544,9 @@ def readiness(
     """The advice-only readiness view of one upcoming or under-way Assignment.
 
     Each required document lands in (1) before joining, or (2) can be renewed
-    at sea, or neither; one awaiting review is also listed in (3) not
-    reviewed; (4) covers all holds everything in none of the first three.
+    at sea, or (3) expiry not stated, or none; one awaiting review is also
+    listed in (4) not reviewed; (5) covers all holds everything in none of
+    the first four.
     There is no overall verdict. `assignment` carries its dates and its own
     and the held Position (ids and names).
     """
@@ -508,7 +563,12 @@ def readiness(
         expiry = own if effective is None else effective.expiry
         coverage = coverage_class(start, end, current, effective)
         bucket, suggestion = _advice(
-            coverage, expiry, renewable_at_sea=doc.renewable_at_sea, under_way=under_way, today=today
+            coverage,
+            expiry,
+            renewable_at_sea=doc.renewable_at_sea,
+            under_way=under_way,
+            today=today,
+            issued=None if current is None else current.get("issue_date"),
         )
         if bucket is not None and effective is not None:
             suggestion = _certificate_advice(bucket, effective, under_way=under_way) or suggestion
@@ -552,10 +612,12 @@ def readiness(
 # --- The dashboard (FR-20, T10) --------------------------------------------------------
 
 DashboardQueue = Literal[
-    "missing", "expired", "expiring_soon", "waiting_for_review", "starting_soon", "in_order"
+    "missing", "expired", "expiring_soon", "expiry_not_stated", "waiting_for_review",
+    "starting_soon", "in_order",
 ]
 DASHBOARD_QUEUES: tuple[DashboardQueue, ...] = (
-    "missing", "expired", "expiring_soon", "waiting_for_review", "starting_soon", "in_order"
+    "missing", "expired", "expiring_soon", "expiry_not_stated", "waiting_for_review",
+    "starting_soon", "in_order",
 )
 DOCUMENT_QUEUES: tuple[DashboardQueue, ...] = tuple(q for q in DASHBOARD_QUEUES if q != "starting_soon")
 ActionHint = Literal["upload", "review", "open"]
@@ -563,12 +625,15 @@ _QUEUE_ACTIONS: dict[DashboardQueue, ActionHint] = {
     "missing": "upload",
     "expired": "upload",
     "expiring_soon": "upload",
+    "expiry_not_stated": "open",  # it may be fine: a person has to look
     "waiting_for_review": "review",
     "in_order": "open",
 }
-TotalsColumn = Literal["missing", "expired", "expiring_soon", "unexpired", "no_expiry_date"]
+TotalsColumn = Literal[
+    "missing", "expired", "expiring_soon", "unexpired", "expiry_not_stated", "no_expiry_date"
+]
 TOTALS_COLUMNS: tuple[TotalsColumn, ...] = (
-    "missing", "expired", "expiring_soon", "unexpired", "no_expiry_date"
+    "missing", "expired", "expiring_soon", "unexpired", "expiry_not_stated", "no_expiry_date"
 )
 Breakdown = Literal["vessel", "position", "document_type"]
 ASHORE_UNASSIGNED = "Ashore / Unassigned"
@@ -674,12 +739,14 @@ class DashboardFilters:
 
 def document_queues(line: DocumentLine) -> tuple[DashboardQueue, ...]:
     """The work queues a line is in: missing, or its Expiry Status's queue
-    (expired, expiring soon, or in order for unexpired and no expiry date),
+    (expired, expiring soon, expiry not stated, or in order for unexpired and
+    no expiry date),
     plus waiting for review when its Current Version has no Review yet."""
     if line.expiry_status is None:
         return ("missing",)
     expiry_queue: DashboardQueue = {
         "expired": "expired", "expiring_soon": "expiring_soon",
+        "expiry_not_stated": "expiry_not_stated",
     }.get(line.expiry_status, "in_order")
     if line.review_state == "not_reviewed":
         return expiry_queue, "waiting_for_review"

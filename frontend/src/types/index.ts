@@ -1,11 +1,12 @@
 /** Where a document's Current Version stands against its expiry date (S7). */
-export type ExpiryStatus = 'unexpired' | 'expiring_soon' | 'expired' | 'no_expiry_date'
+export type ExpiryStatus = 'unexpired' | 'expiring_soon' | 'expired' | 'no_expiry_date' | 'expiry_not_stated'
 
 export const EXPIRY_STATUS_LABELS: Record<ExpiryStatus, string> = {
   unexpired: 'Unexpired',
   expiring_soon: 'Expiring soon',
   expired: 'Expired',
   no_expiry_date: 'No expiry date',
+  expiry_not_stated: 'Expiry not stated — check manually',
 }
 
 export type AccountStatus = 'pending' | 'active' | 'deactivated'
@@ -152,12 +153,18 @@ export interface SeafarerRecord extends Seafarer {
 }
 
 /** How one required document stands against an Assignment's dates (T3). */
-export type CoverageClass = 'missing' | 'runs_out_before_start' | 'runs_out_during' | 'covers_all'
+export type CoverageClass =
+  | 'missing'
+  | 'runs_out_before_start'
+  | 'runs_out_during'
+  | 'expiry_not_stated'
+  | 'covers_all'
 
 export const COVERAGE_LABELS: Record<CoverageClass, string> = {
   missing: 'Missing',
   runs_out_before_start: 'Runs out before start',
   runs_out_during: 'Runs out during',
+  expiry_not_stated: EXPIRY_STATUS_LABELS.expiry_not_stated,
   covers_all: 'Covers all',
 }
 
@@ -182,7 +189,7 @@ export interface ReadinessEntry {
   verified: boolean
 }
 
-export type ReadinessBucket = 'before_joining' | 'renewable_at_sea' | 'not_reviewed' | 'covers_all'
+export type ReadinessBucket = 'before_joining' | 'renewable_at_sea' | 'expiry_not_stated' | 'not_reviewed' | 'covers_all'
 
 /** GET /api/assignments/{id}/readiness (T4 variant B). Advice only: it approves
  * and blocks nothing, and gives no overall verdict. */
@@ -290,6 +297,8 @@ export interface VersionDetails {
   /** ISO dates (YYYY-MM-DD); no expiry date for a type that doesn't expire. */
   issue_date: string
   expiry_date: string | null
+  /** The form's tick that lets an expiring type take no date; checked, never stored (ADR-0006). */
+  expiry_not_stated?: boolean
 }
 
 /** A Version's latest Review decides (S8). The Current Version is never rejected. */
@@ -527,6 +536,7 @@ export type DashboardQueue =
   | 'missing'
   | 'expired'
   | 'expiring_soon'
+  | 'expiry_not_stated'
   | 'waiting_for_review'
   | 'starting_soon'
   | 'in_order'
@@ -535,6 +545,7 @@ export const DASHBOARD_QUEUE_LABELS: Record<DashboardQueue, string> = {
   missing: 'Missing',
   expired: 'Expired',
   expiring_soon: 'Expiring soon',
+  expiry_not_stated: EXPIRY_STATUS_LABELS.expiry_not_stated,
   waiting_for_review: 'Waiting for review',
   starting_soon: 'Starting soon',
   in_order: 'In order',
@@ -601,7 +612,13 @@ export interface Dashboard {
   }
 }
 
-export type TotalsColumn = 'missing' | 'expired' | 'expiring_soon' | 'unexpired' | 'no_expiry_date'
+export type TotalsColumn =
+  | 'missing'
+  | 'expired'
+  | 'expiring_soon'
+  | 'unexpired'
+  | 'expiry_not_stated'
+  | 'no_expiry_date'
 export type Breakdown = 'vessel' | 'position' | 'document_type'
 
 /** GET /api/dashboard/totals: counts only, no names. */

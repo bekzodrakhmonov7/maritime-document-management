@@ -63,30 +63,34 @@ def test_versions_uploaded_at_the_same_time_are_ordered_by_id():
 
 
 def test_the_expiry_day_itself_is_expiring_soon_and_still_valid():
-    assert expiry_status(E, E, 90) == "expiring_soon"
+    assert expiry_status(E, E, 90, expires=True) == "expiring_soon"
 
 
 def test_the_day_after_expiry_is_expired():
-    assert expiry_status(E, date(2026, 7, 1), 90) == "expired"
+    assert expiry_status(E, date(2026, 7, 1), 90, expires=True) == "expired"
 
 
 def test_no_expiry_date():
-    assert expiry_status(None, E, 90) == "no_expiry_date"
+    assert expiry_status(None, E, 90, expires=False) == "no_expiry_date"
+
+
+def test_expiry_not_stated_for_an_empty_date_on_an_expiring_type():
+    assert expiry_status(None, E, 90, expires=True) == "expiry_not_stated"
 
 
 def test_expiring_soon_starts_at_the_largest_alert_step():
-    assert expiry_status(E, date(2026, 4, 1), 90) == "expiring_soon"  # 90 days left
-    assert expiry_status(E, date(2026, 3, 31), 90) == "unexpired"  # 91 days left
+    assert expiry_status(E, date(2026, 4, 1), 90, expires=True) == "expiring_soon"  # 90 days left
+    assert expiry_status(E, date(2026, 3, 31), 90, expires=True) == "unexpired"  # 91 days left
 
 
 def test_a_smaller_largest_step_moves_the_boundary():
-    assert expiry_status(E, date(2026, 4, 1), 30) == "unexpired"
-    assert expiry_status(E, date(2026, 5, 31), 30) == "expiring_soon"
+    assert expiry_status(E, date(2026, 4, 1), 30, expires=True) == "unexpired"
+    assert expiry_status(E, date(2026, 5, 31), 30, expires=True) == "expiring_soon"
 
 
 def test_with_only_the_expiry_day_as_a_step_only_that_day_is_expiring_soon():
-    assert expiry_status(E, E, 0) == "expiring_soon"
-    assert expiry_status(E, date(2026, 6, 29), 0) == "unexpired"
+    assert expiry_status(E, E, 0, expires=True) == "expiring_soon"
+    assert expiry_status(E, date(2026, 6, 29), 0, expires=True) == "unexpired"
 
 
 # --- Version date rules (T2) ---------------------------------------------------------------
@@ -105,8 +109,31 @@ def test_latest_allowed_expiry_adds_whole_months(issue, months, latest):
     assert latest_allowed_expiry(issue, months) == latest
 
 
-def test_an_expiring_type_needs_an_expiry_date():
-    assert "expiry date" in version_dates_problem(date(2026, 1, 1), None, expires=True, max_validity_months=None)
+def test_an_expiring_type_needs_an_expiry_date_or_the_tick():
+    problem = version_dates_problem(date(2026, 1, 1), None, expires=True, max_validity_months=None)
+    assert problem == (
+        "This document type expires: enter the expiry date, "
+        "or tick 'Expiry not stated on the document'."
+    )
+
+
+def test_an_expiring_type_takes_no_date_with_the_tick():
+    assert version_dates_problem(
+        date(2026, 1, 1), None, expires=True, max_validity_months=60, expiry_not_stated=True
+    ) is None
+
+
+def test_the_tick_and_a_date_are_refused_together():
+    assert "one or the other" in version_dates_problem(
+        date(2026, 1, 1), date(2027, 1, 1), expires=True, max_validity_months=None,
+        expiry_not_stated=True,
+    )
+
+
+def test_the_tick_is_refused_on_a_type_that_doesnt_expire():
+    assert "doesn't expire" in version_dates_problem(
+        date(2026, 1, 1), None, expires=False, max_validity_months=None, expiry_not_stated=True
+    )
 
 
 def test_a_non_expiring_type_takes_no_expiry_date():

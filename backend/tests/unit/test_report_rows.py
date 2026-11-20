@@ -6,7 +6,10 @@ import csv
 import io
 from datetime import date, datetime, timezone
 
-from app.domain import RequiredDocument, readiness
+import re
+import zlib
+
+from app.domain import EffectiveExpiry, RequiredDocument, readiness
 from app.reports import CSV_COLUMNS, ReportSection, StatusReport, csv_rows, to_csv
 
 TODAY = date(2027, 2, 1)
@@ -162,7 +165,7 @@ def test_both_kinds_render_to_a_pdf_whatever_the_names():
 def test_the_vessel_totals_sum_the_sections_counters():
     boris = _section(_assignment("Boris"), _doc("CoC", 2, missing=True))
     assert _report(ANNA, boris, kind="vessel").totals == {
-        "before_joining": 3, "renewable_at_sea": 1, "not_reviewed": 1,
+        "before_joining": 3, "renewable_at_sea": 1, "expiry_not_stated": 0, "not_reviewed": 1,
     }
 
 
@@ -170,3 +173,45 @@ def test_the_pdf_writes_names_its_fonts_lack_without_accents():
     from app.reports import _latin1
 
     assert _latin1("Łukasz Šimić Müller 李") == "Lukasz Simic Müller ?"
+
+
+# --- Expiry Not Stated (ADR-0006) ------------------------------------------------------------
+
+UNSTATED = RequiredDocument(
+    document_type_id=5,
+    name="Survival Craft",
+    renewable_at_sea=False,
+    document_id=75,
+    current_version={"id": 1, "issue_date": date(2025, 4, 2), "expiry_date": None},
+    review_state="accepted",
+    effective=EffectiveExpiry(expiry=None, own_expiry=None, expires=True),
+)
+
+
+def _pdf_text(pdf: bytes) -> str:
+    streams = re.findall(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.S)
+    return b"".join(zlib.decompress(s) for s in streams).decode("latin-1")
+
+
+def test_expiry_not_stated_has_its_own_csv_bucket_and_coverage():
+    [row] = csv_rows(_report(_section(_assignment(), UNSTATED)))
+    assert (row["bucket"], row["coverage"], row["expiry"], row["suggestion"]) == (
+        "Expiry not stated — check manually",
+        "expiry_not_stated",
+        "",
+        "Issued 2025-04-02: expiry not stated, check manually",
+    )
+
+
+def test_expiry_not_stated_is_counted_and_titled_in_both_pdfs():
+    from app.reports import to_pdf
+
+    section = _section(_assignment(), UNSTATED)
+    vessel = _report(section, _section(_assignment("Boris"), UNSTATED), kind="vessel")
+    assert vessel.totals["expiry_not_stated"] == 2
+    for report, counter in ((_report(section), "1"), (vessel, "2")):
+        text = _pdf_text(to_pdf(report))
+        # The PDF escapes parentheses in its text.
+        assert r"Expiry not stated - check manually \(1\)" in text
+        assert f"Expiry not stated: {counter}" in text
+        assert "[Expiry not stated - check manually]" in text

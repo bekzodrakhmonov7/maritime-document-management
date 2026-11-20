@@ -127,6 +127,22 @@ async def test_counts_follow_the_filters(client, world):
     assert board["counts"]["in_order"] == 0
 
 
+async def test_expiry_not_stated_has_its_own_queue_and_totals_column(client, world):
+    await _uploaded(client, world["admin"], world["anna"], world["passport"],
+                    expiry_date=None, expiry_not_stated="true")
+    board = await _dashboard(client, world["admin"])
+    assert board["counts"]["expiry_not_stated"] == 1
+    assert board["counts"]["waiting_for_review"] == 1
+    assert board["counts"]["in_order"] == 0
+    [entry] = board["queues"]["expiry_not_stated"][0]["entries"]
+    assert entry["action"] == "open"
+
+    res = await client.get("/api/dashboard/totals", headers=world["manager"])
+    assert res.status_code == 200
+    assert res.json()["totals"]["expiry_not_stated"] == 1
+    assert res.json()["totals"]["no_expiry_date"] == 0
+
+
 async def test_inactive_seafarers_only_with_show_inactive(client, world, owner_db):
     await owner_db.execute(
         "UPDATE public.seafarer SET inactive_since = now(), inactive_reason = 'Left' WHERE id = $1",
@@ -154,7 +170,9 @@ async def test_starting_soon_lists_upcoming_assignments_within_the_horizon(clien
     [entry] = board["queues"]["starting_soon"]
     assert entry["assignment_id"] == soon
     assert entry["vessel_name"] == "Alpha"
-    assert entry["counters"] == {"before_joining": 2, "renewable_at_sea": 0, "not_reviewed": 0}
+    assert entry["counters"] == {
+        "before_joining": 2, "renewable_at_sea": 0, "expiry_not_stated": 0, "not_reviewed": 0
+    }
     assert board["counts"]["starting_soon"] == 1
 
 
@@ -189,7 +207,8 @@ async def test_the_manager_response_contains_no_names(client, world):
     assert res.status_code == 200
     body = res.json()
     assert body["totals"] == {
-        "missing": 5, "expired": 1, "expiring_soon": 0, "unexpired": 0, "no_expiry_date": 0,
+        "missing": 5, "expired": 1, "expiring_soon": 0, "unexpired": 0,
+        "expiry_not_stated": 0, "no_expiry_date": 0,
     }
     assert body["breakdown"] == "vessel"
     assert [r["name"] for r in body["rows"]] == ["Alpha", "Bravo", "Ashore / Unassigned"]

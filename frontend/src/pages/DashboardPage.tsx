@@ -30,6 +30,7 @@ const QUEUES: DashboardQueue[] = [
   'missing',
   'expired',
   'expiring_soon',
+  'expiry_not_stated',
   'waiting_for_review',
   'starting_soon',
   'in_order',
@@ -168,6 +169,7 @@ function StartingSoonRow({ entry, onAdd }: { entry: StartingSoonEntry; onAdd: (t
         <div className="flex flex-wrap gap-4">
           <Counter label="Before joining" value={entry.counters.before_joining} />
           <Counter label="Can be renewed at sea" value={entry.counters.renewable_at_sea} />
+          <Counter label={EXPIRY_STATUS_LABELS.expiry_not_stated} value={entry.counters.expiry_not_stated} />
           <Counter label="Not reviewed" value={entry.counters.not_reviewed} />
         </div>
       </div>
@@ -333,6 +335,7 @@ const TOTALS_COLUMNS: { key: TotalsColumn; label: string }[] = [
   { key: 'expired', label: EXPIRY_STATUS_LABELS.expired },
   { key: 'expiring_soon', label: EXPIRY_STATUS_LABELS.expiring_soon },
   { key: 'unexpired', label: EXPIRY_STATUS_LABELS.unexpired },
+  { key: 'expiry_not_stated', label: EXPIRY_STATUS_LABELS.expiry_not_stated },
   { key: 'no_expiry_date', label: EXPIRY_STATUS_LABELS.no_expiry_date },
 ]
 

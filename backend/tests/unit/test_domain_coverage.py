@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from app.domain import (
+    EffectiveExpiry,
     RequiredDocument,
     RequirementRows,
     RequirementException,
@@ -41,6 +42,18 @@ def _current(expiry: date | None) -> dict:
 )
 def test_each_coverage_class_at_its_boundary(expiry, expected):
     assert coverage_class(S, D, _current(expiry)) == expected
+
+
+@pytest.mark.parametrize("issued", [S - 100 * ONE_DAY, S, D, D + ONE_DAY])
+def test_an_expiring_type_with_no_date_is_expiry_not_stated(issued):
+    version = {"id": 1, "issue_date": issued, "expiry_date": None}
+    unstated = EffectiveExpiry(expiry=None, own_expiry=None, expires=True)
+    assert coverage_class(S, D, version, unstated) == "expiry_not_stated"
+
+
+def test_a_type_that_does_not_expire_with_no_date_covers_all():
+    no_date = EffectiveExpiry(expiry=None, own_expiry=None, expires=False)
+    assert coverage_class(S, D, _current(None), no_date) == "covers_all"
 
 
 def test_no_current_version_is_missing():
@@ -252,7 +265,7 @@ def test_covers_all_has_no_suggestion(expiry):
     entry = _only(view, "covers_all")
     assert entry["coverage"] == "covers_all"
     assert entry["suggestion"] is None
-    assert view["counters"] == {"before_joining": 0, "renewable_at_sea": 0, "not_reviewed": 0}
+    assert view["counters"] == {"before_joining": 0, "renewable_at_sea": 0, "expiry_not_stated": 0, "not_reviewed": 0}
 
 
 def test_an_awaiting_review_version_counts_toward_coverage():
@@ -271,7 +284,7 @@ def test_not_reviewed_overlaps_the_problem_buckets():
     )
     assert _buckets_holding(view, "CoC") == {"before_joining", "not_reviewed"}
     assert _buckets_holding(view, "Medical") == {"renewable_at_sea", "not_reviewed"}
-    assert view["counters"] == {"before_joining": 1, "renewable_at_sea": 1, "not_reviewed": 2}
+    assert view["counters"] == {"before_joining": 1, "renewable_at_sea": 1, "expiry_not_stated": 0, "not_reviewed": 2}
 
 
 def test_counters_count_the_buckets_and_entries_sort_by_name():
@@ -282,9 +295,44 @@ def test_counters_count_the_buckets_and_entries_sort_by_name():
         _doc("Basic Safety", D + ONE_DAY, review="not_reviewed"),
         _doc("Seaman's Book", None),
     )
-    assert view["counters"] == {"before_joining": 2, "renewable_at_sea": 1, "not_reviewed": 1}
+    assert view["counters"] == {"before_joining": 2, "renewable_at_sea": 1, "expiry_not_stated": 0, "not_reviewed": 1}
     assert [e["name"] for e in view["buckets"]["before_joining"]] == ["CoC", "Passport"]
     assert [e["name"] for e in view["buckets"]["covers_all"]] == ["Seaman's Book"]
+
+
+ISSUED = date(2025, 4, 2)
+
+
+def _unstated(name: str, review: str = "accepted") -> RequiredDocument:
+    return RequiredDocument(
+        document_type_id=abs(hash(name)) % 10_000,
+        name=name,
+        renewable_at_sea=False,
+        document_id=7,
+        current_version={"id": 1, "issue_date": ISSUED, "expiry_date": None},
+        review_state=review,
+        effective=EffectiveExpiry(expiry=None, own_expiry=None, expires=True),
+    )
+
+
+@pytest.mark.parametrize("today", [UPCOMING_TODAY, UNDER_WAY_TODAY])
+def test_expiry_not_stated_has_its_own_group_and_counter(today):
+    view = _view(_unstated("Proficiency in Survival Craft"), today=today)
+    entry = _only(view, "expiry_not_stated")
+    assert entry["coverage"] == "expiry_not_stated"
+    # The issue date only, never a calculated date (ADR-0006).
+    assert entry["suggestion"] == "Issued 2025-04-02: expiry not stated, check manually"
+    assert view["buckets"]["covers_all"] == []
+    assert view["counters"] == {
+        "before_joining": 0, "renewable_at_sea": 0, "expiry_not_stated": 1, "not_reviewed": 0
+    }
+
+
+def test_expiry_not_stated_awaiting_review_is_in_both_groups():
+    view = _view(_unstated("Proficiency in Survival Craft", review="not_reviewed"))
+    assert _buckets_holding(view, "Proficiency in Survival Craft") == {
+        "expiry_not_stated", "not_reviewed"
+    }
 
 
 def test_the_first_counter_is_labelled_act_now_when_under_way():
