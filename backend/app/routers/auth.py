@@ -16,6 +16,11 @@ Signing in is two steps, and no session leaves here before both are done:
 - `POST /api/auth/password/forgot` and `/password/reset` replace a forgotten
   password with an e-mailed code; every session of the Account then ends.
 
+A new password (register, reset) has at least 12 characters, is not on the
+common list and not known to Pwned Passwords (SR-02, `app.password_policy`,
+`app.pwned_passwords`); otherwise 422 `weak_password`, before Supabase Auth
+is asked. Signing in accepts any length, so older Accounts still get in.
+
 Wrong passwords, wrong codes and an unreachable Supabase Auth are recorded as
 *Login failed*.
 """
@@ -31,7 +36,9 @@ from app import audit
 from app.audit import AuditAction, audit_context_for, client_ip, request_audit_context
 from app.deps import get_account
 from app.deps import get_db
+from app import password_policy
 from app.models.auth import UserPayload
+from app.pwned_passwords import PwnedPasswords, get_pwned_passwords
 from app.services import sign_in
 from app.supabase_auth import (
     AuthUnavailable,
@@ -43,8 +50,14 @@ from app.supabase_auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 Email = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=320)]
-# bcrypt reads at most 72 bytes; Supabase Auth refuses longer passwords.
-Password = Annotated[str, StringConstraints(min_length=8, max_length=72)]
+# A new password (SR-02). bcrypt reads at most 72 bytes; Supabase Auth
+# refuses longer passwords.
+Password = Annotated[
+    str,
+    StringConstraints(
+        min_length=password_policy.MIN_LENGTH, max_length=password_policy.MAX_LENGTH
+    ),
+]
 Code = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[0-9]{6}$")]
 ChallengeToken = Annotated[str, StringConstraints(min_length=1, max_length=200)]
 
@@ -56,6 +69,7 @@ WRONG_PASSWORD = "invalid_credentials"
 NOT_CONFIRMED = "email_not_confirmed"
 ALREADY_REGISTERED = "user_already_exists"
 SEND_RATE_LIMITED = "over_email_send_rate_limit"
+WEAK_PASSWORD = "weak_password"
 
 
 class LoginRequest(BaseModel):
@@ -130,9 +144,13 @@ async def register(
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
+    pwned: PwnedPasswords = Depends(get_pwned_passwords),
 ) -> dict[str, str]:
     """Create the pending Account and e-mail the code that finishes it."""
     ip = client_ip(request)
+    weakness = await _weakness(body.password, pwned)
+    if weakness:
+        raise _weak(weakness)
     try:
         created = await supabase_auth.sign_up(body.email, body.password, body.full_name, ip)
     except SignInRefused as exc:
@@ -332,9 +350,15 @@ async def reset_password(
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
+    pwned: PwnedPasswords = Depends(get_pwned_passwords),
 ) -> dict[str, str]:
     """Check the code, set the new password and end every session."""
     ip = client_ip(request)
+    # Before the code is used, so it still works for a better password.
+    weakness = await _weakness(body.password, pwned)
+    if weakness:
+        await _record_reset(db, request, body.email, outcome="refused", reason=WEAK_PASSWORD)
+        raise _weak(weakness)
     try:
         session = await supabase_auth.verify_code(body.email, body.code, ip, type="recovery")
     except SignInRefused as exc:
@@ -383,6 +407,24 @@ async def _record_reset(
 
 
 # --- shared ---------------------------------------------------------------------
+
+
+async def _weakness(password: str, pwned: PwnedPasswords) -> str | None:
+    """Why a new password (already 12 to 72 characters) is refused, or None.
+    The common list first: a listed password never leaves the host."""
+    if password_policy.is_common(password):
+        return "This password is too common. Choose a less predictable one."
+    if await pwned.is_breached(password):
+        return (
+            "This password has appeared in a known data breach. Choose a different one."
+        )
+    return None
+
+
+def _weak(message: str) -> HTTPException:
+    return HTTPException(
+        status.HTTP_422_UNPROCESSABLE_CONTENT, {"code": WEAK_PASSWORD, "message": message}
+    )
 
 
 async def _sign_out_quietly(
