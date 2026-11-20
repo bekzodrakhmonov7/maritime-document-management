@@ -6,9 +6,11 @@ are done: the password (`/token?grant_type=password`), then a TOTP code
 from an authenticator app (`/factors`: enrol, challenge, verify), which
 raises the session to `aal2`. Registering is finished with the e-mailed
 confirmation code (`/signup`, `/verify`); a forgotten password is replaced
-with an e-mailed code (`/recover`). The frontend hands the final session to
-`setSession`. An administrator removes a lost authenticator through the
-admin API, with the service key.
+with an e-mailed code (`/recover`). The final session goes to the
+browser, which never calls Supabase Auth itself (SR-01): it renews the
+session through the API (`/token?grant_type=refresh_token`), and the API
+ends it at sign-out (`/logout`). An administrator removes a lost
+authenticator through the admin API, with the service key.
 """
 
 from typing import Any, Literal, Protocol
@@ -75,6 +77,11 @@ class SupabaseAuth(Protocol):
         self, access_token: str, scope: Literal["local", "global"], client_ip: str | None
     ) -> None:
         """End the session (`local`) or every session of its user (`global`)."""
+        ...
+
+    async def refresh(self, refresh_token: str, client_ip: str | None) -> dict[str, Any]:
+        """Renew a session with its refresh token (used once); answers the
+        same session (id and aal kept) with new tokens."""
         ...
 
     async def list_factors(self, access_token: str, client_ip: str | None) -> list[dict[str, Any]]:
@@ -157,6 +164,12 @@ class GoTrue:
         self, access_token: str, scope: Literal["local", "global"], client_ip: str | None
     ) -> None:
         await self._call("POST", f"/logout?scope={scope}", None, client_ip, access_token)
+
+    async def refresh(self, refresh_token: str, client_ip: str | None) -> dict[str, Any]:
+        return await self._call(
+            "POST", "/token?grant_type=refresh_token",
+            {"refresh_token": refresh_token}, client_ip,
+        )
 
     async def list_factors(self, access_token: str, client_ip: str | None) -> list[dict[str, Any]]:
         # GoTrue has no GET /factors: the user carries them (absent when none).

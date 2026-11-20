@@ -6,20 +6,22 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { supabase } from '../lib/supabase'
-import { apiFetch, onAccountSwitchedOff, onSessionRefused } from '../lib/api'
-import type { Session, User } from '@supabase/supabase-js'
+import { apiFetch, onAccountSwitchedOff, onSessionRefused, refreshSession } from '../lib/api'
+import {
+  forgetLegacySessions,
+  onSessionChange,
+  readSession,
+  secondsUntilRefresh,
+  sessionFromTokens,
+  writeSession,
+  type Session,
+  type SessionTokens,
+  type User,
+} from '../lib/session'
 import type { AccountStatus, Me, UserRole } from '../types'
 import type { SignInStep } from '../lib/signInCode'
 
 const SWITCHED_OFF_KEY = 'account-switched-off'
-
-/** The part of the sign-in proxy's response that `setSession` needs. */
-interface SessionTokens {
-  access_token: string
-  refresh_token: string
-}
-
 
 interface AuthContextValue {
   user: User | null
@@ -53,11 +55,15 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
+  const [session, setSession] = useState<Session | null>(() => {
+    forgetLegacySessions()
+    return readSession()
+  })
+  const user: User | null = session?.user ?? null
   const [role, setRole] = useState<UserRole | null>(null)
   const [status, setStatus] = useState<AccountStatus | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Until /api/me has answered for a kept session.
+  const [loading, setLoading] = useState(() => readSession() !== null)
   const [switchedOff, setSwitchedOff] = useState(
     () => sessionStorage.getItem(SWITCHED_OFF_KEY) === '1',
   )
@@ -73,15 +79,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Only this browser forgets the session; Supabase Auth is never called
+  // from here (SR-01).
   const endSession = useCallback(async () => {
-    await supabase.auth.signOut()
+    writeSession(null)
     setRole(null)
     setStatus(null)
   }, [])
 
   const signOut = useCallback(async () => {
-    // Records *logout* in the Audit Log. Best effort: signing out must work
-    // even when the API can't be reached.
+    // Records *logout* in the Audit Log and ends the session at Supabase
+    // Auth. Best effort: signing out must work even when the API can't be
+    // reached.
     try {
       await apiFetch('/api/auth/logout', { method: 'POST' })
     } catch {
@@ -109,34 +118,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (cancelled) return
-      setSession(data.session)
-      setUser(data.session?.user ?? null)
-      if (data.session) {
-        await fetchAccount()
-      }
-      if (!cancelled) {
-        setLoading(false)
-      }
-    })
+    const stored = readSession()
+    if (stored) {
+      // /api/me renews an expired session first (lib/api.ts).
+      void apiFetch<Me>('/api/me')
+        .then(
+          (me) => {
+            if (cancelled) return
+            setRole(me.role)
+            setStatus(me.status)
+          },
+          () => undefined,
+        )
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+    let userId = stored?.user.id ?? null
+    const stop = onSessionChange((s) => {
       setSession(s)
-      setUser(s?.user ?? null)
-      if (s) {
-        void fetchAccount()
-      } else {
+      if (!s) {
         setRole(null)
         setStatus(null)
+      } else if (s.user.id !== userId) {
+        void fetchAccount()
       }
+      userId = s?.user.id ?? null
     })
 
     return () => {
       cancelled = true
-      listener.subscription.unsubscribe()
+      stop()
     }
   }, [fetchAccount])
+
+  // Renew the session shortly before its access token expires.
+  useEffect(() => {
+    if (!session) return
+    const timer = setTimeout(
+      () => void refreshSession(),
+      secondsUntilRefresh(session) * 1000,
+    )
+    return () => clearTimeout(timer)
+  }, [session])
 
   const clearSwitchedOff = useCallback(() => {
     sessionStorage.removeItem(SWITCHED_OFF_KEY)
@@ -159,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await post('/api/auth/code', { challenge })
   }
 
-  // The session the proxy returns is handed to Supabase; the existing
+  // The session the proxy returns is kept in this browser; the existing
   // routing then sends a pending Account to the waiting page (FR-01).
   const verifyCode = async (email: string, challenge: string, code: string) => {
     const answer = await post<SessionTokens | SignInStep>('/api/auth/verify', {
@@ -168,13 +193,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       code,
     })
     if (!('access_token' in answer)) return answer
-    const tokens = answer
-    const { error } = await supabase.auth.setSession({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-    })
-    if (error) throw error
+    const started = sessionFromTokens(answer)
+    if (!started) throw new Error('Sign-in failed. Try again.')
     clearSwitchedOff()
+    writeSession(started)
     return null
   }
 

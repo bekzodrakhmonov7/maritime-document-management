@@ -1,4 +1,5 @@
 import { resolveApiBase } from './apiBase'
+import { readSession, secondsUntilRefresh, sessionFromTokens, writeSession } from './session'
 
 const API_BASE = resolveApiBase(import.meta.env.VITE_API_BASE)
 
@@ -53,12 +54,57 @@ async function toApiError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, text || `HTTP ${res.status}`)
 }
 
-/** A request with the session's token; a refusal becomes an ApiError. */
-async function authorizedFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const { supabase } = await import('./supabase')
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
+let refreshing: Promise<string | null> | null = null
 
+/**
+ * Renew the session through the API (SR-01: never at Supabase Auth). One
+ * renewal at a time: a refresh token works only once. Returns the new
+ * access token, or null. A refused renewal ends the session here; when the
+ * API can't be reached the session is kept for another try.
+ */
+export function refreshSession(): Promise<string | null> {
+  refreshing ??= (async () => {
+    const current = readSession()
+    if (!current) return null
+    let res: Response
+    try {
+      res = await fetch(`${API_BASE}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: current.refresh_token }),
+      })
+    } catch {
+      return null
+    }
+    if (res.ok) {
+      const renewed = sessionFromTokens(await res.json())
+      writeSession(renewed)
+      return renewed?.access_token ?? null
+    }
+    if (res.status === 401 || res.status === 403) {
+      const err = await toApiError(res)
+      if (err.code === 'account_deactivated') {
+        switchedOffListeners.forEach((listener) => listener())
+      }
+      // Another tab may have renewed it with the same refresh token first.
+      if (readSession()?.refresh_token === current.refresh_token) writeSession(null)
+    }
+    return null
+  })().finally(() => {
+    refreshing = null
+  })
+  return refreshing
+}
+
+/** The access token to send, renewed first when it is about to expire. */
+async function accessToken(): Promise<string | null> {
+  const session = readSession()
+  if (!session) return null
+  if (secondsUntilRefresh(session) > 0) return session.access_token
+  return (await refreshSession()) ?? readSession()?.access_token ?? null
+}
+
+function send(path: string, options: RequestInit, token: string | null): Promise<Response> {
   const headers = new Headers(options.headers)
   if (!(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
@@ -66,11 +112,18 @@ async function authorizedFetch(path: string, options: RequestInit = {}): Promise
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
+  return fetch(`${API_BASE}${path}`, { ...options, headers })
+}
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  })
+/** A request with the session's token; a refusal becomes an ApiError. A 401
+ * renews the session once and tries again. */
+async function authorizedFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const token = await accessToken()
+  let res = await send(path, options, token)
+  if (res.status === 401 && token) {
+    const renewed = await refreshSession()
+    if (renewed) res = await send(path, options, renewed)
+  }
 
   if (!res.ok) {
     const err = await toApiError(res)

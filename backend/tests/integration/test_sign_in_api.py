@@ -56,6 +56,8 @@ class FakeAuth:
         self.passwords_set: list[tuple[UUID, str]] = []
         # The aal1 tokens handed to the proxy.
         self.aal1_tokens: list[str] = []
+        # refresh token -> (e-mail, session id, aal) of a live session.
+        self.refresh_tokens: dict[str, tuple[str, UUID, str]] = {}
 
     def add(
         self,
@@ -73,12 +75,15 @@ class FakeAuth:
 
     def _session(self, email: str, session_id: UUID | None = None, aal: str = "aal1") -> dict:
         user_id = self.accounts[email.lower()]["id"]
-        token = make_token(user_id, email, session_id=session_id or uuid4(), aal=aal)
+        session_id = session_id or uuid4()
+        token = make_token(user_id, email, session_id=session_id, aal=aal)
         if aal == "aal1":
             self.aal1_tokens.append(token)
+        refresh_token = f"refresh-{uuid4().hex}"
+        self.refresh_tokens[refresh_token] = (email, session_id, aal)
         return {
             "access_token": token,
-            "refresh_token": "refresh",
+            "refresh_token": refresh_token,
             "token_type": "bearer",
             "expires_in": 3600,
             "user": {"id": str(user_id), "email": email.lower()},
@@ -155,6 +160,23 @@ class FakeAuth:
 
     async def sign_out(self, access_token, scope, client_ip):
         self.signed_out.append((access_token, scope))
+        # Local: the session's refresh tokens stop working.
+        session_id = UUID(self._claims(access_token)["session_id"])
+        self.refresh_tokens = {
+            t: s for t, s in self.refresh_tokens.items() if s[1] != session_id
+        }
+
+    async def refresh(self, refresh_token, client_ip):
+        self.calls.append(("refresh", client_ip))
+        self._check()
+        # As GoTrue: a refresh token is used once; the session keeps its id and aal.
+        found = self.refresh_tokens.pop(refresh_token, None)
+        if found is None:
+            raise SignInRefused(
+                400, "refresh_token_not_found", "Invalid Refresh Token: Refresh Token Not Found"
+            )
+        email, session_id, aal = found
+        return self._session(email, session_id=session_id, aal=aal)
 
     # --- MFA ---
 
@@ -1142,13 +1164,16 @@ async def test_auth_down_while_checking_the_code(client, owner_db, fake_auth, of
 # --- logout ---------------------------------------------------------------------
 
 
-async def test_logout_is_recorded_and_ends_the_session(client, owner_db, make_account):
+async def test_logout_is_recorded_and_ends_the_session(client, owner_db, fake_auth, make_account):
     email = _unique_email()
     officer_id = await make_account(role="crewing_officer", email=email)
+    headers = auth_header(officer_id)
 
-    res = await client.post("/api/auth/logout", headers=auth_header(officer_id))
+    res = await client.post("/api/auth/logout", headers=headers)
 
     assert res.status_code == 204
+    # Ended at Supabase Auth too, by the backend (SR-01): this session only.
+    assert fake_auth.signed_out == [(headers["Authorization"].split()[1], "local")]
     [rec] = await _records(owner_db, "logout", email)
     assert rec["actor_id"] == officer_id
     assert rec["actor_role"] == "crewing_officer"
@@ -1156,7 +1181,7 @@ async def test_logout_is_recorded_and_ends_the_session(client, owner_db, make_ac
     assert (await client.get("/api/me", headers=auth_header(officer_id))).status_code == 401
 
 
-async def test_a_pending_account_can_log_out(client, owner_db, make_account):
+async def test_a_pending_account_can_log_out(client, owner_db, fake_auth, make_account):
     email = _unique_email()
     pending = await make_account(status="pending", email=email)
 
@@ -1167,8 +1192,172 @@ async def test_a_pending_account_can_log_out(client, owner_db, make_account):
     assert await _records(owner_db, "access_refused", email) == []
 
 
-async def test_logout_needs_a_token(client):
+async def test_logout_needs_a_token(client, fake_auth):
     assert (await client.post("/api/auth/logout")).status_code == 401
+    assert fake_auth.signed_out == []
+
+
+async def test_logout_works_while_supabase_auth_is_down(client, owner_db, fake_auth, make_account):
+    email = _unique_email()
+    officer_id = await make_account(role="crewing_officer", email=email)
+
+    async def down(*_):
+        raise AuthUnavailable()
+
+    fake_auth.sign_out = down
+
+    res = await client.post("/api/auth/logout", headers=auth_header(officer_id))
+
+    assert res.status_code == 204
+    assert len(await _records(owner_db, "logout", email)) == 1
+    assert (await client.get("/api/me", headers=auth_header(officer_id))).status_code == 401
+
+
+# --- refresh: the web client renews its session through the API (SR-01) ---------
+
+
+async def _signed_in(client, email: str) -> dict:
+    """A session that passed the password and the authenticator code."""
+    res = await _verify(client, email, await _login(client, email))
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+async def _refresh(client, refresh_token: str):
+    return await client.post("/api/auth/refresh", json={"refresh_token": refresh_token})
+
+
+async def _refusals_for(owner_db, res) -> list[dict]:
+    rows = await owner_db.fetch(
+        "SELECT * FROM public.audit_log WHERE action = 'access_refused' AND request_id = $1",
+        res.headers["x-request-id"],
+    )
+    return [dict(r) for r in rows]
+
+
+def _session_id(session: dict) -> str:
+    return jwt.decode(session["access_token"], options={"verify_signature": False})["session_id"]
+
+
+async def test_a_verified_session_is_refreshed(client, owner_db, fake_auth, officer):
+    email, _ = officer
+    session = await _signed_in(client, email)
+
+    res = await _refresh(client, session["refresh_token"])
+
+    assert res.status_code == 200, res.text
+    renewed = res.json()
+    assert renewed["refresh_token"] != session["refresh_token"]
+    assert _session_id(renewed) == _session_id(session)
+    assert (await client.get("/api/me", headers=_bearer(renewed))).status_code == 200
+    assert await _refusals_for(owner_db, res) == []
+    # The old refresh token was used up.
+    assert (await _refresh(client, session["refresh_token"])).status_code == 401
+
+
+async def test_refreshing_a_password_only_session_is_refused_and_recorded(
+    client, owner_db, fake_auth, officer
+):
+    email, user_id = officer
+    aal1 = await fake_auth.password_grant(email, PASSWORD, None)
+
+    res = await _refresh(client, aal1["refresh_token"])
+
+    assert res.status_code == 401
+    assert res.json()["detail"]["code"] == "second_factor_missing"
+    assert "access_token" not in res.text
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "second_factor_missing"
+    assert rec["actor_id"] == user_id
+    assert rec["actor_email"] == email
+    # The session is no use to anyone: it is ended at Supabase Auth too.
+    assert [scope for _, scope in fake_auth.signed_out] == ["local"]
+
+
+async def test_refreshing_a_session_that_skipped_the_proxy_is_refused_and_recorded(
+    client, owner_db, fake_auth, officer
+):
+    email, user_id = officer
+    # aal2, but completed directly at Supabase Auth: never a verified session.
+    direct = fake_auth._session(email, aal="aal2")
+
+    res = await _refresh(client, direct["refresh_token"])
+
+    assert res.status_code == 401
+    assert res.json()["detail"]["code"] == "session_not_verified"
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "session_not_verified"
+    assert rec["actor_id"] == user_id
+
+
+async def test_an_unknown_refresh_token_is_refused_and_recorded(client, owner_db, fake_auth):
+    res = await _refresh(client, "made-up-refresh-token")
+
+    assert res.status_code == 401
+    assert res.json()["detail"]["code"] == "invalid_session"
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "invalid_session"
+    assert rec["actor_id"] is None
+    assert "made-up-refresh-token" not in str(rec)
+
+
+async def test_a_session_ended_by_logout_cannot_be_refreshed(
+    client, owner_db, fake_auth, officer
+):
+    email, _ = officer
+    session = await _signed_in(client, email)
+    assert (await client.post("/api/auth/logout", headers=_bearer(session))).status_code == 204
+
+    res = await _refresh(client, session["refresh_token"])
+
+    assert res.status_code == 401
+    assert len(await _refusals_for(owner_db, res)) == 1
+
+
+async def test_a_session_no_longer_verified_cannot_be_refreshed(
+    client, owner_db, fake_auth, officer
+):
+    """E.g. a password reset ended every session of the Account here."""
+    email, user_id = officer
+    session = await _signed_in(client, email)
+    await owner_db.execute("DELETE FROM public.verified_session WHERE user_id = $1", user_id)
+
+    res = await _refresh(client, session["refresh_token"])
+
+    assert res.status_code == 401
+    assert res.json()["detail"]["code"] == "session_not_verified"
+    assert len(await _refusals_for(owner_db, res)) == 1
+
+
+async def test_a_switched_off_account_cannot_refresh(client, owner_db, fake_auth, officer):
+    email, user_id = officer
+    session = await _signed_in(client, email)
+    await owner_db.execute("UPDATE public.users SET status = 'deactivated' WHERE id = $1", user_id)
+
+    res = await _refresh(client, session["refresh_token"])
+
+    assert res.status_code == 403
+    assert res.json()["detail"]["code"] == "account_deactivated"
+    [rec] = await _refusals_for(owner_db, res)
+    assert rec["reason"] == "account_deactivated"
+
+
+async def test_refresh_with_supabase_auth_down_is_503(client, fake_auth, officer):
+    email, _ = officer
+    session = await _signed_in(client, email)
+    fake_auth.down = True
+
+    res = await _refresh(client, session["refresh_token"])
+
+    assert res.status_code == 503
+    assert res.json()["detail"]["code"] == "auth_unavailable"
+
+
+async def test_a_refresh_token_is_never_echoed(client, fake_auth):
+    res = await client.post("/api/auth/refresh", json={"refresh_token": "x" * 5000})
+
+    assert res.status_code == 422
+    assert "xxxx" not in res.text
 
 
 # --- against a real local Supabase Auth and Mailpit -----------------------------
@@ -1324,6 +1513,39 @@ async def test_real_auth_sign_in_enrols_then_asks_for_the_code(client, owner_db,
         assert (await client.get("/api/me", headers=_bearer(totp.json()))).status_code == 401
         third = await client.post("/api/auth/login", json={"email": email, "password": PASSWORD})
         assert third.json()["step"] == "enrol"
+    finally:
+        await _remove(owner_db, user_id)
+
+
+@needs_auth
+async def test_real_auth_refresh_keeps_the_second_factor_and_logout_ends_it(client, owner_db):
+    """GoTrue keeps the session id and aal2 on a refresh; the backend's
+    logout ends the session at GoTrue, so its refresh token stops working."""
+    email = _unique_email()
+    user_id = await _real_user(email)
+    try:
+        first = await client.post("/api/auth/login", json={"email": email, "password": PASSWORD})
+        assert first.status_code == 200, first.text
+        signed_in = await _verify(
+            client, email, first.json()["challenge"], _totp(first.json()["secret"])
+        )
+        assert signed_in.status_code == 200, signed_in.text
+        session = signed_in.json()
+
+        res = await _refresh(client, session["refresh_token"])
+
+        assert res.status_code == 200, res.text
+        renewed = res.json()
+        claims = jwt.decode(renewed["access_token"], options={"verify_signature": False})
+        assert claims["aal"] == "aal2"
+        assert claims["session_id"] == _session_id(session)
+        assert (await client.get("/api/me", headers=_bearer(renewed))).status_code == 200
+
+        out = await client.post("/api/auth/logout", headers=_bearer(renewed))
+        assert out.status_code == 204
+        again = await _refresh(client, renewed["refresh_token"])
+        assert again.status_code == 401
+        assert len(await _refusals_for(owner_db, again)) == 1
     finally:
         await _remove(owner_db, user_id)
 
