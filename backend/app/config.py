@@ -1,8 +1,17 @@
 from pathlib import Path
+from urllib.parse import urlparse
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
+
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def is_local(url: str) -> bool:
+    """The URL points at this machine (the local Supabase stack)."""
+    return (urlparse(url).hostname or "").lower() in LOCAL_HOSTS
 
 
 class Settings(BaseSettings):
@@ -33,6 +42,14 @@ class Settings(BaseSettings):
     # Shared with the database's pg_cron job (Vault `cron_secret`). Empty means
     # POST /api/internal/daily-check always answers 404.
     cron_secret: str = ""
+
+    @field_validator("supabase_url")
+    @classmethod
+    def _https_unless_local(cls, url: str) -> str:
+        # Every connection leaving the host uses TLS (SR-11).
+        if urlparse(url).scheme != "https" and not is_local(url):
+            raise ValueError("must be an https:// URL (plain http only for a local host)")
+        return url
 
 
 settings = Settings()
