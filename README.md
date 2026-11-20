@@ -298,6 +298,17 @@ For production and for staging:
    from the e-mail, then run `make_admin` from your machine against its
    `DATABASE_URL`:
    `cd backend && DATABASE_URL='<that DATABASE_URL>' uv run python -m app.scripts.make_admin <email>`
+7. **Database CA certificate (SR-11).** The backend connects to a hosted
+   database only over TLS 1.2+ with the server's certificate and host name
+   checked against the Supabase root CA, which it reads from
+   `backend/app/certs/supabase-ca.crt`. Download it from Database settings →
+   SSL Configuration → *Download certificate* and **commit it** at that path
+   (it is public; `vercel.json` bundles it with `backend/app/**`). Without it
+   the API refuses to start against a hosted `DATABASE_URL`; there is no
+   fallback to unchecked TLS. Local URLs (`127.0.0.1`, `localhost`, `::1`)
+   need no certificate. Do this before step 6: `make_admin` needs it too.
+   `SUPABASE_URL` must be `https://` except for a local
+   host, or the backend refuses to start.
 
 ### DNS
 
