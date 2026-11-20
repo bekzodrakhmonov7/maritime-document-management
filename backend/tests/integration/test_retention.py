@@ -351,17 +351,34 @@ async def test_an_inactive_seafarer_is_removed_whole_and_their_audit_records_are
 # --- Audit Records -----------------------------------------------------------------------
 
 
+async def test_the_daily_check_leaves_old_audit_records_alone(w, owner_db):
+    old = await owner_db.fetchval(
+        "INSERT INTO public.audit_log (occurred_at, action) VALUES (now() - interval '8 years', "
+        "'settings_changed') RETURNING id"
+    )
+
+    await w.scheduled_run()
+
+    assert await w.exists("audit_log", old)
+    assert await w.records("audit_log") == []
+    run = await owner_db.fetchrow("SELECT * FROM public.daily_check_run")
+    assert run["retention_finished_at"] is not None
+    assert run["removed_audit_records"] is None
+
+
 async def test_old_audit_records_go_with_one_summary(w, owner_db):
     insert = """
         INSERT INTO public.audit_log (occurred_at, actor_role, action)
         VALUES (now() - $1::text::interval, 'administrator', 'settings_changed') RETURNING id
     """
+    # Old records other tests left behind go first.
+    await owner_db.fetchval("SELECT public.retention_remove_old_audit_records()")
     old = await owner_db.fetchval(insert, ago(7, 1))
     kept = await owner_db.fetchval(insert, ago(6, 360))
 
-    result = await w.scheduled_run()
+    # The owner's nightly job (SR-14), not the daily check, calls it.
+    assert await owner_db.fetchval("SELECT public.retention_remove_old_audit_records()") == 1
 
-    assert result.retention.audit_records == 1
     assert not await w.exists("audit_log", old)
     assert await w.exists("audit_log", kept)
     [summary] = await w.records("audit_log")
@@ -375,8 +392,7 @@ async def test_nothing_removed_records_nothing(w, owner_db):
 
     result = await w.scheduled_run()
 
-    assert (result.retention.versions, result.retention.seafarers,
-            result.retention.audit_records) == (0, 0, 0)
+    assert (result.retention.versions, result.retention.seafarers) == (0, 0)
     assert await w.records() == []
 
 
@@ -465,13 +481,17 @@ async def test_the_bypass_flag_cannot_be_set_outside_the_functions(w, owner_db, 
     assert await w.exists("audit_log", record)
 
 
-@pytest.mark.parametrize("role", ["anon", "authenticated", "service_role"])
-async def test_only_the_backend_may_call_the_removal_functions(w, owner_db, role):
-    for call in (
-        "public.retention_remove_replaced_versions()",
-        "public.retention_remove_inactive_seafarers()",
-        "public.retention_remove_old_audit_records()",
-    ):
+@pytest.mark.parametrize("role", ["anon", "authenticated", "service_role", "app_backend"])
+async def test_who_may_call_the_removal_functions(w, owner_db, role):
+    """The backend removes Versions and seafarers; only the owner removes Audit
+    Records (SR-14)."""
+    calls = ["public.retention_remove_old_audit_records()"]
+    if role != "app_backend":
+        calls += [
+            "public.retention_remove_replaced_versions()",
+            "public.retention_remove_inactive_seafarers()",
+        ]
+    for call in calls:
         with pytest.raises(asyncpg.InsufficientPrivilegeError):
             async with owner_db.transaction():
                 await owner_db.execute(f"SET LOCAL ROLE {role}")
@@ -495,5 +515,21 @@ async def test_the_settings_show_the_last_clean_up(w, owner_db, client):
     assert body["last_cleanup"]["local_date"] == result.local_date.isoformat()
     assert body["last_cleanup"]["versions"] == 1
     assert body["last_cleanup"]["seafarers"] == 1
-    assert body["last_cleanup"]["audit_records"] == 0
+    assert "audit_records" not in body["last_cleanup"]
     assert body["last_cleanup"]["finished_at"]
+
+
+async def test_the_settings_show_the_last_audit_record_removal(w, owner_db, client):
+    headers = auth_header(w.admin)
+    before = (await client.get("/api/settings", headers=headers)).json()["last_audit_cleanup"]
+
+    await owner_db.execute(
+        "INSERT INTO public.audit_log (occurred_at, action) VALUES (now() - interval '8 years', "
+        "'settings_changed')"
+    )
+    removed = await owner_db.fetchval("SELECT public.retention_remove_old_audit_records()")
+
+    after = (await client.get("/api/settings", headers=headers)).json()["last_audit_cleanup"]
+    assert after["rows"] == removed >= 1
+    assert after["removed_at"]
+    assert before is None or before["removed_at"] < after["removed_at"]

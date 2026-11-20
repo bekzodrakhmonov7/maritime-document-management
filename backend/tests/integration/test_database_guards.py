@@ -237,3 +237,47 @@ async def test_the_database_calls_the_daily_check_every_5_minutes(owner_db):
     )
     assert job is not None
     assert (job["schedule"], job["active"]) == ("*/5 * * * *", True)
+
+
+# --- SR-14: the Audit Log is append-only for the application -----------------------
+
+
+async def test_app_backend_holds_only_insert_and_select_on_the_audit_log(owner_db):
+    privileges = await owner_db.fetch(
+        """
+        SELECT privilege_type FROM information_schema.role_table_grants
+         WHERE grantee = 'app_backend' AND table_schema = 'public' AND table_name = 'audit_log'
+        """
+    )
+    assert {r["privilege_type"] for r in privileges} == {"INSERT", "SELECT"}
+
+
+async def test_the_audit_log_owner_is_a_separate_role(owner_db):
+    owner = await owner_db.fetchval(
+        "SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = 'audit_log'"
+    )
+    assert owner != "app_backend"
+    assert await owner_db.fetchval("SELECT pg_has_role('app_backend', $1, 'MEMBER')", owner) is False
+
+
+async def test_app_backend_cannot_run_the_audit_retention():
+    conn = await _app_conn()
+    try:
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await conn.execute("SELECT public.retention_remove_old_audit_records()")
+    finally:
+        await conn.close()
+
+
+async def test_the_owner_removes_old_audit_records_nightly(owner_db):
+    job = await owner_db.fetchrow(
+        "SELECT schedule, command, username, active FROM cron.job WHERE jobname = 'audit-retention'"
+    )
+    assert job is not None
+    assert (job["schedule"], job["active"]) == ("17 3 * * *", True)
+    assert "public.retention_remove_old_audit_records()" in job["command"]
+    owner = await owner_db.fetchval(
+        "SELECT pg_get_userbyid(proowner) FROM pg_proc "
+        "WHERE oid = 'public.retention_remove_old_audit_records()'::regprocedure"
+    )
+    assert job["username"] == owner != "app_backend"

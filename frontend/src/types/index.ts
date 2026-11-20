@@ -236,6 +236,8 @@ export interface Settings {
   updated_at: string
   /** What the latest scheduled run's retention clean-up removed; null before the first. */
   last_cleanup: LastCleanup | null
+  /** The owner job's latest removal of old Audit Records (SR-14); null while it has removed none. */
+  last_audit_cleanup: LastAuditCleanup | null
 }
 
 /** The latest retention clean-up (the last step of the scheduled daily check). */
@@ -244,11 +246,16 @@ export interface LastCleanup {
   finished_at: string
   versions: number
   seafarers: number
-  audit_records: number
+}
+
+/** Old Audit Records are removed by a nightly database job of the owner role, not the API. */
+export interface LastAuditCleanup {
+  removed_at: string
+  rows: number
 }
 
 /** PUT /api/settings: the values plus the version the editor started from. */
-export type SettingsWrite = Omit<Settings, 'updated_at' | 'last_cleanup'>
+export type SettingsWrite = Omit<Settings, 'updated_at' | 'last_cleanup' | 'last_audit_cleanup'>
 
 /** GET /api/requirements: one set cell of the Position Requirement matrix (S4). */
 export interface MatrixCell {

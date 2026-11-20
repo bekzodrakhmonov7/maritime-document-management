@@ -46,8 +46,12 @@ async def get(conn: asyncpg.Connection) -> dict[str, Any]:
 
 
 async def with_last_cleanup(conn: asyncpg.Connection, values: dict[str, Any]) -> dict[str, Any]:
-    """The settings plus what the last retention clean-up removed."""
-    return {**values, "last_cleanup": await retention.last_cleanup(conn)}
+    """The settings plus what the last retention clean-ups removed."""
+    return {
+        **values,
+        "last_cleanup": await retention.last_cleanup(conn),
+        "last_audit_cleanup": await retention.last_audit_cleanup(conn),
+    }
 
 
 async def save(

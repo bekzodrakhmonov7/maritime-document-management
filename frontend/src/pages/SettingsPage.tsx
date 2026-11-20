@@ -3,7 +3,7 @@ import { Loader2, Lock, Play, Plus, RotateCw, X } from 'lucide-react'
 import { useSaveSettings, useSettings } from '../hooks/useSettings'
 import { useRunDailyCheck } from '../hooks/useAlerts'
 import { ApiError } from '../lib/api'
-import type { LastCleanup, Settings } from '../types'
+import type { LastAuditCleanup, LastCleanup, Settings } from '../types'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
 import { FIELD_CLASS, LABEL_CLASS } from '../components/FormDialog'
@@ -96,7 +96,13 @@ export function SettingsPage() {
         />
       )}
 
-      {data && <LastCleanupPanel cleanup={data.last_cleanup} timeZone={data.time_zone} />}
+      {data && (
+        <LastCleanupPanel
+          cleanup={data.last_cleanup}
+          auditCleanup={data.last_audit_cleanup}
+          timeZone={data.time_zone}
+        />
+      )}
 
       <DailyCheckPanel />
     </div>
@@ -104,7 +110,17 @@ export function SettingsPage() {
 }
 
 /** What the scheduled daily check's last retention clean-up removed. */
-function LastCleanupPanel({ cleanup, timeZone }: { cleanup: LastCleanup | null; timeZone: string }) {
+function LastCleanupPanel({
+  cleanup,
+  auditCleanup,
+  timeZone,
+}: {
+  cleanup: LastCleanup | null
+  auditCleanup: LastAuditCleanup | null
+  timeZone: string
+}) {
+  const when = (at: string) =>
+    new Date(at).toLocaleString(undefined, { timeZone, dateStyle: 'medium', timeStyle: 'short' })
   return (
     <section
       aria-labelledby="last-cleanup-heading"
@@ -119,16 +135,16 @@ function LastCleanupPanel({ cleanup, timeZone }: { cleanup: LastCleanup | null; 
         </p>
       ) : (
         <p className="text-sm text-navy-200">
-          {new Date(cleanup.finished_at).toLocaleString(undefined, {
-            timeZone,
-            dateStyle: 'medium',
-            timeStyle: 'short',
-          })}
-          : removed {plural(cleanup.versions, 'Replaced Version')},{' '}
-          {plural(cleanup.seafarers, 'Inactive seafarer')} and{' '}
-          {plural(cleanup.audit_records, 'Audit Record')}.
+          {when(cleanup.finished_at)}: removed {plural(cleanup.versions, 'Replaced Version')} and{' '}
+          {plural(cleanup.seafarers, 'Inactive seafarer')}.
         </p>
       )}
+      <p className="text-sm text-navy-400">
+        Old Audit Records are removed by a nightly database job (03:17 UTC).{' '}
+        {auditCleanup === null
+          ? 'It has removed none yet.'
+          : `Last removal ${when(auditCleanup.removed_at)}: ${plural(auditCleanup.rows, 'Audit Record')}.`}
+      </p>
     </section>
   )
 }

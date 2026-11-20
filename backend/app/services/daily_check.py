@@ -19,8 +19,9 @@ configured check time on; a manual run by an administrator doesn't count as
 the day's run and is audited. Settings are read at the start of each run.
 
 The scheduled run ends with retention (`services.retention`): Replaced
-Versions, Inactive seafarers and old Audit Records whose Retention Period has
-ended are removed. The manual run never removes anything.
+Versions and Inactive seafarers whose Retention Period has ended are removed.
+Old Audit Records are removed by the owner's nightly job (SR-14). The manual
+run never removes anything.
 """
 
 import logging
