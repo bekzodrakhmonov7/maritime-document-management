@@ -7,7 +7,8 @@
 export const CODE_LENGTH = 6
 export const RESEND_WAIT_SECONDS = 60
 
-export const MIN_PASSWORD_LENGTH = 8
+/** SR-02: the API also refuses common and breached passwords (422 weak_password). */
+export const MIN_PASSWORD_LENGTH = 12
 /** bcrypt reads at most 72 bytes; Supabase Auth refuses longer passwords. */
 export const MAX_PASSWORD_LENGTH = 72
 

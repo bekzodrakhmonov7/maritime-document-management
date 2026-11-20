@@ -41,6 +41,14 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.pwned_passwords import get_pwned_passwords  # noqa: E402
+
+
+class _NeverBreached:
+    """Pwned Passwords for tests: knows no breached password, never calls out."""
+
+    async def is_breached(self, password: str) -> bool:
+        return False
 
 
 def make_token(
@@ -139,8 +147,11 @@ async def app():
 
     pool = await db_module.create_pool()
     db_module._pool = pool
+    application = create_app()
+    # The test suite never asks the real Pwned Passwords service (SR-02).
+    application.dependency_overrides[get_pwned_passwords] = lambda: _NeverBreached()
     try:
-        yield create_app()
+        yield application
     finally:
         await pool.close()
         db_module._pool = None

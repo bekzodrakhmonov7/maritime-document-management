@@ -10,6 +10,7 @@ service); the last ones run against a real local Auth and Mailpit and skip
 when they are unreachable.
 """
 
+import logging
 import os
 import re
 from uuid import UUID, uuid4
@@ -17,6 +18,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from app.config import settings as app_settings
+from app.pwned_passwords import PwnedPasswords, get_pwned_passwords
 from app.supabase_auth import AuthUnavailable, SignInRefused, get_supabase_auth
 
 from tests.conftest import auth_header, make_token
@@ -311,11 +313,12 @@ async def test_register_answers_an_existing_account_the_same_but_no_code_lets_it
     [
         {"full_name": " ", "password": PASSWORD},
         {"full_name": "Ana Kovač", "password": "short1"},
+        {"full_name": "Ana Kovač", "password": "eleven-char"},
         {"full_name": "Ana Kovač", "password": "x" * 73},
         {"full_name": "Ana Kovač"},
     ],
 )
-async def test_register_needs_a_full_name_and_a_password_of_8_to_72(client, fake_auth, body):
+async def test_register_needs_a_full_name_and_a_password_of_12_to_72(client, fake_auth, body):
     res = await client.post("/api/auth/register", json={"email": _unique_email(), **body})
 
     assert res.status_code == 422
@@ -330,7 +333,7 @@ async def test_a_weak_password_refused_by_supabase_is_shown(client, fake_auth):
 
     res = await client.post(
         "/api/auth/register",
-        json={"email": _unique_email(), "full_name": "Ana", "password": "aaaaaaaa"},
+        json={"email": _unique_email(), "full_name": "Ana", "password": "harbour-pilot-ladder-7"},
     )
 
     assert res.status_code == 422
@@ -593,6 +596,170 @@ async def test_a_wrong_reset_code_changes_nothing(client, owner_db, fake_auth, o
     [rec] = await _records(owner_db, "password_reset", email)
     assert rec["outcome"] == "refused"
     assert rec["reason"] == "otp_invalid"
+
+
+# --- password rules (SR-02) ------------------------------------------------------
+
+ELEVEN = "harbour-pil"  # 11 characters
+TWELVE = "harbour-pilo"  # 12 characters, on no list
+COMMON = "Qwerty123456"  # on the bundled list (compared case-insensitively)
+
+
+class FakePwned:
+    """Pwned Passwords with a set of breached passwords."""
+
+    def __init__(self, breached: set[str] = frozenset()) -> None:
+        self.breached = set(breached)
+        self.asked: list[str] = []
+
+    async def is_breached(self, password: str) -> bool:
+        self.asked.append(password)
+        return password in self.breached
+
+
+@pytest.fixture
+def pwned(app):
+    fake = FakePwned()
+    app.dependency_overrides[get_pwned_passwords] = lambda: fake
+    return fake
+
+
+async def _register(client, password: str):
+    return await client.post(
+        "/api/auth/register",
+        json={"email": _unique_email(), "full_name": "Ana Kovač", "password": password},
+    )
+
+
+async def _reset(client, email: str, password: str):
+    await client.post("/api/auth/password/forgot", json={"email": email})
+    return await client.post(
+        "/api/auth/password/reset", json={"email": email, "code": CODE, "password": password}
+    )
+
+
+async def test_register_refuses_an_eleven_character_password(client, fake_auth, pwned):
+    res = await _register(client, ELEVEN)
+
+    assert res.status_code == 422
+    assert fake_auth.called("sign_up") == []
+    assert pwned.asked == []
+
+
+async def test_register_refuses_a_common_password(client, fake_auth, pwned):
+    res = await _register(client, COMMON)
+
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "weak_password"
+    assert res.json()["detail"]["message"]
+    assert fake_auth.called("sign_up") == []
+    # The common list is checked first: the password never leaves the host.
+    assert pwned.asked == []
+
+
+async def test_register_refuses_a_breached_password(client, fake_auth, pwned):
+    pwned.breached.add(TWELVE)
+
+    res = await _register(client, TWELVE)
+
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "weak_password"
+    assert fake_auth.called("sign_up") == []
+
+
+async def test_register_accepts_a_twelve_character_uncommon_password(client, fake_auth, pwned):
+    res = await _register(client, TWELVE)
+
+    assert res.status_code == 200, res.text
+    assert pwned.asked == [TWELVE]
+    [call] = fake_auth.called("sign_up")
+    assert call[2] == TWELVE
+
+
+async def test_reset_refuses_an_eleven_character_password(client, fake_auth, pwned, officer):
+    email, _ = officer
+
+    res = await _reset(client, email, ELEVEN)
+
+    assert res.status_code == 422
+    assert fake_auth.called("verify_code") == []
+    assert fake_auth.passwords_set == []
+
+
+@pytest.mark.parametrize("kind", ["common", "breached"])
+async def test_reset_refuses_a_weak_password_and_records_it(
+    client, owner_db, fake_auth, pwned, officer, kind
+):
+    email, user_id = officer
+    password = COMMON if kind == "common" else TWELVE
+    pwned.breached.add(TWELVE)
+
+    res = await _reset(client, email, password)
+
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "weak_password"
+    # Checked before the code: it stays usable for a better password.
+    assert fake_auth.called("verify_code") == []
+    assert fake_auth.passwords_set == []
+    [rec] = await _records(owner_db, "password_reset", email)
+    assert rec["actor_id"] == user_id
+    assert rec["outcome"] == "refused"
+    assert rec["reason"] == "weak_password"
+
+
+async def test_reset_accepts_a_twelve_character_uncommon_password(
+    client, fake_auth, pwned, officer
+):
+    email, user_id = officer
+
+    res = await _reset(client, email, TWELVE)
+
+    assert res.status_code == 200, res.text
+    assert fake_auth.passwords_set == [(user_id, TWELVE)]
+
+
+async def test_a_breached_password_found_through_the_range_api_is_refused(
+    app, client, fake_auth
+):
+    """The real module, answered by httpx.MockTransport: 422, and the request
+    carries only the first five hex characters of the SHA-1."""
+    import hashlib
+
+    sha1 = hashlib.sha1(TWELVE.encode()).hexdigest().upper()
+    seen: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, text=f"{sha1[5:]}:12")
+
+    app.dependency_overrides[get_pwned_passwords] = lambda: PwnedPasswords(
+        transport=httpx.MockTransport(handle)
+    )
+
+    res = await _register(client, TWELVE)
+
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "weak_password"
+    [request] = seen
+    assert request.url.path == f"/range/{sha1[:5]}"
+    assert sha1[5:] not in str(request.url) and TWELVE not in str(request.url)
+
+
+async def test_an_unreachable_breach_service_lets_the_password_through(
+    app, client, fake_auth, caplog
+):
+    def handle(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route", request=request)
+
+    app.dependency_overrides[get_pwned_passwords] = lambda: PwnedPasswords(
+        transport=httpx.MockTransport(handle)
+    )
+
+    with caplog.at_level(logging.WARNING, logger="app.pwned_passwords"):
+        res = await _register(client, TWELVE)
+
+    assert res.status_code == 200, res.text
+    assert "Pwned Passwords" in caplog.text
 
 
 # --- Auth down ------------------------------------------------------------------

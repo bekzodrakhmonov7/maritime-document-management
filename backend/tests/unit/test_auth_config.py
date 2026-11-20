@@ -92,3 +92,11 @@ def test_the_cutover_wizard_pushes_the_auth_config_with_a_fallback():
     assert "/v1/projects/" in wizard and "/config/auth" in wizard
     example = (REPO / ".env.example").read_text(encoding="utf-8")
     assert re.search(r"^SUPABASE_AUTH_SMTP_PASSWORD=$", example, re.M)
+
+
+def test_supabase_auth_also_asks_for_at_least_12_characters():
+    # SR-02: the API asks for 12 (app/password_policy.py); Supabase Auth too,
+    # so no other way in sets a shorter password.
+    assert AUTH["minimum_password_length"] == 12
+    wizard = (REPO / "scripts" / "hosted-cutover.sh").read_text(encoding="utf-8")
+    assert '"password_min_length": auth["minimum_password_length"]' in wizard

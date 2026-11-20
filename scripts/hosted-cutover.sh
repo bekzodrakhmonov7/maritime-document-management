@@ -409,7 +409,7 @@ push_auth_config() {
   hosted_config "$dir" "$2" "$3"
   say "Pushing the Auth config to $ref. Read the diff before you confirm it: it"
   say "should show password-then-code sign-in (enable_confirmations,"
-  say "minimum_password_length 8, otp_length 6, otp_expiry 600, max_frequency"
+  say "minimum_password_length 12, otp_length 6, otp_expiry 600, max_frequency"
   say "60s), SMTP through smtp.resend.com, the magic_link, confirmation and"
   say "recovery templates, and Site URL $2."
   note "Decline any section whose change you didn't expect."

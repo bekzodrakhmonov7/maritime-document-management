@@ -63,7 +63,18 @@ new code replaces the old one). The e-mail holds only the code, never a link.
 The API accepts only sessions that went through both steps of its sign-in
 proxy, so nothing (no env flag, dev mode, demo login or direct call to
 Supabase Auth) skips either one. **Forgot password?** on the Sign in page
-e-mails a code for setting a new password. A local database that ran the
+e-mails a code for setting a new password.
+
+A new password (Register, Forgot password) has 12 to 72 characters and is
+refused with 422 `weak_password` when it is on the bundled list of common
+passwords (`backend/app/data/common_passwords.txt`, case-insensitive) or known
+to [Pwned Passwords](https://haveibeenpwned.com/API/v3#PwnedPasswords) (SR-02).
+The breach check sends only the first five hex characters of the password's
+SHA-1 (k-anonymity); if the service can't be reached within 3 s the password
+is accepted and a warning is logged. A refused reset is recorded as *password
+reset*, outcome `refused`, reason `weak_password`. Sign in accepts any length,
+so Accounts made under the old minimum of 8 still get in. Tests never call the
+real service: `tests/conftest.py` replaces it. A local database that ran the
 earlier, password-wiping version of migration `20261116130000` lost its test
 passwords; set new ones that way.
 
@@ -279,7 +290,7 @@ For production and for staging:
    `SUPABASE_AUTH_SMTP_PASSWORD` (a Resend API key) and `MAIL_FROM` (the
    sender, on the domain the Alerts use) in its environment. `config push`
    prints the diff and asks before changing anything: **read it**. It should
-   show `enable_confirmations`, `minimum_password_length` 8, `otp_length` 6,
+   show `enable_confirmations`, `minimum_password_length` 12, `otp_length` 6,
    `otp_expiry` 600, `max_frequency` 60s, SMTP through `smtp.resend.com` and
    the three templates. It
    isn't confirmed that `config push` carries the SMTP, OTP and template
@@ -428,6 +439,16 @@ wipe production data.
 ├── docker-compose.yml           # Mailhog only
 └── README.md
 ```
+
+## Licences
+
+Third-party data bundled with the application:
+
+| File | Source | Licence | Downloaded |
+|---|---|---|---|
+| `backend/app/data/common_passwords.txt` (the 3,000 most common passwords of 12+ characters, lower-cased) | [SecLists](https://github.com/danielmiessler/SecLists), `Passwords/Common-Credentials/xato-net-10-million-passwords-1000000.txt`, commit `1a89b46` | MIT, Copyright (c) 2018 Daniel Miessler | 2026-11-20 |
+
+The file's header repeats the source, licence and date.
 
 ## API Documentation
 

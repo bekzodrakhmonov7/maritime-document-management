@@ -160,7 +160,7 @@ export function ForgotPasswordPage() {
                   className={INPUT_CLASS}
                 />
                 <p id="password-hint" className="mt-1.5 text-xs text-navy-400">
-                  At least {MIN_PASSWORD_LENGTH} characters.
+                  At least {MIN_PASSWORD_LENGTH} characters, and not a common or breached password.
                 </p>
               </div>
 
