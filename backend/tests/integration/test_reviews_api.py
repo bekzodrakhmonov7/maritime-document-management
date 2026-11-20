@@ -338,6 +338,7 @@ async def test_a_signed_url_for_the_proof_file_is_issued_and_recorded(client, wo
     body = res.json()
     assert body["filename"] == "reply.pdf"
     assert body["content_type"] == "application/pdf"
+    assert 0 < body["expires_in"] <= 300
     [(path, ttl, download)] = storage.signed
     assert path.startswith("proofs/") and download == "reply.pdf" and ttl == body["expires_in"]
 
