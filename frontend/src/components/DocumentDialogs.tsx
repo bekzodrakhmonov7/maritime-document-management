@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { FileText } from 'lucide-react'
+import { AlertTriangle, FileText } from 'lucide-react'
 import { useAddVersion } from '../hooks/useDocuments'
 import { useDocumentTypes } from '../hooks/useReferenceData'
 import { useSettings } from '../hooks/useSettings'
@@ -57,6 +57,8 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
     state.kind === 'new' ? null : state.document.document_type_id,
   )
   const [file, setFile] = useState<File | null>(null)
+  // Warnings from the save (SR-12): the Version is saved; shown before closing.
+  const [warnings, setWarnings] = useState<string[]>([])
 
   const type: Pick<DocumentType, 'name' | 'expires' | 'max_validity_months'> | undefined =
     state.kind === 'new'
@@ -86,17 +88,44 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
     (!type.expires || notStated || !!details.expiry_date) &&
     (!needsFile || !!file)
 
+  const saved = (document: DocumentDetail) => {
+    if (document.warnings?.length) setWarnings(document.warnings)
+    else onClose()
+  }
+
   const submit = () => {
     if (!type || typeId === null) return
     if (state.kind === 'details') {
-      action.mutate({ kind: 'details', documentId: state.document.id, details: body }, { onSuccess: onClose })
+      action.mutate({ kind: 'details', documentId: state.document.id, details: body }, { onSuccess: saved })
     } else if (file) {
       const seafarerId = state.kind === 'new' ? state.seafarer.id : state.document.seafarer_id
       action.mutate(
         { kind: 'upload', seafarerId, documentTypeId: typeId, details: body, file },
-        { onSuccess: onClose },
+        { onSuccess: saved },
       )
     }
+  }
+
+  if (warnings.length > 0) {
+    return (
+      <FormDialog
+        title="Saved with a warning"
+        subtitle={type?.name}
+        submitLabel="OK"
+        onSubmit={onClose}
+        onClose={onClose}
+        pending={false}
+        canSubmit
+        error={null}
+      >
+        {warnings.map((w) => (
+          <p key={w} role="status" className="flex gap-2 text-sm text-status-expiring">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            {w}
+          </p>
+        ))}
+      </FormDialog>
+    )
   }
 
   const hint = settings
@@ -193,7 +222,7 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
       {type?.expires === false && <p className="text-xs text-navy-400">This document type doesn't expire.</p>}
       {type?.max_validity_months && (
         <p className="text-xs text-navy-400">
-          Valid for at most {type.max_validity_months} months from the issue date.
+          Valid for at most {type.max_validity_months} months from the issue date; a longer validity is saved with a warning.
         </p>
       )}
       {needsFile && (

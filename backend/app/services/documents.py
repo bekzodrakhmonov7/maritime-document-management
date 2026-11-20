@@ -36,6 +36,8 @@ VERSION = "version"
 DETAILS = ("document_number", "issuing_authority", "issue_date", "expiry_date")
 # Signed URLs are short-lived: long enough to open, not to pass around.
 FILE_URL_TTL_SECONDS = 120
+# The Audit Record's mark for a Version saved past its type's maximum validity (SR-12).
+VALIDITY_ABOVE_MAXIMUM = "validity_above_maximum"
 
 _DOCUMENT_FIELDS = """
        d.id, d.seafarer_id, d.document_type_id, d.created_at,
@@ -262,16 +264,23 @@ async def get(conn: asyncpg.Connection, scope: Scope, document_id: int) -> dict:
         await _largest_alert_step(conn),
         await _certificate_current(conn, document),
     )
-    found["versions"] = _history(versions, checks, found["current_version"])
+    found["versions"] = _history(
+        versions, checks, found["current_version"], document["max_validity_months"]
+    )
+    found["warnings"] = []
     return found
 
 
 def _history(
-    versions: list[dict], checks: _Checks, current: Mapping[str, Any] | None
+    versions: list[dict],
+    checks: _Checks,
+    current: Mapping[str, Any] | None,
+    max_validity_months: int | None,
 ) -> list[dict]:
     """Every Version, numbered in upload order, newest first, each with its
     Reviews and Verifications, newest first. A Version whose file an earlier
-    one already had is marked with that earlier number."""
+    one already had is marked with that earlier number; one valid longer than
+    the type now allows is marked too (SR-12, computed here, not stored)."""
     first_with_file: dict[str, int] = {}
     history = []
     for number, v in enumerate(versions, start=1):
@@ -282,6 +291,9 @@ def _history(
                 "number": number,
                 "is_current": current is not None and v["id"] == current["id"],
                 "file_from_version_number": reused_from if reused_from != number else None,
+                "above_max_validity": domain.version_dates_warning(
+                    v["issue_date"], v["expiry_date"], max_validity_months
+                ) is not None,
                 "review_state": domain.review_state(v["id"], checks.reviews),
                 "reviews": [r for r in reversed(checks.reviews) if r["version_id"] == v["id"]],
                 "verifications": [
@@ -311,8 +323,12 @@ async def upload_limits(conn: asyncpg.Connection) -> Limits:
     return Limits.from_settings(row["max_file_size_mb"], row["max_pdf_pages"])
 
 
-async def check_details(conn: asyncpg.Connection, document_type_id: int, details: dict) -> None:
-    """The Document Type's rules for a new Version's dates (T2)."""
+async def check_details(
+    conn: asyncpg.Connection, document_type_id: int, details: dict
+) -> str | None:
+    """The Document Type's rules for a new Version's dates (T2): refuses what
+    breaks them; returns the warning for a validity past the type's maximum,
+    which is saved anyway (SR-12)."""
     rules = await conn.fetchrow(
         "SELECT expires, max_validity_months FROM public.document_type WHERE id = $1",
         document_type_id,
@@ -321,11 +337,21 @@ async def check_details(conn: asyncpg.Connection, document_type_id: int, details
         details["issue_date"],
         details["expiry_date"],
         expires=rules["expires"],
-        max_validity_months=rules["max_validity_months"],
         expiry_not_stated=details.get("expiry_not_stated", False),
     )
     if problem:
         raise Invalid(problem)
+    return domain.version_dates_warning(
+        details["issue_date"], details["expiry_date"], rules["max_validity_months"]
+    )
+
+
+def _with_warning(after: dict, warning: str | None) -> dict:
+    return {**after, "warning": VALIDITY_ABOVE_MAXIMUM} if warning else after
+
+
+def _warned(document: dict, warning: str | None) -> dict:
+    return {**document, "warnings": [warning] if warning else []}
 
 
 async def add_version(
@@ -345,21 +371,24 @@ async def add_version(
         seafarer = await seafarers.lock_in_scope(conn, scope, seafarer_id)
         _require_active(seafarer)
         await reference_data.check_pickable(conn, reference_data.DOCUMENT_TYPE, document_type_id)
-        await check_details(conn, document_type_id, details)
+        warning = await check_details(conn, document_type_id, details)
         document_id = await _document_id(conn, seafarer_id, document_type_id)
         version_id = await _insert_version(conn, document_id, details, stored, account_id)
         await audit.record(
             conn, ctx, AuditAction.VERSION_UPLOADED,
             target_type=VERSION, target_id=version_id, seafarer_id=seafarer_id,
-            after={
-                "document_id": document_id,
-                "document_type_id": document_type_id,
-                **{c: details[c] for c in DETAILS},
-                "original_filename": stored.original_filename,
-                "content_type": stored.content_type,
-            },
+            after=_with_warning(
+                {
+                    "document_id": document_id,
+                    "document_type_id": document_type_id,
+                    **{c: details[c] for c in DETAILS},
+                    "original_filename": stored.original_filename,
+                    "content_type": stored.content_type,
+                },
+                warning,
+            ),
         )
-        return await get(conn, scope, document_id)
+        return _warned(await get(conn, scope, document_id), warning)
 
 
 async def add_details_version(
@@ -395,16 +424,19 @@ async def add_details_version(
         )
         if not after:
             raise Conflict("Nothing changed: the details are the same as the Current Version's.")
-        await check_details(conn, document["document_type_id"], details)
+        warning = await check_details(conn, document["document_type_id"], details)
         stored = StoredFile(current["file_path"], current["original_filename"], current["content_type"])
         version_id = await _insert_version(conn, document_id, details, stored, account_id)
         await audit.record(
             conn, ctx, AuditAction.VERSION_UPLOADED,
             target_type=VERSION, target_id=version_id, seafarer_id=document["seafarer_id"],
             before=before,
-            after={"document_id": document_id, **after, "file_from_version_id": current["id"]},
+            after=_with_warning(
+                {"document_id": document_id, **after, "file_from_version_id": current["id"]},
+                warning,
+            ),
         )
-        return await get(conn, scope, document_id)
+        return _warned(await get(conn, scope, document_id), warning)
 
 
 async def version_in_scope(conn: asyncpg.Connection, scope: Scope, version_id: int) -> dict:

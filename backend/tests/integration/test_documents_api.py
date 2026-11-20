@@ -295,7 +295,8 @@ async def test_expired_from_the_day_after_the_expiry_date(client, world):
     [
         ("passport", {"expiry_date": None}, 422),  # expiring type needs one
         ("course", {}, 422),  # non-expiring type takes none
-        ("passport", {"issue_date": day(-10), "expiry_date": day(-10 + 3653 + 2)}, 422),  # > 120 months
+        ("medical", {"expiry_date": "2027-02-30"}, 422),  # no such date (SR-12)
+        ("medical", {"issue_date": "2025-02-30"}, 422),
         ("medical", {"issue_date": day(0), "expiry_date": day(0)}, 422),  # expiry <= issue
         ("old", {}, 422),  # retired type
     ],
@@ -305,6 +306,63 @@ async def test_details_breaking_the_type_rules_are_refused(client, world, storag
     assert res.status_code == status, res.text
     assert storage.objects == {}
     assert await owner_db.fetchval("SELECT count(*) FROM public.document") == 0
+
+
+async def test_validity_above_the_maximum_is_saved_with_a_warning(client, world, owner_db):
+    # SR-12: over 120 months is saved as the certificate states it, with a warning.
+    res = await _upload(
+        client, world["officer_a"], world["anna"], world["passport"],
+        issue_date=day(-10), expiry_date=day(-10 + 3653 + 2),
+    )
+    assert res.status_code == 201, res.text
+    doc = res.json()
+    [warning] = doc["warnings"]
+    assert "maximum validity of 120 months" in warning
+    [version] = doc["versions"]
+    assert version["above_max_validity"] is True
+    [record] = await _records(owner_db, "version_uploaded", target_id=str(version["id"]))
+    assert '"warning": "validity_above_maximum"' in record["after"]
+
+    # The mark is computed when read, not only in the upload response.
+    res = await client.get(f"/api/documents/{doc['id']}", headers=world["officer_a"])
+    assert res.json()["warnings"] == []
+    assert res.json()["versions"][0]["above_max_validity"] is True
+
+
+async def test_a_details_only_version_above_the_maximum_is_saved_with_a_warning(client, world, owner_db):
+    doc = await _uploaded(client, world["officer_a"], world["anna"], world["passport"])
+    assert doc["warnings"] == []
+    assert doc["versions"][0]["above_max_validity"] is False
+    res = await client.post(
+        f"/api/documents/{doc['id']}/versions",
+        json=_details(issue_date=day(-10), expiry_date=day(-10 + 3653 + 2)),
+        headers=world["officer_a"],
+    )
+    assert res.status_code == 201, res.text
+    assert len(res.json()["warnings"]) == 1
+    new, old = res.json()["versions"]
+    assert (new["above_max_validity"], old["above_max_validity"]) == (True, False)
+    [record] = await _records(owner_db, "version_uploaded", target_id=str(new["id"]))
+    assert '"warning": "validity_above_maximum"' in record["after"]
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"expiry_date": "2027-02-30"},  # no such date
+        {"issue_date": "2025-02-30"},
+        {"issue_date": day(30), "expiry_date": day(30)},  # issue not before expiry
+        {"issue_date": day(31), "expiry_date": day(30)},
+    ],
+)
+async def test_invalid_dates_are_refused_on_a_direct_api_call(client, world, owner_db, fields):
+    # SR-12: the API refuses them itself, not only the form.
+    doc = await _uploaded(client, world["officer_a"], world["anna"], world["medical"])
+    res = await client.post(
+        f"/api/documents/{doc['id']}/versions", json=_details(**fields), headers=world["officer_a"]
+    )
+    assert res.status_code == 422, res.text
+    assert await owner_db.fetchval("SELECT count(*) FROM public.version") == 1
 
 
 async def test_the_same_rules_apply_to_a_details_only_version(client, world):

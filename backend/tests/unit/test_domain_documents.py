@@ -12,6 +12,7 @@ from app.domain import (
     latest_allowed_expiry,
     review_state,
     version_dates_problem,
+    version_dates_warning,
 )
 
 E = date(2026, 6, 30)
@@ -110,7 +111,7 @@ def test_latest_allowed_expiry_adds_whole_months(issue, months, latest):
 
 
 def test_an_expiring_type_needs_an_expiry_date_or_the_tick():
-    problem = version_dates_problem(date(2026, 1, 1), None, expires=True, max_validity_months=None)
+    problem = version_dates_problem(date(2026, 1, 1), None, expires=True)
     assert problem == (
         "This document type expires: enter the expiry date, "
         "or tick 'Expiry not stated on the document'."
@@ -119,43 +120,55 @@ def test_an_expiring_type_needs_an_expiry_date_or_the_tick():
 
 def test_an_expiring_type_takes_no_date_with_the_tick():
     assert version_dates_problem(
-        date(2026, 1, 1), None, expires=True, max_validity_months=60, expiry_not_stated=True
+        date(2026, 1, 1), None, expires=True, expiry_not_stated=True
     ) is None
 
 
 def test_the_tick_and_a_date_are_refused_together():
     assert "one or the other" in version_dates_problem(
-        date(2026, 1, 1), date(2027, 1, 1), expires=True, max_validity_months=None,
+        date(2026, 1, 1), date(2027, 1, 1), expires=True,
         expiry_not_stated=True,
     )
 
 
 def test_the_tick_is_refused_on_a_type_that_doesnt_expire():
     assert "doesn't expire" in version_dates_problem(
-        date(2026, 1, 1), None, expires=False, max_validity_months=None, expiry_not_stated=True
+        date(2026, 1, 1), None, expires=False, expiry_not_stated=True
     )
 
 
 def test_a_non_expiring_type_takes_no_expiry_date():
     assert "no expiry date" in version_dates_problem(
-        date(2026, 1, 1), date(2027, 1, 1), expires=False, max_validity_months=None
+        date(2026, 1, 1), date(2027, 1, 1), expires=False
     )
-    assert version_dates_problem(date(2026, 1, 1), None, expires=False, max_validity_months=None) is None
+    assert version_dates_problem(date(2026, 1, 1), None, expires=False) is None
 
 
 @pytest.mark.parametrize("expiry", [date(2026, 1, 1), date(2025, 12, 31)])
 def test_the_expiry_must_be_after_the_issue_date(expiry):
     assert "after the issue date" in version_dates_problem(
-        date(2026, 1, 1), expiry, expires=True, max_validity_months=None
+        date(2026, 1, 1), expiry, expires=True
     )
 
 
-def test_maximum_validity_is_a_hard_limit():
+def test_maximum_validity_is_no_refusal():
+    # SR-12: the expiry date comes from the certificate, so the record holds it.
     issue = date(2026, 1, 15)
-    assert version_dates_problem(issue, date(2031, 1, 15), expires=True, max_validity_months=60) is None
-    assert "maximum validity" in version_dates_problem(
-        issue, date(2031, 1, 16), expires=True, max_validity_months=60
+    assert version_dates_problem(issue, date(2031, 1, 16), expires=True) is None
+
+
+def test_validity_above_the_maximum_gives_a_warning():
+    issue = date(2026, 1, 15)
+    assert version_dates_warning(issue, date(2031, 1, 15), 60) is None
+    assert version_dates_warning(issue, date(2031, 1, 16), 60) == (
+        "The expiry date is past this type's maximum validity of 60 months "
+        "(latest 2031-01-15). Saved anyway: check it against the document."
     )
+
+
+def test_no_warning_without_a_maximum_or_an_expiry_date():
+    assert version_dates_warning(date(2026, 1, 1), date(2099, 1, 1), None) is None
+    assert version_dates_warning(date(2026, 1, 1), None, 60) is None
 
 
 # --- review_state and is_verified (FR-11, FR-12) --------------------------------------

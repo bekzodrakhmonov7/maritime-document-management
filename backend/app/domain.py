@@ -208,11 +208,11 @@ def version_dates_problem(
     expiry: date | None,
     *,
     expires: bool,
-    max_validity_months: int | None,
     expiry_not_stated: bool = False,
 ) -> str | None:
     """Why a new Version's dates break its Document Type's rules, or None.
-    Rules are checked only when a Version is created (T2). `expiry_not_stated`
+    Rules are checked only when a Version is created (T2). The maximum
+    validity is no refusal: see `version_dates_warning`. `expiry_not_stated`
     is the form's tick: an expiring type takes no date only with it (ADR-0006)."""
     if expiry_not_stated and not expires:
         return "This document type doesn't expire, so 'Expiry not stated' doesn't apply."
@@ -229,14 +229,24 @@ def version_dates_problem(
         return None
     if expiry <= issue:
         return "The expiry date must be after the issue date."
-    if max_validity_months is not None:
-        latest = latest_allowed_expiry(issue, max_validity_months)
-        if expiry > latest:
-            return (
-                f"The expiry date is past this type's maximum validity of "
-                f"{max_validity_months} months (latest {latest.isoformat()})."
-            )
     return None
+
+
+def version_dates_warning(
+    issue: date, expiry: date | None, max_validity_months: int | None
+) -> str | None:
+    """Why a Version's validity is longer than its Document Type allows, or
+    None. A warning, not a refusal: the expiry date is the one the
+    certificate states, so the record holds it (SR-12)."""
+    if expiry is None or max_validity_months is None:
+        return None
+    latest = latest_allowed_expiry(issue, max_validity_months)
+    if expiry <= latest:
+        return None
+    return (
+        f"The expiry date is past this type's maximum validity of {max_validity_months} "
+        f"months (latest {latest.isoformat()}). Saved anyway: check it against the document."
+    )
 
 
 # --- Requirements (FR-08, T2) ---------------------------------------------------
