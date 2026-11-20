@@ -16,7 +16,7 @@ import { FILE_SIZE_CEILING_MB } from '../lib/fileSize'
 /** Which Version dialog is open: a first upload (pick the type), a new file
  * for an existing document (renewal), or corrected details only. */
 export type VersionDialogState =
-  | { kind: 'new'; seafarer: Seafarer; taken: number[] }
+  | { kind: 'new'; seafarer: Seafarer; taken: number[]; /** Opened from a Missing entry: preselected, still editable. */ documentTypeId?: number }
   | { kind: 'renew'; document: DocumentSummary }
   | { kind: 'details'; document: DocumentDetail }
 
@@ -54,7 +54,7 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
   const action = useAddVersion()
   const [details, setDetails] = useState<VersionDetails>(() => initialDetails(state))
   const [typeId, setTypeId] = useState<number | null>(
-    state.kind === 'new' ? null : state.document.document_type_id,
+    state.kind === 'new' ? (state.documentTypeId ?? null) : state.document.document_type_id,
   )
   const [file, setFile] = useState<File | null>(null)
   // Warnings from the save (SR-12): the Version is saved; shown before closing.

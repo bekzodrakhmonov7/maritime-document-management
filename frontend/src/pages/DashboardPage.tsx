@@ -6,6 +6,8 @@ import { useDashboard, useFleetTotals, type DashboardFilters } from '../hooks/us
 import { useCanReportOnVessel } from '../hooks/useReports'
 import { fullName } from '../hooks/useSeafarers'
 import { cn } from '../lib/cn'
+import { pageItems } from '../lib/dashboardPaging'
+import { SELF_REVIEW_REASON, isOwnUpload, missingUploadPath } from '../lib/missingUpload'
 import { ErrorNote } from '../components/ErrorNote'
 import { ReportDownloads } from '../components/ReportDownloads'
 import { ExpiryStatusBadge } from '../components/ExpiryStatusBadge'
@@ -100,11 +102,15 @@ function vesselTag(seafarer: DashboardSeafarer): Tag {
 const ACTION_LABELS = { upload: 'Upload', review: 'Review', open: 'Open' } as const
 
 function actionLink(seafarerId: number, entry: QueueEntry): string {
-  // A missing type with no Document yet is uploaded from the seafarer record.
-  return entry.document_id === null ? `/seafarers/${seafarerId}` : `/documents/${entry.document_id}`
+  // A missing type with no Document yet is uploaded from the seafarer record,
+  // with the upload form opened on that type.
+  return entry.document_id === null
+    ? missingUploadPath(seafarerId, entry.document_type_id)
+    : `/documents/${entry.document_id}`
 }
 
 function GroupCard({ group, onAdd }: { group: SeafarerGroup; onAdd: (tag: Tag) => void }) {
+  const { user } = useAuth()
   const s = group.seafarer
   return (
     <li className="rounded-xl border border-navy-800 bg-navy-900">
@@ -132,12 +138,24 @@ function GroupCard({ group, onAdd }: { group: SeafarerGroup; onAdd: (tag: Tag) =
               {entry.review_state === 'not_reviewed' && <NotReviewedTag />}
               <QueueExpiry entry={entry} />
             </div>
-            <Link
-              to={actionLink(s.id, entry)}
-              className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600"
-            >
-              {ACTION_LABELS[entry.action]}
-            </Link>
+            {entry.action === 'review' && isOwnUpload(entry.uploaded_by, user?.id) ? (
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-navy-400">{SELF_REVIEW_REASON}</span>
+                <Link
+                  to={actionLink(s.id, entry)}
+                  className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600"
+                >
+                  {ACTION_LABELS.open}
+                </Link>
+              </span>
+            ) : (
+              <Link
+                to={actionLink(s.id, entry)}
+                className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600"
+              >
+                {ACTION_LABELS[entry.action]}
+              </Link>
+            )}
           </li>
         ))}
       </ul>
@@ -190,7 +208,15 @@ function WorkQueues() {
   const [name, setName] = useState('')
   const [tags, setTags] = useState<Tag[]>([])
   const [showInactive, setShowInactive] = useState(false)
-  const { data, isLoading, error } = useDashboard(toFilters(name, tags, showInactive))
+  const { data, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage, isPlaceholderData } =
+    useDashboard(toFilters(name, tags, showInactive), queue)
+  // Every page carries every queue's count; the pages themselves are of one
+  // queue, so a placeholder from another tab only lends its counts.
+  const first = data?.pages[0]
+  const pages = data && !isPlaceholderData && first?.queue === queue ? data.pages : null
+  const groups = pages ? pageItems(pages, (p) => p.groups) : []
+  const joiners = pages ? pageItems(pages, (p) => p.assignments) : []
+  const shown = queue === 'starting_soon' ? joiners.length : groups.length
 
   const addTag = (tag: Tag) => setTags((held) => (held.some((t) => sameTag(t, tag)) ? held : [...held, tag]))
   const removeTag = (tag: Tag) => setTags((held) => held.filter((t) => !sameTag(t, tag)))
@@ -286,26 +312,26 @@ function WorkQueues() {
           >
             {DASHBOARD_QUEUE_LABELS[q]}
             <span className="rounded-full bg-navy-800 px-2 py-0.5 text-xs text-navy-200">
-              {data?.counts[q] ?? '–'}
+              {first?.counts[q] ?? '–'}
             </span>
           </button>
         ))}
       </div>
 
       {error && <ErrorNote message={error.message} />}
-      {isLoading && <p className="text-sm text-navy-400">Loading…</p>}
+      {(isLoading || (data && !pages && !error)) && <p className="text-sm text-navy-400">Loading…</p>}
 
-      {data && queue === 'starting_soon' && (
+      {pages && queue === 'starting_soon' && (
         <>
           <p className="text-xs text-navy-400">
-            Upcoming assignments starting within the next {data.planning_horizon_days} days, by start date.
+            Upcoming assignments starting within the next {first?.planning_horizon_days} days, by start date.
             Position and vessel tags match the assignment; document type tags don't apply here.
           </p>
-          {data.queues.starting_soon.length === 0 ? (
+          {joiners.length === 0 ? (
             <p className="text-sm text-navy-400">No assignments starting soon.</p>
           ) : (
             <ul className="space-y-2">
-              {data.queues.starting_soon.map((entry) => (
+              {joiners.map((entry) => (
                 <StartingSoonRow key={entry.assignment_id} entry={entry} onAdd={addTag} />
               ))}
             </ul>
@@ -313,16 +339,35 @@ function WorkQueues() {
         </>
       )}
 
-      {data && queue !== 'starting_soon' && (
-        data.queues[queue].length === 0 ? (
+      {pages && queue !== 'starting_soon' && (
+        groups.length === 0 ? (
           <p className="text-sm text-navy-400">Nothing in this queue.</p>
         ) : (
           <ul className="space-y-3">
-            {data.queues[queue].map((group) => (
+            {groups.map((group) => (
               <GroupCard key={group.seafarer.id} group={group} onAdd={addTag} />
             ))}
           </ul>
         )
+      )}
+
+      {pages && first && first.total > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-xs text-navy-400">
+            Showing {shown} of {pages[pages.length - 1].total}{' '}
+            {queue === 'starting_soon' ? 'assignments' : 'seafarers'}
+          </p>
+          {hasNextPage && (
+            <button
+              type="button"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600 disabled:opacity-60"
+            >
+              {isFetchingNextPage ? 'Loading…' : 'Load more'}
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

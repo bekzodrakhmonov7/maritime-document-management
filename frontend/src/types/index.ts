@@ -595,6 +595,8 @@ export interface QueueEntry {
   /** null: missing (no Current Version). */
   expiry_status: ExpiryStatus | null
   review_state: ReviewState | null
+  /** The Current Version's uploader (FR-11: never offered its Review). */
+  uploaded_by?: string | null
   action: ActionHint
 }
 
@@ -615,14 +617,22 @@ export interface StartingSoonEntry {
   counters: Record<Exclude<ReadinessBucket, 'covers_all'>, number>
 }
 
-/** GET /api/dashboard: administrators and crewing officers, within Scope. */
+/** GET /api/dashboard: administrators and crewing officers, within Scope.
+ * Every queue's count, and one page of one queue (NFR-07). */
 export interface Dashboard {
   today: string
   planning_horizon_days: number
+  /** Entries per queue after the filters, for every queue whichever page is read. */
   counts: Record<DashboardQueue, number>
-  queues: Record<Exclude<DashboardQueue, 'starting_soon'>, SeafarerGroup[]> & {
-    starting_soon: StartingSoonEntry[]
-  }
+  queue: DashboardQueue
+  offset: number
+  limit: number
+  /** Items in the whole queue: seafarer groups, or Assignments for starting soon. */
+  total: number
+  /** The page of a document queue, seafarers by name (empty for starting soon). */
+  groups: SeafarerGroup[]
+  /** The page of starting soon, by start date (empty otherwise). */
+  assignments: StartingSoonEntry[]
 }
 
 export type TotalsColumn =

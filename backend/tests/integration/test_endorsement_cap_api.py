@@ -89,8 +89,9 @@ async def test_the_certificate_caps_the_endorsement_everywhere(client, world):
     assert entry["effective_expiry"] == day(5)
     assert entry["suggestion"] == f"Renew CoC before joining (endorsement capped at {day(5)})"
 
-    board = (await client.get("/api/dashboard", headers=w["officer"])).json()
-    [group] = board["queues"]["expiring_soon"]
+    res = await client.get("/api/dashboard", params={"queue": "expiring_soon"}, headers=w["officer"])
+    board = res.json()
+    [group] = board["groups"]
     by_type = {e["document_type_name"]: e for e in group["entries"]}
     assert by_type["Flag endorsement"]["effective_expiry"] == day(5)
     assert by_type["Flag endorsement"]["capped_by"] == "CoC"
@@ -113,8 +114,9 @@ async def test_without_a_certificate_the_endorsement_counts_as_expired(client, w
     assert entry["certificate_missing"] is True
     assert entry["suggestion"] == "Obtain CoC before joining (certificate missing)"
 
-    board = (await client.get("/api/dashboard", headers=w["officer"])).json()
-    [group] = board["queues"]["expired"]
+    res = await client.get("/api/dashboard", params={"queue": "expired"}, headers=w["officer"])
+    board = res.json()
+    [group] = board["groups"]
     [entry] = group["entries"]
     assert entry["document_type_name"] == "Flag endorsement"
     assert entry["certificate_missing"] is True

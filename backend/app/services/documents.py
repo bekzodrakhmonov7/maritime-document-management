@@ -49,12 +49,31 @@ _DOCUMENT_FIELDS = """
   LEFT JOIN public.document_type ct ON ct.id = t.depends_on_id
 """
 
+# A Document Type's fields as _DOCUMENT_FIELDS names them, plus the rank of
+# its lower-cased name (equal names share one), to order Documents read
+# without joining their types.
+_DOCUMENT_TYPES = """
+SELECT t.id, t.name AS document_type_name, t.retired AS document_type_retired,
+       t.expires, t.max_validity_months, t.depends_on_id,
+       ct.name AS certificate_type_name,
+       dense_rank() OVER (ORDER BY lower(t.name)) AS name_rank
+  FROM public.document_type t
+  LEFT JOIN public.document_type ct ON ct.id = t.depends_on_id
+"""
+
 _VERSION_FIELDS = """
        v.id, v.document_id, v.file_path, v.original_filename, v.content_type,
        v.document_number, v.issuing_authority, v.issue_date, v.expiry_date,
        v.uploaded_by, u.full_name AS uploaded_by_name, v.uploaded_at
   FROM public.version v
   JOIN public.users u ON u.id = v.uploaded_by
+"""
+
+# What the dashboard reads of a Current Version (NFR-07): a brief summary
+# carries only these.
+_BRIEF_VERSION_FIELDS = """
+       v.id, v.document_id, v.issue_date, v.expiry_date, v.uploaded_by, v.uploaded_at
+  FROM public.version v
 """
 
 
@@ -75,15 +94,18 @@ async def _largest_alert_step(conn: asyncpg.Connection) -> int:
     return max(await conn.fetchval("SELECT alert_steps FROM public.settings"))
 
 
-async def _versions_of(conn: asyncpg.Connection, document_ids: list[int]) -> dict[int, list[dict]]:
+async def _versions_of(
+    conn: asyncpg.Connection, document_ids: list[int], fields: str = _VERSION_FIELDS
+) -> dict[int, list[asyncpg.Record]]:
+    """Each Document's Versions in upload order, as read-only rows."""
     rows = await conn.fetch(
-        f"SELECT {_VERSION_FIELDS} WHERE v.document_id = ANY($1::bigint[]) "
+        f"SELECT {fields} WHERE v.document_id = ANY($1::bigint[]) "
         "ORDER BY v.uploaded_at, v.id",
         document_ids,
     )
-    by_document: dict[int, list[dict]] = {}
+    by_document: dict[int, list[asyncpg.Record]] = {}
     for row in rows:
-        by_document.setdefault(row["document_id"], []).append(dict(row))
+        by_document.setdefault(row["document_id"], []).append(row)
     return by_document
 
 
@@ -120,6 +142,34 @@ async def _verifications_of(
     return [dict(r) for r in rows]
 
 
+async def _latest_checks_of(
+    conn: asyncpg.Connection, document_ids: list[int]
+) -> tuple[dict[int, asyncpg.Record], dict[int, asyncpg.Record]]:
+    """Each Version's latest Review (id, decision) and latest Verification (id,
+    result), by Version, for these Documents' Versions. The latest one (the
+    highest id) is all the domain functions read of a Version's checks, so a
+    summary needs no other rows (NFR-07)."""
+    reviews = await conn.fetch(
+        """
+        SELECT DISTINCT ON (r.version_id) r.id, r.version_id, r.decision
+          FROM public.review r JOIN public.version v ON v.id = r.version_id
+         WHERE v.document_id = ANY($1::bigint[])
+         ORDER BY r.version_id, r.id DESC
+        """,
+        document_ids,
+    )
+    verifications = await conn.fetch(
+        """
+        SELECT DISTINCT ON (c.version_id) c.id, c.version_id, c.result
+          FROM public.verification c JOIN public.version v ON v.id = c.version_id
+         WHERE v.document_id = ANY($1::bigint[])
+         ORDER BY c.version_id, c.id DESC
+        """,
+        document_ids,
+    )
+    return {r["version_id"]: r for r in reviews}, {c["version_id"]: c for c in verifications}
+
+
 @dataclass(frozen=True)
 class _Checks:
     """The Reviews and Verifications of a set of Versions, oldest first."""
@@ -132,34 +182,55 @@ class _Checks:
         return cls(await _reviews_of(conn, versions), await _verifications_of(conn, versions))
 
 
+def by_version(rows: Iterable[Mapping[str, Any]]) -> dict[int, list]:
+    """Rows (Reviews or Verifications) grouped by their Version, order kept."""
+    grouped: dict[int, list] = {}
+    for row in rows:
+        grouped.setdefault(row["version_id"], []).append(row)
+    return grouped
+
+
+def rows_of(grouped: Mapping[int, list], versions: Iterable[Mapping[str, Any]]) -> list:
+    """The grouped rows of just these Versions, oldest (lowest id) first: the
+    subset the domain functions need, so one Document's read does not scan the
+    checks of every Version read with it."""
+    return sorted((r for v in versions for r in grouped.get(v["id"], ())), key=lambda r: r["id"])
+
+
 def _summary(
     document: Mapping[str, Any],
-    versions: list[dict],
+    type_fields: Mapping[str, Any],
+    version_count: int,
+    current: Mapping[str, Any] | None,
     checks: _Checks,
     today: date,
     largest_step: int,
     certificate_current: Mapping[str, Any] | None,
 ) -> dict:
-    """A Document with its Current Version and Expiry Status. The status follows
-    the Effective Expiry, so an Endorsement is capped by `certificate_current`
-    (its certificate's Current Version, None when there is none)."""
-    current = domain.current_version(versions, checks.reviews)
-    effective = domain.effective_expiry({**document, "current_version": current}, certificate_current)
-    return {
+    """A Document with its Current Version (`current`: domain.current_version
+    over its Versions and `checks.reviews`) and Expiry Status. The status
+    follows the Effective Expiry, so an Endorsement is capped by
+    `certificate_current` (its certificate's Current Version, None when there
+    is none). `type_fields` adds the Document Type's fields when `document`
+    does not carry them."""
+    summary = {
         **document,
-        "version_count": len(versions),
+        **type_fields,
+        "version_count": version_count,
         "current_version": (
             None if current is None
             else {**current, "review_state": domain.review_state(current["id"], checks.reviews)}
         ),
-        "expiry_status": None if effective is None else effective.status(today, largest_step),
-        # Kept for coverage and readiness; not part of the response.
-        "effective": effective,
-        "effective_expiry": None if effective is None else effective.expiry,
-        "capped_by": None if effective is None else effective.capped_by,
-        "certificate_missing": effective is not None and effective.certificate_missing,
-        "verified": domain.is_verified(current, checks.verifications),
     }
+    effective = domain.effective_expiry(summary, certificate_current)
+    summary["expiry_status"] = None if effective is None else effective.status(today, largest_step)
+    # Kept for coverage and readiness; not part of the response.
+    summary["effective"] = effective
+    summary["effective_expiry"] = None if effective is None else effective.expiry
+    summary["capped_by"] = None if effective is None else effective.capped_by
+    summary["certificate_missing"] = effective is not None and effective.certificate_missing
+    summary["verified"] = domain.is_verified(current, checks.verifications)
+    return summary
 
 
 async def _certificate_current(
@@ -183,10 +254,12 @@ async def current_versions(conn: asyncpg.Connection, document_ids: list[int]) ->
     """Each Document's Current Version with its review state, or None when it
     has none (no Version, or every one rejected)."""
     versions = await _versions_of(conn, document_ids)
-    reviews = await _reviews_of(conn, [v for vs in versions.values() for v in vs])
+    grouped = by_version(await _reviews_of(conn, [v for vs in versions.values() for v in vs]))
     found: dict[int, dict | None] = {}
     for document_id in document_ids:
-        current = domain.current_version(versions.get(document_id, []), reviews)
+        own = versions.get(document_id, [])
+        reviews = rows_of(grouped, own)
+        current = domain.current_version(own, reviews)
         found[document_id] = (
             None if current is None
             else {**current, "review_state": domain.review_state(current["id"], reviews)}
@@ -207,31 +280,61 @@ async def summaries_for(conn: asyncpg.Connection, seafarer_id: int, today: date)
 
 
 async def summaries_by_seafarer(
-    conn: asyncpg.Connection, seafarer_ids: list[int], today: date
+    conn: asyncpg.Connection, seafarer_ids: list[int], today: date, *, brief: bool = False
 ) -> dict[int, list[dict]]:
     """Each seafarer's document summaries, by type name, for seafarers the
-    caller already read through its Scope."""
-    documents = await conn.fetch(
-        f"SELECT {_DOCUMENT_FIELDS} WHERE d.seafarer_id = ANY($1::bigint[]) "
-        "ORDER BY lower(t.name), d.id",
-        seafarer_ids,
+    caller already read through its Scope. Of each Version's Reviews and
+    Verifications only the latest is read: it is what the domain rules decide by.
+    `brief`: each Current Version carries only its id, issue and expiry dates,
+    uploader and upload time, which is all the dashboard reads (NFR-07)."""
+    types = {}
+    for t in await conn.fetch(_DOCUMENT_TYPES):
+        fields = dict(t)
+        del fields["id"]
+        types[t["id"]] = (fields.pop("name_rank"), fields)
+    # As ORDER BY lower(t.name), d.id, without joining the types to every row.
+    documents = sorted(
+        await conn.fetch(
+            "SELECT d.id, d.seafarer_id, d.document_type_id, d.created_at FROM public.document d "
+            "WHERE d.seafarer_id = ANY($1::bigint[])",
+            seafarer_ids,
+        ),
+        key=lambda d: (types[d["document_type_id"]][0], d["id"]),
     )
-    versions = await _versions_of(conn, [d["id"] for d in documents])
-    checks = await _Checks.of(conn, [v for vs in versions.values() for v in vs])
+    document_ids = [d["id"] for d in documents]
+    versions = await _versions_of(
+        conn, document_ids, _BRIEF_VERSION_FIELDS if brief else _VERSION_FIELDS
+    )
+    latest_review, latest_verification = await _latest_checks_of(conn, document_ids)
     largest_step = await _largest_alert_step(conn)
-    # A seafarer has at most one Document per type, so an Endorsement's
+
+    # Every Current Version first: an Endorsement is capped by its
+    # certificate's. A seafarer has at most one Document per type, so the
     # certificate is the seafarer's Document of the type it depends on.
-    current_by_type = {
-        (d["seafarer_id"], d["document_type_id"]): domain.current_version(
-            versions.get(d["id"], []), checks.reviews
-        )
-        for d in documents
-    }
-    by_seafarer: dict[int, list[dict]] = {}
+    read = []
+    current_by_type: dict[tuple[int, int], Mapping[str, Any] | None] = {}
     for d in documents:
-        certificate = current_by_type.get((d["seafarer_id"], d["depends_on_id"]))
+        depends_on_id = types[d["document_type_id"]][1]["depends_on_id"]
+        own = versions.get(d["id"], ())
+        checks = _Checks(
+            [latest_review[v["id"]] for v in own if v["id"] in latest_review],
+            [latest_verification[v["id"]] for v in own if v["id"] in latest_verification],
+        )
+        current = domain.current_version(own, checks.reviews)
+        current_by_type[d["seafarer_id"], d["document_type_id"]] = current
+        read.append((d, depends_on_id, len(own), current, checks))
+
+    by_seafarer: dict[int, list[dict]] = {}
+    for d, depends_on_id, version_count, current, checks in read:
+        certificate = (
+            None if depends_on_id is None
+            else current_by_type.get((d["seafarer_id"], depends_on_id))
+        )
         by_seafarer.setdefault(d["seafarer_id"], []).append(
-            _summary(dict(d), versions.get(d["id"], []), checks, today, largest_step, certificate)
+            _summary(
+                d, types[d["document_type_id"]][1], version_count, current, checks,
+                today, largest_step, certificate,
+            )
         )
     return by_seafarer
 
@@ -258,7 +361,9 @@ async def get(conn: asyncpg.Connection, scope: Scope, document_id: int) -> dict:
     checks = await _Checks.of(conn, versions)
     found = _summary(
         document,
-        versions,
+        {},
+        len(versions),
+        domain.current_version(versions, checks.reviews),
         checks,
         scope.today,
         await _largest_alert_step(conn),

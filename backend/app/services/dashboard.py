@@ -26,6 +26,7 @@ from app.domain import (
     DashboardFilters,
     DashboardSeafarer,
     DocumentLine,
+    QueuePage,
     RequirementRows,
     StartingSoon,
     VesselRef,
@@ -76,7 +77,7 @@ async def _read_crew(conn: asyncpg.Connection, scope: Scope, *, include_inactive
     assignments: dict[int, list[asyncpg.Record]] = {}
     for a in assignment_rows:
         assignments.setdefault(a["seafarer_id"], []).append(a)
-    summaries = await documents.summaries_by_seafarer(conn, ids, today)
+    summaries = await documents.summaries_by_seafarer(conn, ids, today, brief=True)
     held = {sid: {d["document_type_id"]: d for d in docs} for sid, docs in summaries.items()}
     rules = await requirements.fleet_requirement_rows(conn)
     types = {
@@ -131,6 +132,7 @@ def _held_line(seafarer_id: int, doc: Mapping[str, Any]) -> DocumentLine:
         certificate_missing=doc["certificate_missing"],
         expiry_status=doc["expiry_status"],
         review_state=current["review_state"],
+        uploaded_by=current["uploaded_by"],
     )
 
 
@@ -172,8 +174,11 @@ def _starting_soon(crew: _Crew, today: date, horizon_days: int) -> list[Starting
     return found
 
 
-async def dashboard(conn: asyncpg.Connection, scope: Scope, filters: DashboardFilters) -> dict:
-    """The work queues and their counts within the caller's Scope, after the filters."""
+async def dashboard(
+    conn: asyncpg.Connection, scope: Scope, filters: DashboardFilters, page: QueuePage = QueuePage()
+) -> dict:
+    """The counts of every work queue and one page of one queue, within the
+    caller's Scope, after the filters."""
     horizon_days = await conn.fetchval("SELECT planning_horizon_days FROM public.settings")
     crew = await _read_crew(conn, scope, include_inactive=filters.show_inactive)
     board = domain.dashboard(
@@ -183,6 +188,7 @@ async def dashboard(conn: asyncpg.Connection, scope: Scope, filters: DashboardFi
         filters,
         scope.today,
         horizon_days,
+        page,
     )
     return {"today": scope.today, "planning_horizon_days": horizon_days, **board}
 

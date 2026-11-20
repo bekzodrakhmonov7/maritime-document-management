@@ -1,0 +1,9 @@
+{
+  "name": "nfr-browser-checks",
+  "private": true,
+  "type": "module",
+  "scripts": {},
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
+  }
+}

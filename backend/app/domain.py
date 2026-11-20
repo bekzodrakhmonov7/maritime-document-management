@@ -6,9 +6,10 @@ dashboard, the daily check and the reports share these functions.
 
 import calendar
 from collections.abc import Collection, Iterable, Mapping, Set
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 from typing import Any, Literal, TypeVar
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 AssignmentState = Literal["upcoming", "under_way", "finished"]
@@ -62,7 +63,11 @@ def _latest_by_version(rows: Iterable[Mapping[str, Any]]) -> dict[int, Mapping[s
 
 def _latest_for(version_id: int, rows: Iterable[Mapping[str, Any]]) -> Mapping[str, Any] | None:
     """One Version's latest row (the highest id), or None when it has none."""
-    return _latest_by_version(r for r in rows if r["version_id"] == version_id).get(version_id)
+    latest = None
+    for row in rows:
+        if row["version_id"] == version_id and (latest is None or row["id"] > latest["id"]):
+            latest = row
+    return latest
 
 
 def review_state(version_id: int, reviews: Iterable[Mapping[str, Any]]) -> ReviewState:
@@ -399,9 +404,18 @@ class RequirementRows:
     matrix: Collection[tuple[int, int]]
     exceptions: Collection[RequirementException]
     retired_types: Collection[int]
+    # Each pair's required set, worked out once: the dashboard asks per seafarer.
+    _found: dict[tuple[int, VesselRef | None], frozenset[int]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
     def required(self, position_id: int, vessel: VesselRef | None) -> set[int]:
-        return required_set(position_id, vessel, self.matrix, self.exceptions, self.retired_types)
+        found = self._found.get((position_id, vessel))
+        if found is None:
+            found = self._found[position_id, vessel] = frozenset(
+                required_set(position_id, vessel, self.matrix, self.exceptions, self.retired_types)
+            )
+        return set(found)
 
 
 # --- Coverage, missing documents and readiness (FR-17, FR-18, FR-19; T3, T4) --------------
@@ -647,6 +661,9 @@ TOTALS_COLUMNS: tuple[TotalsColumn, ...] = (
 )
 Breakdown = Literal["vessel", "position", "document_type"]
 ASHORE_UNASSIGNED = "Ashore / Unassigned"
+# A dashboard page: seafarer groups (document queues) or Assignments (starting soon).
+DASHBOARD_PAGE_LIMIT = 50
+DASHBOARD_PAGE_MAX = 200
 
 
 @dataclass(frozen=True)
@@ -682,6 +699,8 @@ class DocumentLine:
     certificate_missing: bool = False
     expiry_status: ExpiryStatus | None = None
     review_state: ReviewState | None = None
+    # The Current Version's uploader, who may not review it (FR-11).
+    uploaded_by: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -727,14 +746,20 @@ class DashboardFilters:
     def _position(self, position_id: int) -> bool:
         return not self.position_ids or position_id in self.position_ids
 
-    def keeps_line(self, s: DashboardSeafarer, line: DocumentLine) -> bool:
-        """A document line, by its seafarer's held Position and Current Vessel."""
+    def keeps_seafarer(self, s: DashboardSeafarer) -> bool:
+        """A seafarer's document lines, by name, held Position and Current Vessel."""
         return (
             self._person(s)
             and self._position(s.position_id)
             and self._vessel(s.current_vessel_id, s.current_vessel_id is None)
-            and (not self.document_type_ids or line.document_type_id in self.document_type_ids)
         )
+
+    def keeps_type(self, document_type_id: int) -> bool:
+        return not self.document_type_ids or document_type_id in self.document_type_ids
+
+    def keeps_line(self, s: DashboardSeafarer, line: DocumentLine) -> bool:
+        """A document line, by its seafarer's held Position and Current Vessel."""
+        return self.keeps_seafarer(s) and self.keeps_type(line.document_type_id)
 
     def keeps_joiner(self, s: DashboardSeafarer, a: StartingSoon) -> bool:
         """A starting-soon Assignment, by its own Position and vessel; "Ashore /
@@ -785,6 +810,51 @@ def _seafarer_fields(s: DashboardSeafarer) -> dict:
     }
 
 
+@dataclass(frozen=True)
+class QueuePage:
+    """Which page of one work queue the dashboard returns: `limit` items from
+    `offset` in the queue's order. An item is a seafarer group for a document
+    queue and an Assignment for starting soon."""
+
+    queue: DashboardQueue = "missing"
+    offset: int = 0
+    limit: int = DASHBOARD_PAGE_LIMIT
+
+
+def _entry(line: DocumentLine, queue: DashboardQueue) -> dict:
+    return {
+        "document_type_id": line.document_type_id,
+        "document_type_name": line.document_type_name,
+        "document_id": line.document_id,
+        "expiry_date": line.expiry_date,
+        "effective_expiry": line.effective_expiry,
+        "capped_by": line.capped_by,
+        "certificate_missing": line.certificate_missing,
+        "expiry_status": line.expiry_status,
+        "review_state": line.review_state,
+        "uploaded_by": line.uploaded_by,
+        "action": _QUEUE_ACTIONS[queue],
+    }
+
+
+def _joiner(a: StartingSoon, s: DashboardSeafarer) -> dict:
+    return {
+        "assignment_id": a.assignment_id,
+        "seafarer": _seafarer_fields(s),
+        "vessel_id": a.vessel_id,
+        "vessel_name": a.vessel_name,
+        "position_id": a.position_id,
+        "position_name": a.position_name,
+        "start_date": a.start_date,
+        "end_date": a.end_date,
+        "counters": dict(a.counters),
+    }
+
+
+def _by_type(line: DocumentLine) -> tuple[str, int]:
+    return line.document_type_name.lower(), line.document_type_id
+
+
 def dashboard(
     seafarers: Iterable[DashboardSeafarer],
     lines: Iterable[DocumentLine],
@@ -792,38 +862,30 @@ def dashboard(
     filters: DashboardFilters,
     today: date,
     horizon_days: int,
+    page: QueuePage = QueuePage(),
 ) -> dict:
-    """The work queues for the seafarers given (already the caller's Scope),
-    each a list of seafarers by name with their entries, and their counts
-    (entries, after the filters). Starting soon lists non-cancelled upcoming
-    Assignments within the Planning Horizon by start date instead."""
+    """The work queues for the seafarers given (already the caller's Scope):
+    the counts of every queue (entries, after the filters) and one page of
+    `page.queue` with its `total` of items.
+
+    A document queue is a list of seafarers by name, each with their entries
+    by Document Type name. Starting soon lists non-cancelled upcoming
+    Assignments within the Planning Horizon by start date instead. The page
+    is in `groups` for a document queue and in `assignments` for starting
+    soon; the other list is empty."""
     people = {s.id: s for s in seafarers}
-    grouped: dict[DashboardQueue, dict[int, list[dict]]] = {q: {} for q in DOCUMENT_QUEUES}
-    for line in sorted(lines, key=lambda l: (l.document_type_name.lower(), l.document_type_id)):
+    kept: dict[int, bool] = {}
+    grouped: dict[DashboardQueue, dict[int, list[DocumentLine]]] = {q: {} for q in DOCUMENT_QUEUES}
+    for line in lines:
         s = people[line.seafarer_id]
-        if not filters.keeps_line(s, line):
+        keep = kept.get(s.id)
+        if keep is None:
+            keep = kept[s.id] = filters.keeps_seafarer(s)
+        if not keep or not filters.keeps_type(line.document_type_id):
             continue
         for queue in document_queues(line):
-            grouped[queue].setdefault(s.id, []).append({
-                "document_type_id": line.document_type_id,
-                "document_type_name": line.document_type_name,
-                "document_id": line.document_id,
-                "expiry_date": line.expiry_date,
-                "effective_expiry": line.effective_expiry,
-                "capped_by": line.capped_by,
-                "certificate_missing": line.certificate_missing,
-                "expiry_status": line.expiry_status,
-                "review_state": line.review_state,
-                "action": _QUEUE_ACTIONS[queue],
-            })
+            grouped[queue].setdefault(s.id, []).append(line)
 
-    queues: dict[str, list[dict]] = {
-        queue: [
-            {"seafarer": _seafarer_fields(people[sid]), "entries": entries}
-            for sid, entries in sorted(by_seafarer.items(), key=lambda i: _by_name(people[i[0]]))
-        ]
-        for queue, by_seafarer in grouped.items()
-    }
     joiners = sorted(
         (
             a for a in starting
@@ -833,23 +895,35 @@ def dashboard(
         ),
         key=lambda a: (a.start_date, *_by_name(people[a.seafarer_id]), a.assignment_id),
     )
-    queues["starting_soon"] = [
-        {
-            "assignment_id": a.assignment_id,
-            "seafarer": _seafarer_fields(people[a.seafarer_id]),
-            "vessel_id": a.vessel_id,
-            "vessel_name": a.vessel_name,
-            "position_id": a.position_id,
-            "position_name": a.position_name,
-            "start_date": a.start_date,
-            "end_date": a.end_date,
-            "counters": dict(a.counters),
-        }
-        for a in joiners
-    ]
-    counts = {q: sum(len(g["entries"]) for g in queues[q]) for q in DOCUMENT_QUEUES}
+    counts = {q: sum(len(entries) for entries in grouped[q].values()) for q in DOCUMENT_QUEUES}
     counts["starting_soon"] = len(joiners)
-    return {"counts": {q: counts[q] for q in DASHBOARD_QUEUES}, "queues": queues}
+
+    window = slice(page.offset, page.offset + page.limit)
+    groups: list[dict] = []
+    assignments: list[dict] = []
+    if page.queue == "starting_soon":
+        total = len(joiners)
+        assignments = [_joiner(a, people[a.seafarer_id]) for a in joiners[window]]
+    else:
+        by_seafarer = grouped[page.queue]
+        order = sorted(by_seafarer, key=lambda sid: _by_name(people[sid]))
+        total = len(order)
+        groups = [
+            {
+                "seafarer": _seafarer_fields(people[sid]),
+                "entries": [_entry(l, page.queue) for l in sorted(by_seafarer[sid], key=_by_type)],
+            }
+            for sid in order[window]
+        ]
+    return {
+        "counts": {q: counts[q] for q in DASHBOARD_QUEUES},
+        "queue": page.queue,
+        "offset": page.offset,
+        "limit": page.limit,
+        "total": total,
+        "groups": groups,
+        "assignments": assignments,
+    }
 
 
 def fleet_totals(

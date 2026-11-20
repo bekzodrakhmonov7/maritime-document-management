@@ -2,6 +2,9 @@
 
 A full-stack application for tracking maritime crew document expirations across a fleet of vessels. Built with FastAPI, React, Tailwind CSS v4, and Supabase (local).
 
+This README is the developer guide. For using the application, see the
+[User Guide](USER_GUIDE.md).
+
 ## Stack
 
 - **Backend**: FastAPI + asyncpg + Supabase local (PostgreSQL + Auth + Storage)
@@ -11,39 +14,46 @@ A full-stack application for tracking maritime crew document expirations across 
 
 ## Prerequisites
 
-- Python 3.13+
-- Node.js 22+
-- Docker & Docker Compose
-- `npx` (comes with Node.js)
+- Git
+- Python 3.13+ and [uv](https://docs.astral.sh/uv/) (it creates and manages the virtual environment)
+- Node.js 22+ (with `npx`)
+- Docker (running)
+
+All commands below run from the repository root unless they start with `cd`.
+They are written for a POSIX shell (Git Bash on Windows works; in PowerShell use
+`Copy-Item` instead of `cp`).
 
 ## Quick Start
 
-### 1. Install Supabase CLI & start services
+### 1. Start the local Supabase services
 
 ```bash
-npx supabase@latest login
-npx supabase@latest start
+npx supabase@2.122.1 start
 ```
 
-This starts PostgreSQL (port 54322), Auth, Storage, and other services.
+This starts PostgreSQL (port 54322), Auth, Storage, Mailpit and the other
+services, and prints their URLs and keys. No `supabase login` is needed for the
+local stack. The CLI version is pinned: CLI 3.x refuses this repository's
+`supabase/config.toml` ("inbucket ... is no longer supported").
 
 ### 2. Backend setup
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install uv
-uv sync
+uv sync    # creates .venv at the repository root, including the dev tools
 ```
 
-Copy environment variables and run migrations:
+Create the environment file **at the repository root** (`backend/app/config.py`
+reads `.env` from there) and run the migrations:
 
 ```bash
-cd backend
-cp ../.env.example .env
-npx supabase@latest db reset   # Applies migrations in supabase/migrations/
+cp .env.example .env
+npx supabase@2.122.1 db reset   # Applies migrations in supabase/migrations/
 ```
+
+Fill in the three Supabase values in `.env` from the output of
+`npx supabase@2.122.1 status`: `SUPABASE_ANON_KEY` is `ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY` is `SERVICE_ROLE_KEY` and `SUPABASE_JWT_SECRET` is
+`JWT_SECRET`. The other defaults work locally.
 
 > **Note:** `supabase db reset` is destructive — it drops and recreates the
 > local database, which **wipes all registered auth users** (`auth.users` and
@@ -129,7 +139,7 @@ Register (or ask for a password reset) in the app, open
 6 digits. The Auth settings (TOTP on under `[auth.mfa.totp]`) and the code-only
 e-mail templates live in `supabase/config.toml` and `supabase/templates/`
 (`confirmation.html` for Register, `recovery.html` for Forgot password;
-`magic_link.html` is no longer used for signing in); run `npx supabase@latest stop && npx supabase@latest start` after
+`magic_link.html` is no longer used for signing in); run `npx supabase@2.122.1 stop && npx supabase@2.122.1 start` after
 changing them. SMTP (Resend) is off locally and only turned on for hosted.
 
 ### First administrator
@@ -185,13 +195,18 @@ Stated limits:
 Start the FastAPI server:
 
 ```bash
+cd backend
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
 ### 3. Frontend setup
 
+Create `frontend/.env` from its example and set `VITE_SUPABASE_ANON_KEY` to the
+same `ANON_KEY` as above (the Supabase client refuses to start without it):
+
 ```bash
 cd frontend
+cp .env.example .env
 npm install
 npm run dev
 ```
@@ -210,12 +225,34 @@ uv run pytest tests/ -v
 Integration tests need the local database. The app under test connects as
 `app_backend` (derived from `OWNER_DATABASE_URL`, or set `APP_DATABASE_URL`);
 fixtures arrange rows through `OWNER_DATABASE_URL` and never use the seed.
+Unit tests alone (no database): `uv run pytest tests/unit -q`.
+
+#### Coverage
+
+Statement coverage of the three components the thesis names (NFR-06: at least
+80 % each). The HTML report lands in `backend/htmlcov/`:
+
+```bash
+cd backend
+uv run pytest tests/ -q \
+  --cov=app.domain --cov=app.reports \
+  --cov=app.scope --cov=app.deps --cov=app.routers.crew_access --cov=app.refused_access \
+  --cov=app.upload_safety \
+  --cov-report=term-missing --cov-report=html
+```
+
+| Component | Modules |
+|---|---|
+| Status engine | `app/domain.py`, `app/reports.py` |
+| Access policy | `app/scope.py`, `app/deps.py`, `app/routers/crew_access.py`, `app/refused_access.py` |
+| File validation | `app/upload_safety.py` |
 
 ### Frontend
 
 ```bash
 cd frontend
-npm run build
+npm test        # unit tests (node --test)
+npm run build   # type check and production build
 ```
 
 ## Environment Variables
@@ -490,13 +527,53 @@ wipe production data.
 ├── scripts/
 │   └── hosted-cutover.sh        # Hosting setup and cutover wizard
 ├── vercel.json                  # Build, fra1 region, /api and SPA rewrites
-├── docker-compose.yml           # Mailhog only
+├── docker-compose.yml           # Standalone MailHog; not needed (Supabase includes Mailpit)
 └── README.md
 ```
 
-## Licences
+## Third-party components and licences
 
-Third-party data bundled with the application:
+Direct dependencies, with the versions locked at the time of writing
+(`uv.lock`, `frontend/package-lock.json`). Every licence allows use in this
+project. fpdf2 is LGPL-3.0: it is used unmodified as a separately installed
+library.
+
+| Component | Version | Licence |
+|---|---|---|
+| **Backend (Python)** | | |
+| FastAPI | 0.138.0 | MIT |
+| Uvicorn | 0.49.0 | BSD-3-Clause |
+| asyncpg | 0.31.0 | Apache-2.0 |
+| pydantic-settings | 2.14.2 | MIT |
+| PyJWT | 2.13.0 | MIT |
+| httpx | 0.28.1 | BSD-3-Clause |
+| python-multipart | 0.0.32 | Apache-2.0 |
+| Jinja2 | 3.1.6 | BSD-3-Clause |
+| supabase (Python) | 2.31.0 | MIT |
+| resend | 2.32.2 | MIT |
+| pikepdf | 10.18.1 | MPL-2.0 |
+| Pillow | 12.2.0 | MIT-CMU |
+| fpdf2 | 2.9.0 | LGPL-3.0-only |
+| ReportLab | 5.0.0 | BSD |
+| tzdata | 2026.6 | Apache-2.0 |
+| pyotp (dev) | 2.12.1 | MIT |
+| pytest / pytest-cov / pytest-asyncio (dev) | 9.1.1 / 7.1.0 / 1.4.0 | MIT / MIT / Apache-2.0 |
+| **Frontend (npm)** | | |
+| React, React DOM | 19.2.7 | MIT |
+| React Router | 7.18.0 | MIT |
+| TanStack Query / Table | 5.101.0 / 8.21.3 | MIT |
+| Tailwind CSS, @tailwindcss/vite | 4.3.1 | MIT |
+| Radix UI Slider | 1.4.1 | MIT |
+| lucide-react | 1.21.0 | ISC |
+| react-dropzone | 15.0.0 | MIT |
+| zustand | 5.0.14 | MIT |
+| clsx / tailwind-merge | 2.1.1 / 3.6.0 | MIT |
+| Vite (dev) | 8.0.16 | MIT |
+| TypeScript (dev) | 6.0.3 | Apache-2.0 |
+| **Services and tools** | | |
+| Supabase CLI and local stack | 2.122.1 | Apache-2.0 (PostgreSQL: PostgreSQL Licence) |
+
+Bundled data:
 
 | File | Source | Licence | Downloaded |
 |---|---|---|---|

@@ -45,6 +45,7 @@ docs/
 .scratch/
 *.md
 !README.md
+!USER_GUIDE.md
 .env.hosted
 
 .vercel

@@ -9,6 +9,7 @@ from app.domain import (
     DashboardFilters,
     DashboardSeafarer,
     DocumentLine,
+    QueuePage,
     StartingSoon,
     dashboard,
     document_queues,
@@ -64,12 +65,20 @@ def _soon(seafarer, start_offset, vessel_id=ALPHA, cancelled=False, **kw) -> Sta
     )
 
 
-def _board(seafarers=(ANNA, IVAN, OLGA), lines=(), starting=(), **filters) -> dict:
-    return dashboard(seafarers, lines, starting, DashboardFilters(**filters), TODAY, HORIZON)
+def _board(
+    seafarers=(ANNA, IVAN, OLGA), lines=(), starting=(), page=QueuePage(), **filters
+) -> dict:
+    return dashboard(seafarers, lines, starting, DashboardFilters(**filters), TODAY, HORIZON, page)
 
 
-def _names(board, queue) -> list[str]:
-    return [g["seafarer"]["last_name"] for g in board["queues"][queue]]
+def _queue(queue, **kw) -> list[dict]:
+    """The whole of one queue: its seafarer groups, or Assignments for starting soon."""
+    board = _board(page=QueuePage(queue, 0, 1000), **kw)
+    return board["assignments"] if queue == "starting_soon" else board["groups"]
+
+
+def _names(queue, **kw) -> list[str]:
+    return [g["seafarer"]["last_name"] for g in _queue(queue, **kw)]
 
 
 # --- Queue membership ------------------------------------------------------------------
@@ -96,24 +105,26 @@ def test_each_document_lands_in_its_queues(status, review, expected):
 
 
 def test_an_expired_unreviewed_document_is_in_both_queues_and_both_counts():
-    board = _board(lines=[_line(ANNA, status="expired", review="not_reviewed")])
+    lines = [_line(ANNA, status="expired", review="not_reviewed")]
+    board = _board(lines=lines)
     assert board["counts"]["expired"] == 1
     assert board["counts"]["waiting_for_review"] == 1
-    [expired] = board["queues"]["expired"][0]["entries"]
-    [waiting] = board["queues"]["waiting_for_review"][0]["entries"]
+    [expired] = _queue("expired", lines=lines)[0]["entries"]
+    [waiting] = _queue("waiting_for_review", lines=lines)[0]["entries"]
     assert expired["action"] == "upload"
     assert waiting["action"] == "review"
 
 
 def test_action_hints():
-    board = _board(lines=[
+    lines = [
         _line(ANNA, PASSPORT, status=None),
         _line(ANNA, MEDICAL, status="unexpired"),
         _line(IVAN, MEDICAL, status="expiry_not_stated"),
-    ])
-    assert board["queues"]["missing"][0]["entries"][0]["action"] == "upload"
-    assert board["queues"]["in_order"][0]["entries"][0]["action"] == "open"
-    assert board["queues"]["expiry_not_stated"][0]["entries"][0]["action"] == "open"
+    ]
+    board = _board(lines=lines)
+    assert _queue("missing", lines=lines)[0]["entries"][0]["action"] == "upload"
+    assert _queue("in_order", lines=lines)[0]["entries"][0]["action"] == "open"
+    assert _queue("expiry_not_stated", lines=lines)[0]["entries"][0]["action"] == "open"
     assert list(board["counts"]) == [
         "missing", "expired", "expiring_soon", "expiry_not_stated",
         "waiting_for_review", "starting_soon", "in_order",
@@ -121,32 +132,33 @@ def test_action_hints():
 
 
 def test_entries_are_grouped_by_seafarer_by_name():
-    board = _board(lines=[
+    lines = [
         _line(ANNA, PASSPORT, status="expired"),
         _line(IVAN, PASSPORT, status="expired"),
         _line(ANNA, MEDICAL, status="expired"),
-    ])
-    assert _names(board, "expired") == ["Orlov", "Petrova"]
-    petrova = board["queues"]["expired"][1]
+    ]
+    assert _names("expired", lines=lines) == ["Orlov", "Petrova"]
+    petrova = _queue("expired", lines=lines)[1]
     assert petrova["seafarer"]["current_vessel_name"] == "Alpha"
     assert [e["document_type_name"] for e in petrova["entries"]] == ["Medical", "Passport"]
-    assert board["counts"]["expired"] == 3
+    assert _board(lines=lines)["counts"]["expired"] == 3
 
 
 # --- Inactive seafarers ----------------------------------------------------------------
 
 
 def test_inactive_seafarers_are_left_out_of_queues_and_counts():
-    board = _board(lines=[_line(OLGA, status="expired"), _line(OLGA, MEDICAL, status=None)])
-    assert board["queues"]["expired"] == []
+    lines = [_line(OLGA, status="expired"), _line(OLGA, MEDICAL, status=None)]
+    board = _board(lines=lines)
+    assert _queue("expired", lines=lines) == []
     assert board["counts"]["expired"] == 0
     assert board["counts"]["missing"] == 0
 
 
 def test_show_inactive_brings_them_back():
-    board = _board(lines=[_line(OLGA, status="expired")], show_inactive=True)
-    assert _names(board, "expired") == ["Smirnova"]
-    assert board["queues"]["expired"][0]["seafarer"]["inactive"] is True
+    [group] = _queue("expired", lines=[_line(OLGA, status="expired")], show_inactive=True)
+    assert group["seafarer"]["last_name"] == "Smirnova"
+    assert group["seafarer"]["inactive"] is True
 
 
 # --- Starting soon ---------------------------------------------------------------------
@@ -162,33 +174,33 @@ def test_starting_soon_is_bounded_by_the_planning_horizon(offset, expected):
 
 
 def test_starting_soon_lists_upcoming_assignments_within_the_horizon_by_start_date():
-    board = _board(starting=[
+    starting = [
         _soon(ANNA, 60),
         _soon(IVAN, 5),
         _soon(IVAN, HORIZON + 1),
         _soon(ANNA, 0),
         _soon(ANNA, 30, cancelled=True),
-    ])
-    assert [e["assignment_id"] for e in board["queues"]["starting_soon"]] == [5, 60]
-    assert board["counts"]["starting_soon"] == 2
-    first = board["queues"]["starting_soon"][0]
+    ]
+    assert [e["assignment_id"] for e in _queue("starting_soon", starting=starting)] == [5, 60]
+    assert _board(starting=starting)["counts"]["starting_soon"] == 2
+    first = _queue("starting_soon", starting=starting)[0]
     assert first["seafarer"]["last_name"] == "Orlov"
     assert first["counters"] == {"before_joining": 1, "renewable_at_sea": 0, "not_reviewed": 2}
 
 
 def test_starting_soon_filters_by_the_assignments_vessel_and_position():
     starting = [_soon(ANNA, 10, ALPHA, assignment_id=1), _soon(IVAN, 20, BRAVO, assignment_id=2)]
-    board = _board(starting=starting, vessel_ids=frozenset({BRAVO}))
-    assert [e["assignment_id"] for e in board["queues"]["starting_soon"]] == [2]
-    board = _board(starting=starting, position_ids=frozenset({MASTER}))
-    assert [e["assignment_id"] for e in board["queues"]["starting_soon"]] == [1]
+    by_vessel = _queue("starting_soon", starting=starting, vessel_ids=frozenset({BRAVO}))
+    assert [e["assignment_id"] for e in by_vessel] == [2]
+    by_position = _queue("starting_soon", starting=starting, position_ids=frozenset({MASTER}))
+    assert [e["assignment_id"] for e in by_position] == [1]
 
 
 def test_ashore_matches_a_joiner_who_is_ashore_today():
     starting = [_soon(ANNA, 10, BRAVO, assignment_id=1), _soon(IVAN, 20, BRAVO, assignment_id=2)]
-    board = _board(starting=starting, ashore=True)
     # Anna is on board Alpha today; Ivan is ashore.
-    assert [e["assignment_id"] for e in board["queues"]["starting_soon"]] == [2]
+    joiners = _queue("starting_soon", starting=starting, ashore=True)
+    assert [e["assignment_id"] for e in joiners] == [2]
 
 
 # --- Filters ---------------------------------------------------------------------------
@@ -201,24 +213,22 @@ LINES = [
 
 
 def test_the_name_filter_needs_every_word():
-    assert _names(_board(lines=LINES, name="anna pet"), "expired") == ["Petrova"]
-    assert _names(_board(lines=LINES, name="anna orlov"), "expired") == []
+    assert _names("expired", lines=LINES, name="anna pet") == ["Petrova"]
+    assert _names("expired", lines=LINES, name="anna orlov") == []
 
 
 def test_tags_narrow_and_counts_follow():
     board = _board(lines=LINES, document_type_ids=frozenset({PASSPORT}))
     assert board["counts"]["expired"] == 2
-    board = _board(lines=LINES, position_ids=frozenset({COOK}))
-    assert _names(board, "expired") == ["Orlov"]
-    board = _board(lines=LINES, vessel_ids=frozenset({ALPHA}))
-    assert _names(board, "expired") == ["Petrova"]
-    assert board["counts"]["expired"] == 2
+    assert _names("expired", lines=LINES, position_ids=frozenset({COOK})) == ["Orlov"]
+    assert _names("expired", lines=LINES, vessel_ids=frozenset({ALPHA})) == ["Petrova"]
+    assert _board(lines=LINES, vessel_ids=frozenset({ALPHA}))["counts"]["expired"] == 2
 
 
 def test_ashore_unassigned_is_a_vessel_value():
-    assert _names(_board(lines=LINES, ashore=True), "expired") == ["Orlov"]
-    board = _board(lines=LINES, ashore=True, vessel_ids=frozenset({ALPHA}))
-    assert _names(board, "expired") == ["Orlov", "Petrova"]
+    assert _names("expired", lines=LINES, ashore=True) == ["Orlov"]
+    both = _names("expired", lines=LINES, ashore=True, vessel_ids=frozenset({ALPHA}))
+    assert both == ["Orlov", "Petrova"]
 
 
 def test_tags_of_different_kinds_combine():
@@ -226,6 +236,70 @@ def test_tags_of_different_kinds_combine():
         lines=LINES, vessel_ids=frozenset({ALPHA}), document_type_ids=frozenset({MEDICAL})
     )
     assert board["counts"]["expired"] == 1
+
+
+# --- Paging ---------------------------------------------------------------------------
+
+CREW = [
+    DashboardSeafarer(
+        id=10 + i, first_name="Crew", last_name=f"Member{i:02}", position_id=MASTER,
+        position_name="Master",
+    )
+    for i in range(7)
+]
+
+
+def test_a_document_queue_pages_by_seafarer_group_in_name_order():
+    lines = [_line(s, t, status="expired") for s in CREW for t in (PASSPORT, MEDICAL)]
+    pages = [_board(CREW, lines, page=QueuePage("expired", offset, 3)) for offset in (0, 3, 6)]
+    assert [len(p["groups"]) for p in pages] == [3, 3, 1]
+    assert [g["seafarer"]["last_name"] for p in pages for g in p["groups"]] == [
+        s.last_name for s in CREW
+    ]
+    # A group is never split: the page unit is the seafarer with all their entries.
+    assert all(len(g["entries"]) == 2 for p in pages for g in p["groups"])
+    assert {(p["queue"], p["total"], p["limit"]) for p in pages} == {("expired", 7, 3)}
+    assert [p["offset"] for p in pages] == [0, 3, 6]
+    assert all(p["assignments"] == [] for p in pages)
+
+
+def test_starting_soon_pages_by_assignment_in_start_date_order():
+    starting = [_soon(s, 10 + i, assignment_id=i) for i, s in enumerate(CREW)]
+    first = _board(CREW, starting=starting, page=QueuePage("starting_soon", 0, 4))
+    second = _board(CREW, starting=starting, page=QueuePage("starting_soon", 4, 4))
+    ids = [a["assignment_id"] for a in first["assignments"] + second["assignments"]]
+    assert ids == list(range(7))
+    assert (first["total"], first["groups"], len(second["assignments"])) == (7, [], 3)
+
+
+def test_counts_cover_every_queue_whatever_the_page():
+    lines = [
+        _line(ANNA, PASSPORT, status="expired", review="not_reviewed"),
+        _line(IVAN, PASSPORT, status=None),
+        _line(IVAN, MEDICAL, status="unexpired"),
+    ]
+    starting = [_soon(IVAN, 5)]
+    pages = [
+        _board(lines=lines, starting=starting, page=QueuePage(q, offset, limit))
+        for q in ("missing", "expired", "starting_soon", "in_order")
+        for offset, limit in ((0, 1), (1, 1), (50, 200))
+    ]
+    assert all(p["counts"] == pages[0]["counts"] for p in pages)
+    assert pages[0]["counts"] == {
+        "missing": 1, "expired": 1, "expiring_soon": 0, "expiry_not_stated": 0,
+        "waiting_for_review": 1, "starting_soon": 1, "in_order": 1,
+    }
+
+
+def test_a_page_past_the_end_is_empty_and_keeps_the_total():
+    board = _board(lines=LINES, page=QueuePage("expired", 5, 50))
+    assert (board["groups"], board["total"]) == ([], 2)
+
+
+def test_the_default_page_is_the_first_50_of_missing():
+    board = _board(lines=[_line(IVAN, status=None)])
+    assert (board["queue"], board["offset"], board["limit"]) == ("missing", 0, 50)
+    assert [g["seafarer"]["last_name"] for g in board["groups"]] == ["Orlov"]
 
 
 # --- Fleet totals ----------------------------------------------------------------------
