@@ -83,7 +83,13 @@ class LastCleanup(BaseModel):
     finished_at: datetime
     versions: int
     seafarers: int
-    audit_records: int
+
+
+class LastAuditCleanup(BaseModel):
+    """The owner job's latest removal of old Audit Records (SR-14)."""
+
+    removed_at: datetime
+    rows: int
 
 
 class SettingsRead(BaseModel):
@@ -99,6 +105,7 @@ class SettingsRead(BaseModel):
     version: int
     updated_at: datetime
     last_cleanup: LastCleanup | None = None
+    last_audit_cleanup: LastAuditCleanup | None = None
 
 
 EDITABLE = tuple(SettingsValues.model_fields)

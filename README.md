@@ -51,7 +51,9 @@ npx supabase@latest db reset   # Applies migrations in supabase/migrations/
 > register your account again and make it an administrator again (below).
 
 The app connects as the restricted `app_backend` database role, never as the
-table owner, so it can only add to and read the Audit Log. `seed.sql` gives it
+table owner, so it can only add to and read the Audit Log. It cannot remove old
+Audit Records either: the owner's nightly `audit-retention` `pg_cron` job
+(03:17 UTC) does that (SR-14, ADR 0008). `seed.sql` gives it
 the local password `app_backend_dev` (see `DATABASE_URL` in `.env.example`).
 
 ### Signing in: a password, then an e-mailed code

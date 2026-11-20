@@ -2,8 +2,10 @@
 daily check, never the manual one.
 
 The removal itself happens in the database, in one SECURITY DEFINER function
-per kind of record (migration `..._retention.sql`): Replaced Versions, the
-whole records of Inactive seafarers, and old Audit Records. Each removes what
+per kind of record (migration `..._retention.sql`): Replaced Versions and the
+whole records of Inactive seafarers. Old Audit Records are not removed here:
+app_backend may not start that, a nightly pg_cron job of the owner does
+(SR-14, ADR 0008). Each removes what
 its Retention Period has passed, writes the system's *retention removal*
 Audit Records and queues the removed rows' files, all in its own transaction.
 A run removes at most 500 Versions and 500 seafarers; the rest go next time.
@@ -29,7 +31,6 @@ CAP = 500
 class CleanupResult:
     versions: int
     seafarers: int
-    audit_records: int
     files_removed: int
     files_failed: int
 
@@ -38,18 +39,17 @@ async def clean_up(conn: asyncpg.Connection, storage: FileStorage, run_id: int) 
     """Remove what is due, note it on the run, then delete the queued files."""
     versions = await conn.fetchval("SELECT public.retention_remove_replaced_versions($1)", CAP)
     seafarers = await conn.fetchval("SELECT public.retention_remove_inactive_seafarers($1)", CAP)
-    audit_records = await conn.fetchval("SELECT public.retention_remove_old_audit_records()")
     await conn.execute(
         """
         UPDATE public.daily_check_run
            SET retention_finished_at = now(), removed_versions = $2,
-               removed_seafarers = $3, removed_audit_records = $4
+               removed_seafarers = $3
          WHERE id = $1
         """,
-        run_id, versions, seafarers, audit_records,
+        run_id, versions, seafarers,
     )
     removed, failed = await remove_queued_files(conn, storage)
-    return CleanupResult(versions, seafarers, audit_records, removed, failed)
+    return CleanupResult(versions, seafarers, removed, failed)
 
 
 async def remove_queued_files(conn: asyncpg.Connection, storage: FileStorage) -> tuple[int, int]:
@@ -89,10 +89,25 @@ async def last_cleanup(conn: asyncpg.Connection) -> dict | None:
     row = await conn.fetchrow(
         """
         SELECT local_date, retention_finished_at AS finished_at, removed_versions AS versions,
-               removed_seafarers AS seafarers, removed_audit_records AS audit_records
+               removed_seafarers AS seafarers
           FROM public.daily_check_run
          WHERE retention_finished_at IS NOT NULL
          ORDER BY retention_finished_at DESC
+         LIMIT 1
+        """
+    )
+    return None if row is None else dict(row)
+
+
+async def last_audit_cleanup(conn: asyncpg.Connection) -> dict | None:
+    """The owner job's latest removal of old Audit Records, from its own
+    *retention removal* record; None while it has removed nothing."""
+    row = await conn.fetchrow(
+        """
+        SELECT occurred_at AS removed_at, (after->>'rows')::int AS rows
+          FROM public.audit_log
+         WHERE action = 'retention_removal' AND target_type = 'audit_log'
+         ORDER BY id DESC
          LIMIT 1
         """
     )

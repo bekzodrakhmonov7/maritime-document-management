@@ -30,7 +30,6 @@ class RetentionResult(BaseModel):
 
     versions: int
     seafarers: int
-    audit_records: int
     files_removed: int
     # Stay queued and are retried on the next run.
     files_failed: int
