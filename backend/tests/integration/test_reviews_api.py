@@ -330,7 +330,7 @@ async def test_a_failed_transaction_deletes_the_stored_proof_file(client, world,
 
 async def test_a_signed_url_for_the_proof_file_is_issued_and_recorded(client, world, storage, owner_db):
     doc = await _passport(client, world)
-    doc = await _verified(client, world["officer_a"], doc["versions"][0]["id"], proof=PDF, filename="reply")
+    doc = await _verified(client, world["officer_a"], doc["versions"][0]["id"], proof=PDF, filename="reply.pdf")
     verification_id = doc["versions"][0]["verifications"][0]["id"]
 
     res = await client.post(f"/api/verifications/{verification_id}/proof-url", headers=world["officer_a2"])
