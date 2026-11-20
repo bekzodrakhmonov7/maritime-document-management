@@ -23,6 +23,7 @@ from app.models.requirements import (
 )
 from app.services import errors
 from app.services import requirements as svc
+from app.routers.params import Id
 
 admin_only = require_role("administrator")
 all_staff = require_role("administrator", "crewing_officer", "manager")
@@ -63,8 +64,8 @@ async def evaluate(
 
 @matrix.put("/{position_id}/{document_type_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def set_requirement(
-    position_id: int,
-    document_type_id: int,
+    position_id: Id,
+    document_type_id: Id,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     admin: UserPayload = Depends(admin_only),
@@ -76,8 +77,8 @@ async def set_requirement(
 
 @matrix.delete("/{position_id}/{document_type_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_requirement(
-    position_id: int,
-    document_type_id: int,
+    position_id: Id,
+    document_type_id: Id,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     admin: UserPayload = Depends(admin_only),
@@ -125,7 +126,7 @@ async def create_exception(
 
 @exceptions.put("/{exception_id}", response_model=RequirementExceptionRead)
 async def edit_exception(
-    exception_id: int,
+    exception_id: Id,
     body: RequirementExceptionWrite,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
@@ -139,7 +140,7 @@ async def edit_exception(
 
 @exceptions.delete("/{exception_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_exception(
-    exception_id: int,
+    exception_id: Id,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     admin: UserPayload = Depends(admin_only),

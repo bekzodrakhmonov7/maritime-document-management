@@ -55,6 +55,7 @@ from app.upload_safety import (
     too_large,
     validate,
 )
+from app.routers.params import MAX_ID, Id
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ _REFUSALS = {
 
 @router.get("/seafarers/{seafarer_id}/documents", response_model=list[DocumentSummary])
 async def list_seafarer_documents(
-    seafarer_id: int,
+    seafarer_id: Id,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
@@ -87,9 +88,9 @@ async def list_seafarer_documents(
     responses=_REFUSALS,
 )
 async def upload_version(
-    seafarer_id: int,
+    seafarer_id: Id,
     request: Request,
-    document_type_id: int = Query(...),
+    document_type_id: int = Query(..., ge=1, le=MAX_ID),
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
     storage: FileStorage = Depends(get_storage),
@@ -126,7 +127,7 @@ async def upload_version(
 
 @router.get("/documents/{document_id}", response_model=DocumentRead)
 async def get_document(
-    document_id: int,
+    document_id: Id,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
@@ -141,7 +142,7 @@ async def get_document(
     status_code=status.HTTP_201_CREATED,
 )
 async def add_details_version(
-    document_id: int,
+    document_id: Id,
     body: VersionDetails,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
@@ -157,7 +158,7 @@ async def add_details_version(
 
 @router.post("/versions/{version_id}/file-url", response_model=FileUrl)
 async def issue_file_url(
-    version_id: int,
+    version_id: Id,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
@@ -179,7 +180,7 @@ async def issue_file_url(
     status_code=status.HTTP_201_CREATED,
 )
 async def review_version(
-    version_id: int,
+    version_id: Id,
     body: ReviewWrite,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
@@ -200,7 +201,7 @@ async def review_version(
     responses=_REFUSALS,
 )
 async def record_verification(
-    version_id: int,
+    version_id: Id,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
@@ -237,7 +238,7 @@ async def record_verification(
 
 @router.post("/verifications/{verification_id}/proof-url", response_model=FileUrl)
 async def issue_proof_url(
-    verification_id: int,
+    verification_id: Id,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),

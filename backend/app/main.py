@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app import refused_access
+from app import errors, refused_access
 from app.db import lifespan
 from app.request_context import RequestIdMiddleware
 from app.routers import (
@@ -27,6 +27,7 @@ from app.routers import (
 def create_app() -> FastAPI:
     app = FastAPI(title="Crew Document Management", lifespan=lifespan)
 
+    errors.install(app)
     refused_access.install(app)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(

@@ -80,6 +80,8 @@ def _forged_headers(real_account) -> dict[str, dict[str, str]]:
         "wrong audience": _bearer(_hs256(_claims(sub=sub, aud="elsewhere"))),
         "no subject": _bearer(_hs256(_claims(sub=None))),
         "unusable subject": _bearer(_hs256(_claims(sub="not-a-uuid"))),
+        "no expiry": _bearer(_hs256(_claims(sub=sub, session_id=sub, exp=None))),
+        "no audience": _bearer(_hs256(_claims(sub=sub, aud=None))),
     }
 
 
@@ -93,6 +95,8 @@ FORGED = [
     ("wrong audience", "Invalid token"),
     ("no subject", "Invalid token"),
     ("unusable subject", "Invalid token"),
+    ("no expiry", "Invalid token"),
+    ("no audience", "Invalid token"),
 ]
 
 
@@ -185,13 +189,16 @@ async def test_an_expired_session_without_an_account_names_only_its_subject(clie
     _assert_request_target(rec)
 
 
-@pytest.mark.parametrize("case", ["unusable subject", "wrong key", "wrong audience"])
+@pytest.mark.parametrize(
+    "case", ["unusable subject", "no subject", "wrong key", "wrong audience"]
+)
 async def test_an_expired_but_otherwise_bad_session_is_an_invalid_session(
     client, owner_db, make_account, case
 ):
     account = await make_account()
     headers = {
         "unusable subject": _bearer(_hs256(_expired(sub="not-a-uuid"))),
+        "no subject": _bearer(_hs256(_expired(sub=None))),
         "wrong key": _bearer(_hs256(_expired(sub=str(account)), "not-the-secret-" * 3)),
         "wrong audience": _bearer(_hs256(_expired(sub=str(account), aud="elsewhere"))),
     }[case]

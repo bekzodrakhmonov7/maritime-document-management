@@ -14,6 +14,7 @@ from app.reports import ReportFormat
 from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
 from app.services import reports as svc
 from app.services.reports import RenderedReport
+from app.routers.params import Id
 
 router = APIRouter(tags=["reports"])
 
@@ -31,7 +32,7 @@ def _download(report: RenderedReport) -> Response:
 
 @router.get("/assignments/{assignment_id}/report")
 async def assignment_report(
-    assignment_id: int,
+    assignment_id: Id,
     request: Request,
     format: ReportFormat = Query(...),
     db: asyncpg.Connection = Depends(get_db),
@@ -48,7 +49,7 @@ async def assignment_report(
 
 @router.get("/vessels/{vessel_id}/report")
 async def vessel_report(
-    vessel_id: int,
+    vessel_id: Id,
     request: Request,
     format: ReportFormat = Query(...),
     db: asyncpg.Connection = Depends(get_db),

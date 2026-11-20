@@ -14,6 +14,10 @@ from app.models.auth import UserPayload
 
 security = HTTPBearer(auto_error=False)
 
+# A Session without these is refused: it would never expire, name no one
+# or be meant for another audience (SR-01).
+REQUIRED_CLAIMS = ["exp", "sub", "aud"]
+
 
 class SessionRefused(HTTPException):
     """A Session refused with a 401, recorded as refused access (ADR-0006).
@@ -97,6 +101,7 @@ async def get_signed_in_user(
             key,
             algorithms=algorithms,
             audience="authenticated",
+            options={"require": REQUIRED_CLAIMS},
         )
     except jwt.ExpiredSignatureError:
         raise await _refuse_expired(token, key, algorithms, db)
@@ -166,7 +171,7 @@ async def _refuse_expired(
     try:
         payload = jwt.decode(
             token, key, algorithms=algorithms, audience="authenticated",
-            options={"verify_exp": False},
+            options={"verify_exp": False, "require": REQUIRED_CLAIMS},
         )
         sub = UUID(str(payload.get("sub")))
     except (jwt.InvalidTokenError, ValueError):

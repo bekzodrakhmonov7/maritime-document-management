@@ -27,6 +27,7 @@ from app.services import errors
 from app.services import reference_data as svc
 from app.services import responsible_officers
 from app.services.reference_data import DOCUMENT_TYPE, POSITION, VESSEL, Table
+from app.routers.params import Id
 
 admin_only = require_role("administrator")
 fleet_readers = require_role("administrator", "crewing_officer")
@@ -65,7 +66,7 @@ async def list_vessels(
 
 @vessels.get("/{vessel_id}", response_model=VesselRead)
 async def get_vessel(
-    vessel_id: int,
+    vessel_id: Id,
     db: asyncpg.Connection = Depends(get_db),
     _: UserPayload = Depends(fleet_readers),
 ):
@@ -86,7 +87,7 @@ async def create_vessel(
 
 @vessels.put("/{vessel_id}", response_model=VesselRead)
 async def edit_vessel(
-    vessel_id: int,
+    vessel_id: Id,
     body: VesselWrite,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
@@ -100,7 +101,7 @@ async def edit_vessel(
 
 @vessels.post("/{vessel_id}/deactivate", response_model=VesselRead)
 async def deactivate_vessel(
-    vessel_id: int,
+    vessel_id: Id,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     admin: UserPayload = Depends(admin_only),
@@ -113,7 +114,7 @@ async def deactivate_vessel(
 
 @vessels.post("/{vessel_id}/reactivate", response_model=VesselRead)
 async def reactivate_vessel(
-    vessel_id: int,
+    vessel_id: Id,
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
     admin: UserPayload = Depends(admin_only),
@@ -151,7 +152,7 @@ def _retirable_router(
 
     @router.put("/{row_id}", response_model=read_model)
     async def edit(
-        row_id: int,
+        row_id: Id,
         body: write_model,  # type: ignore[valid-type]
         request: Request,
         db: asyncpg.Connection = Depends(get_db),
@@ -164,7 +165,7 @@ def _retirable_router(
 
     @router.post("/{row_id}/retire", response_model=read_model)
     async def retire(
-        row_id: int,
+        row_id: Id,
         request: Request,
         db: asyncpg.Connection = Depends(get_db),
         admin: UserPayload = Depends(admin_only),
@@ -176,7 +177,7 @@ def _retirable_router(
 
     @router.post("/{row_id}/unretire", response_model=read_model)
     async def unretire(
-        row_id: int,
+        row_id: Id,
         request: Request,
         db: asyncpg.Connection = Depends(get_db),
         admin: UserPayload = Depends(admin_only),
@@ -188,7 +189,7 @@ def _retirable_router(
 
     @router.delete("/{row_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete(
-        row_id: int,
+        row_id: Id,
         request: Request,
         db: asyncpg.Connection = Depends(get_db),
         admin: UserPayload = Depends(admin_only),
