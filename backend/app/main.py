@@ -36,7 +36,10 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["X-Request-ID", "Content-Disposition", "X-Export-Rows", "X-Export-Truncated"],
+        expose_headers=[
+            "X-Request-ID", "Content-Disposition", "X-Export-Rows", "X-Export-Truncated",
+            "Retry-After",
+        ],
     )
 
     @app.get("/health")

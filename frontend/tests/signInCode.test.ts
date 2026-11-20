@@ -10,6 +10,7 @@ import {
   normaliseCode,
   passwordProblem,
   secondsUntilResend,
+  signInErrorMessage,
 } from '../src/lib/signInCode.ts'
 
 test('a typed or pasted code keeps only its first 6 digits', () => {
@@ -49,6 +50,25 @@ test('a wrong or expired code says so', () => {
 test('too many attempts asks the person to wait', () => {
   assert.match(
     codeErrorMessage({ status: 429, code: 'over_request_rate_limit', message: 'x' }),
+    /Too many attempts/,
+  )
+})
+
+test('a sign-in blocked after failed attempts says to wait 15 minutes (SR-18)', () => {
+  const blocked = { status: 429, code: 'login_blocked', message: 'x' }
+  for (const message of [codeErrorMessage(blocked), signInErrorMessage(blocked)]) {
+    assert.match(message, /Too many failed sign-in attempts/)
+    assert.match(message, /15 minutes/)
+  }
+})
+
+test('the password step shows the API message for other refusals', () => {
+  assert.equal(
+    signInErrorMessage({ status: 400, code: 'invalid_credentials', message: 'Wrong e-mail or password.' }),
+    'Wrong e-mail or password.',
+  )
+  assert.match(
+    signInErrorMessage({ status: 429, code: 'over_request_rate_limit', message: 'x' }),
     /Too many attempts/,
   )
 })

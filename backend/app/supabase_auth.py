@@ -215,7 +215,12 @@ class GoTrue:
         if access_token:
             headers["Authorization"] = f"Bearer {access_token}"
         if client_ip:
-            # So Supabase's own rate limit and log see the person, not us.
+            # Not relied on: Supabase documents forwarding the person's
+            # address only through Sb-Forwarded-For, sent with a secret API
+            # key once forwarding is enabled for the project (not done). So
+            # Supabase's own per-address rate limits and logs may see the
+            # server's address. The app's block after failed logins counts
+            # per address itself (SR-18, app.services.login_block).
             headers["X-Forwarded-For"] = client_ip
         try:
             async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as http:

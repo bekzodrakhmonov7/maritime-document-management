@@ -4,7 +4,7 @@ import { Anchor, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { CodeStep } from '../components/auth/CodeStep'
 import { ErrorNote } from '../components/ErrorNote'
-import type { SignInStep } from '../lib/signInCode'
+import { signInErrorMessage, type SignInStep } from '../lib/signInCode'
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-navy-50 placeholder-navy-500 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50'
@@ -43,7 +43,7 @@ export function LoginPage() {
       setPassword('')
       setStep(issued)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed.')
+      setError(err instanceof Error ? signInErrorMessage(err) : 'Sign-in failed.')
     } finally {
       setLoading(false)
     }
