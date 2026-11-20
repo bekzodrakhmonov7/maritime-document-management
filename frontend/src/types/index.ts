@@ -350,6 +350,8 @@ export interface Version extends VersionDetails {
   is_current: boolean
   /** Set on a details-only Version: the earlier Version whose file it reuses. */
   file_from_version_number: number | null
+  /** Valid longer than the type's maximum validity allows (SR-12); saved as the document states it. */
+  above_max_validity: boolean
   review_state: ReviewState
   /** Newest first. */
   reviews: Review[]
@@ -393,6 +395,9 @@ export interface DocumentDetail extends DocumentSummary {
   seafarer_last_name: string
   seafarer_inactive: boolean
   versions: Version[]
+  /** Set only in the answer that saved a new Version: why its details need a
+   * second look (SR-12: validity past the type's maximum). Empty otherwise. */
+  warnings?: string[]
 }
 
 /** POST /api/versions/{id}/file-url */

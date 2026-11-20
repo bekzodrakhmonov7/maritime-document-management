@@ -94,6 +94,9 @@ class VersionRead(BaseModel):
     is_current: bool
     # Set on a details-only Version: the earlier Version whose file it reuses.
     file_from_version_number: int | None
+    # Valid longer than the type's maximum validity allows (SR-12); computed
+    # when read against the type's current rule.
+    above_max_validity: bool
     # The latest Review decides; never "rejected" for the Current Version.
     review_state: ReviewState
     # Newest first.
@@ -149,6 +152,9 @@ class DocumentRead(DocumentSummary):
     seafarer_last_name: str
     seafarer_inactive: bool
     versions: list[VersionRead]
+    # Set only in the response that saved a new Version: why its details
+    # need a second look (SR-12: validity past the type's maximum).
+    warnings: list[str] = []
 
 
 class FileUrl(BaseModel):

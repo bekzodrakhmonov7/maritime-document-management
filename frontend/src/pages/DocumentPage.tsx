@@ -138,6 +138,11 @@ export function DocumentPage() {
                       </dd>
                     </div>
                   </dl>
+                  {v.above_max_validity && (
+                    <p className="mt-2 text-xs text-status-expiring">
+                      Validity longer than this type allows (at most {document.max_validity_months} months).
+                    </p>
+                  )}
                   {v.file_from_version_number && (
                     <p className="mt-2 text-xs text-navy-400">
                       Details corrected; same file as version {v.file_from_version_number}.
