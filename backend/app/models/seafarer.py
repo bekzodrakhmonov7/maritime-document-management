@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Annotated
 
-from pydantic import BaseModel, StringConstraints, field_validator
+from pydantic import BaseModel, StringConstraints, ValidationInfo, field_validator
 
 from app.models.reference import CountryCode
 
@@ -22,10 +22,21 @@ class SeafarerWrite(BaseModel):
 
     @field_validator("date_of_birth")
     @classmethod
-    def born_in_the_past(cls, value: date | None) -> date | None:
-        if value is not None and not date(1900, 1, 1) <= value <= date.today():
+    def born_in_the_past(cls, value: date | None, info: ValidationInfo) -> date | None:
+        """Not after today in the company time zone. That date comes from
+        Settings, so it is checked only when the caller passes it as the
+        validation context `today` (`born_by`); never the server's own date."""
+        today = (info.context or {}).get("today")
+        if value is not None and (
+            value < date(1900, 1, 1) or (today is not None and value > today)
+        ):
             raise ValueError("must be a date in the past")
         return value
+
+    def born_by(self, today: date) -> "SeafarerWrite":
+        """This body validated again with the company's today as the upper
+        bound of the date of birth; raises ValidationError like the parse."""
+        return SeafarerWrite.model_validate(self.model_dump(), context={"today": today})
 
 
 class SetInactive(BaseModel):

@@ -4,8 +4,12 @@ Administrators and crewing officers, within their Scope; managers get 403.
 There is no delete endpoint: a seafarer is set Inactive instead.
 """
 
+from datetime import date
+
 import asyncpg
 from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 
 from app.audit import audit_context_for
 from app.deps import get_db
@@ -17,6 +21,16 @@ from app.services import assignments, coverage
 from app.services import seafarers as svc
 
 router = APIRouter(prefix="/seafarers", tags=["seafarers"])
+
+
+def _born_by(body: SeafarerWrite, today: date) -> dict:
+    """The body's values, its date of birth not after `today` (company time
+    zone); refused with the same 422 as any other invalid field."""
+    try:
+        return body.born_by(today).model_dump()
+    except ValidationError as exc:
+        errors = exc.errors(include_url=False, include_context=False)
+        raise RequestValidationError([{**e, "loc": ("body", *e["loc"])} for e in errors])
 
 
 @router.get("", response_model=list[SeafarerRead])
@@ -52,7 +66,9 @@ async def create_seafarer(
     access: CrewAccess = Depends(get_crew_access),
 ):
     with errors_as_http():
-        return await svc.create(db, audit_context_for(request, access.user), body.model_dump())
+        return await svc.create(
+            db, audit_context_for(request, access.user), _born_by(body, access.scope.today)
+        )
 
 
 @router.put("/{seafarer_id}", response_model=SeafarerRead)
@@ -65,7 +81,8 @@ async def edit_seafarer(
 ):
     with errors_as_http():
         return await svc.edit(
-            db, audit_context_for(request, access.user), access.scope, seafarer_id, body.model_dump()
+            db, audit_context_for(request, access.user), access.scope, seafarer_id,
+            _born_by(body, access.scope.today),
         )
 
 

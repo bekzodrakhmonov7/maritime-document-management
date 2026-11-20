@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, FileWarning, Plus, Upload } from 'lucide-react'
 import { useSeafarerAssignments } from '../hooks/useAssignments'
 import { useSeafarerDocuments } from '../hooks/useDocuments'
 import { fullName, useSeafarer } from '../hooks/useSeafarers'
 import { flagLabel } from '../lib/flags'
+import { UPLOAD_PARAM, preselectedTypeId } from '../lib/missingUpload'
 import { ActionButton } from '../components/ActionButton'
 import {
   AssignmentDialog,
@@ -32,7 +33,13 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 
 /** The required documents with no Current Version, for the Assignment under
  * way (or the held Position when ashore). Expiry is shown in the table below. */
-function MissingDocumentsStrip({ seafarer }: { seafarer: SeafarerRecord }) {
+function MissingDocumentsStrip({
+  seafarer,
+  onUpload,
+}: {
+  seafarer: SeafarerRecord
+  onUpload: (documentTypeId: number) => void
+}) {
   const missing = seafarer.missing_documents
   const basis = seafarer.current_vessel_name
     ? `as on board ${seafarer.current_vessel_name}`
@@ -60,9 +67,15 @@ function MissingDocumentsStrip({ seafarer }: { seafarer: SeafarerRecord }) {
             {m.name}
           </Link>
         ) : (
-          <span key={m.document_type_id} className="rounded-full bg-navy-800 px-2.5 py-0.5 text-xs text-navy-100">
+          <button
+            key={m.document_type_id}
+            type="button"
+            onClick={() => onUpload(m.document_type_id)}
+            className="rounded-full bg-navy-800 px-2.5 py-0.5 text-xs text-navy-100 hover:underline"
+            title={`Upload ${m.name}`}
+          >
             {m.name}
-          </span>
+          </button>
         ),
       )}
     </section>
@@ -79,6 +92,29 @@ export function SeafarerPage() {
   const [versionDialog, setVersionDialog] = useState<VersionDialogState | null>(null)
   const [dialog, setDialog] = useState<SeafarerDialogState | null>(null)
   const [assignmentDialog, setAssignmentDialog] = useState<AssignmentDialogState | null>(null)
+  const [params, setParams] = useSearchParams()
+  const taken = (documents.data ?? []).map((d) => d.document_type_id)
+  const uploadMissing = (documentTypeId: number) =>
+    seafarer && setVersionDialog({ kind: 'new', seafarer, taken, documentTypeId })
+  // Arrived from a Missing entry elsewhere (?upload=<type id>): open the form with that type.
+  const linkedType = preselectedTypeId(params.toString())
+  const shownVersionDialog: VersionDialogState | null =
+    versionDialog ??
+    (linkedType !== null && seafarer && !seafarer.inactive_since && documents.data
+      ? { kind: 'new', seafarer, taken, documentTypeId: linkedType }
+      : null)
+  const closeVersionDialog = () => {
+    setVersionDialog(null)
+    if (linkedType !== null) {
+      setParams(
+        (p) => {
+          p.delete(UPLOAD_PARAM)
+          return p
+        },
+        { replace: true },
+      )
+    }
+  }
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -132,7 +168,7 @@ export function SeafarerPage() {
             </Detail>
           </dl>
 
-          {!seafarer.inactive_since && <MissingDocumentsStrip seafarer={seafarer} />}
+          {!seafarer.inactive_since && <MissingDocumentsStrip seafarer={seafarer} onUpload={uploadMissing} />}
 
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -164,11 +200,7 @@ export function SeafarerPage() {
                 <ActionButton
                   tone="primary"
                   onClick={() =>
-                    setVersionDialog({
-                      kind: 'new',
-                      seafarer,
-                      taken: (documents.data ?? []).map((d) => d.document_type_id),
-                    })
+                    setVersionDialog({ kind: 'new', seafarer, taken })
                   }
                 >
                   <Upload className="h-4 w-4" />
@@ -190,9 +222,7 @@ export function SeafarerPage() {
       )}
 
       {dialog && <SeafarerDialog state={dialog} onClose={() => setDialog(null)} />}
-      {versionDialog && (
-        <VersionDialog state={versionDialog} onClose={() => setVersionDialog(null)} />
-      )}
+      {shownVersionDialog && <VersionDialog state={shownVersionDialog} onClose={closeVersionDialog} />}
       {assignmentDialog && (
         <AssignmentDialog state={assignmentDialog} onClose={() => setAssignmentDialog(null)} />
       )}

@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAccountAction, useAccounts, usePendingCount, type AccountAction } from '../hooks/useAccounts'
 import { useVessels } from '../hooks/useReferenceData'
 import { cn } from '../lib/cn'
+import { BADGE_TONE } from '../lib/badgeTone'
 import { ErrorNote } from '../components/ErrorNote'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
 import { ROLE_LABELS, type Account, type AccountStatus, type UserRole } from '../types'
@@ -18,9 +19,9 @@ const FILTERS: { value: Filter; label: string }[] = [
 ]
 
 const STATUS_STYLE: Record<AccountStatus, string> = {
-  pending: 'bg-status-expiring-bg/10 text-status-expiring',
-  active: 'bg-status-valid-bg/10 text-status-valid',
-  deactivated: 'bg-status-expired-bg/10 text-status-expired',
+  pending: BADGE_TONE.warn,
+  active: BADGE_TONE.ok,
+  deactivated: BADGE_TONE.bad,
 }
 
 const FORM_TITLE: Record<FormKind, string> = {
