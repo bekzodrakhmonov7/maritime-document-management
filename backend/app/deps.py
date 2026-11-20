@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import AsyncGenerator
+from typing import AsyncGenerator, NoReturn
 from uuid import UUID
 
 import asyncpg
@@ -7,11 +7,32 @@ import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
 from jwt import PyJWKClient
+from jwt.algorithms import AllowedPublicKeys
 
 from app.config import settings
 from app.models.auth import UserPayload
 
 security = HTTPBearer(auto_error=False)
+
+
+class SessionRefused(HTTPException):
+    """A Session refused with a 401, recorded as refused access (ADR-0006).
+    The actor fields are set only when the signature checked out."""
+
+    def __init__(
+        self,
+        reason: str,
+        detail: object,
+        *,
+        account_id: UUID | None = None,
+        email: str | None = None,
+        role: str | None = None,
+    ) -> None:
+        super().__init__(status.HTTP_401_UNAUTHORIZED, detail)
+        self.reason = reason
+        self.account_id = account_id
+        self.email = email
+        self.role = role
 
 
 @lru_cache(maxsize=1)
@@ -32,8 +53,8 @@ async def get_signed_in_user(
     request: Request,
     db: asyncpg.Connection = Depends(get_db),
 ) -> UserPayload:
-    auth_header = request.headers.get("authorization")
-    if not auth_header:
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.strip():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authorization header",
@@ -41,41 +62,34 @@ async def get_signed_in_user(
 
     parts = auth_header.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
-        )
+        raise SessionRefused("invalid_session", "Invalid authorization header format")
 
     token = parts[1]
 
     try:
         header = jwt.get_unverified_header(token)
     except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise SessionRefused("invalid_session", "Invalid token")
 
     alg = header.get("alg")
 
     if alg == "ES256":
-        try:
-            signing_key = _jwks_client().get_signing_key_from_jwt(token)
-        except jwt.InvalidTokenError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-            )
+        # Errors fetching our key set (down, no usable keys) are a server
+        # fault and propagate; only a kid matching none of our keys is the visitor's.
+        keys = _jwks_client()
+        kid = header.get("kid")
+        signing_key = keys.match_kid(keys.get_signing_keys(), kid) or keys.match_kid(
+            keys.get_signing_keys(refresh=True), kid
+        )
+        if signing_key is None:
+            raise SessionRefused("invalid_session", "Invalid token")
         key = signing_key.key
         algorithms = ["ES256"]
     elif alg == "HS256":
         key = settings.supabase_jwt_secret
         algorithms = ["HS256"]
     else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise SessionRefused("invalid_session", "Invalid token")
 
     try:
         payload = jwt.decode(
@@ -85,23 +99,14 @@ async def get_signed_in_user(
             audience="authenticated",
         )
     except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
-        )
+        raise await _refuse_expired(token, key, algorithms, db)
     except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise SessionRefused("invalid_session", "Invalid token")
 
     try:
         sub = UUID(str(payload.get("sub")))
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise SessionRefused("invalid_session", "Invalid token")
 
     try:
         session_id = UUID(str(payload.get("session_id")))
@@ -132,12 +137,15 @@ async def get_signed_in_user(
     # e-mailed code alone, to anyone holding the public key. Only a session
     # that passed both steps of the sign-in proxy gets in (ADR-0005).
     if not row["verified"]:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
+        raise SessionRefused(
+            "session_not_verified",
+            {
                 "code": "session_not_verified",
                 "message": "Sign in again with your password and e-mailed code.",
             },
+            account_id=sub,
+            email=row["email"],
+            role=row["role"],
         )
 
     request.state.account = UserPayload(
@@ -148,6 +156,26 @@ async def get_signed_in_user(
         role=row["role"],
     )
     return request.state.account
+
+
+async def _refuse_expired(
+    token: str, key: str | AllowedPublicKeys, algorithms: list[str], db: asyncpg.Connection
+) -> NoReturn:
+    """Refuse a genuine but expired Session, naming the Account it is for.
+    Everything but the expiry is checked again, so a forged one stays invalid."""
+    try:
+        payload = jwt.decode(
+            token, key, algorithms=algorithms, audience="authenticated",
+            options={"verify_exp": False},
+        )
+        sub = UUID(str(payload.get("sub")))
+    except (jwt.InvalidTokenError, ValueError):
+        raise SessionRefused("invalid_session", "Invalid token")
+    row = await db.fetchrow("SELECT email, role FROM public.users WHERE id = $1", sub)
+    raise SessionRefused(
+        "session_expired", "Token has expired", account_id=sub,
+        email=row["email"] if row else None, role=row["role"] if row else None,
+    )
 
 
 def account_refused(code: str, message: str) -> HTTPException:
