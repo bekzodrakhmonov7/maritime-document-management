@@ -18,8 +18,8 @@ Signing in is two steps, and no session leaves here before both are done:
   TOTP step it asks Supabase Auth for an MFA challenge and verifies the
   code, which raises the session to aal2; the session is then recorded as
   verified (only verified aal2 sessions get past `get_signed_in_user`),
-  *Login succeeded* is recorded and Supabase's session is returned for
-  `setSession`. Five wrong codes end the challenge.
+  *Login succeeded* is recorded and Supabase's session is returned to the web
+  client, which stores it itself. Five wrong codes end the challenge.
 - `POST /api/auth/password/forgot` and `/password/reset` replace a forgotten
   password with an e-mailed code; every session of the Account then ends.
   The next sign-in still needs the authenticator.
@@ -334,7 +334,7 @@ async def verify(
 ) -> dict[str, Any]:
     """Check the code against the challenge. The e-mailed code of a Register
     leads on to the TOTP step; the right TOTP code returns Supabase's aal2
-    session for `setSession`."""
+    session, which the web client stores itself."""
     await _refuse_if_blocked(db, request, body.email)
     challenge = await sign_in.open_challenge(db, body.challenge, body.email)
     if challenge is None:
