@@ -4,6 +4,7 @@ import { useAssignmentAction } from '../hooks/useAssignments'
 import { usePositions, useVessels } from '../hooks/useReferenceData'
 import { fullName } from '../hooks/useSeafarers'
 import { cn } from '../lib/cn'
+import { BADGE_TONE } from '../lib/badgeTone'
 import { ASSIGNMENT_STATE_LABELS, type Assignment, type AssignmentState, type Seafarer } from '../types'
 import { ActionButton } from './ActionButton'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
@@ -32,10 +33,10 @@ export function AssignmentDialog({
 }
 
 const STATE_STYLE: Record<AssignmentState, string> = {
-  upcoming: 'bg-status-expiring-bg/10 text-status-expiring',
-  under_way: 'bg-status-valid-bg/10 text-status-valid',
-  finished: 'bg-navy-800 text-navy-300',
-  cancelled: 'bg-navy-800 text-navy-500 line-through',
+  upcoming: BADGE_TONE.warn,
+  under_way: BADGE_TONE.ok,
+  finished: BADGE_TONE.neutral,
+  cancelled: cn(BADGE_TONE.muted, 'line-through'),
 }
 
 export function AssignmentStateBadge({ state }: { state: AssignmentState }) {

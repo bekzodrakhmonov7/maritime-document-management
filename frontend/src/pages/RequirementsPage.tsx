@@ -13,6 +13,7 @@ import type {
   RequirementExceptionWrite,
 } from '../types'
 import { cn } from '../lib/cn'
+import { BADGE_TONE } from '../lib/badgeTone'
 import { FLAG_OPTIONS, flagLabel } from '../lib/flags'
 import { ActionButton } from '../components/ActionButton'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -186,7 +187,7 @@ function EffectBadge({ effect }: { effect: ExceptionEffect }) {
     <span
       className={cn(
         'rounded-full px-2 py-0.5 text-xs font-semibold',
-        effect === 'add' ? 'bg-status-valid/20 text-status-valid' : 'bg-status-expired/20 text-status-expired',
+        effect === 'add' ? BADGE_TONE.ok : BADGE_TONE.bad,
       )}
     >
       {effect === 'add' ? 'Add' : 'Remove'}

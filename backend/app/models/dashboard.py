@@ -1,10 +1,11 @@
 """The dashboard's work queues and the managers' fleet totals (FR-20, T10)."""
 
 from datetime import date
+from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.domain import ActionHint, Breakdown, ExpiryStatus, ReviewState
+from app.domain import ActionHint, Breakdown, DashboardQueue, ExpiryStatus, ReviewState
 
 
 class DashboardSeafarer(BaseModel):
@@ -33,6 +34,8 @@ class QueueEntry(BaseModel):
     # None: missing (no Current Version).
     expiry_status: ExpiryStatus | None
     review_state: ReviewState | None
+    # The Current Version's uploader, who may not review it (FR-11).
+    uploaded_by: UUID | None = None
     action: ActionHint
 
 
@@ -70,24 +73,24 @@ class QueueCounts(BaseModel):
     in_order: int
 
 
-class Queues(BaseModel):
-    missing: list[SeafarerGroup]
-    expired: list[SeafarerGroup]
-    expiring_soon: list[SeafarerGroup]
-    expiry_not_stated: list[SeafarerGroup]
-    # Overlaps the expiry queues.
-    waiting_for_review: list[SeafarerGroup]
-    # By start date.
-    starting_soon: list[StartingSoonEntry]
-    in_order: list[SeafarerGroup]
-
-
 class DashboardRead(BaseModel):
+    """Every queue's count and one page of one queue (`queue`). Waiting for
+    review overlaps the expiry queues."""
+
     today: date
     planning_horizon_days: int
-    # Entries per queue, after the filters.
+    # Entries per queue, after the filters: every queue, whichever page is read.
     counts: QueueCounts
-    queues: Queues
+    queue: DashboardQueue
+    offset: int
+    limit: int
+    # Items in the whole queue after the filters: seafarer groups for a
+    # document queue, Assignments for starting soon.
+    total: int
+    # The page of a document queue: seafarers by name (empty for starting soon).
+    groups: list[SeafarerGroup]
+    # The page of starting soon: Assignments by start date (empty otherwise).
+    assignments: list[StartingSoonEntry]
 
 
 class StatusCounts(BaseModel):

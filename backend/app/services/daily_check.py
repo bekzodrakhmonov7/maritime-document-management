@@ -17,6 +17,10 @@ A run has two phases:
 The scheduled run happens once per local date (company time zone), from the
 configured check time on; a manual run by an administrator doesn't count as
 the day's run and is audited. Settings are read at the start of each run.
+A scheduled run that never finished (it crashed or was killed mid-send) is
+taken over by a later wake-up the same day once its lease (`RUN_LEASE`,
+longer than any function may live) has run out; the unique Alert keeps the
+take-over from raising anything twice.
 
 The scheduled run ends with retention (`services.retention`): Replaced
 Versions, Inactive seafarers and old Audit Records whose Retention Period has
@@ -26,7 +30,7 @@ ended are removed. The manual run never removes anything.
 import logging
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -44,6 +48,10 @@ from app.storage import FileStorage, get_storage
 logger = logging.getLogger(__name__)
 
 TARGET = "daily_check_run"
+
+# How long a started scheduled run is presumed alive. API functions are killed
+# long before this, so an unfinished run older than it has died.
+RUN_LEASE = timedelta(minutes=15)
 
 
 @dataclass(frozen=True)
@@ -73,12 +81,19 @@ async def run_if_due(
     storage: FileStorage | None = None,
 ) -> RunResult | None:
     """The scheduled run: once per local date, from the check time on. The
-    run row is claimed first, so two workers never both run the same day."""
+    run row is claimed first, so two workers never both run the same day. A
+    day's run that never finished counts as not run once its lease is over,
+    and is reclaimed by one later wake-up (the lease is measured on the
+    database clock)."""
     config = await conn.fetchrow("SELECT time_zone, daily_check_time FROM public.settings")
     local_now = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo(config["time_zone"]))
     ran_today = await conn.fetchval(
-        "SELECT EXISTS (SELECT 1 FROM public.daily_check_run WHERE local_date = $1 AND NOT manual)",
-        local_now.date(),
+        """
+        SELECT EXISTS (SELECT 1 FROM public.daily_check_run
+                        WHERE local_date = $1 AND NOT manual
+                          AND (finished_at IS NOT NULL OR started_at > now() - $2::interval))
+        """,
+        local_now.date(), RUN_LEASE,
     )
     if not domain.daily_check_due(local_now, config["daily_check_time"], ran_today):
         return None
@@ -91,7 +106,20 @@ async def run_if_due(
         local_now.date(),
     )
     if run_id is None:
-        return None
+        # Reclaim a dead run. Concurrent reclaims queue on the row lock and the
+        # later ones see the fresh started_at, so only one wins.
+        run_id = await conn.fetchval(
+            """
+            UPDATE public.daily_check_run SET started_at = now()
+             WHERE local_date = $1 AND NOT manual
+               AND finished_at IS NULL AND started_at <= now() - $2::interval
+            RETURNING id
+            """,
+            local_now.date(), RUN_LEASE,
+        )
+        if run_id is None:
+            return None
+        logger.warning("Reclaimed unfinished daily check run %s for %s", run_id, local_now.date())
     return await _check(
         conn, mailer, run_id, local_now.date(), manual=False, storage=storage or get_storage()
     )

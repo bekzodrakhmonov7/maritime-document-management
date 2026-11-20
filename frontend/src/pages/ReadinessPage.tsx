@@ -5,20 +5,22 @@ import { useReadiness } from '../hooks/useAssignments'
 import { fullName } from '../hooks/useSeafarers'
 import { flagLabel } from '../lib/flags'
 import { cn } from '../lib/cn'
+import { BADGE_TONE } from '../lib/badgeTone'
 import { AssignmentStateBadge } from '../components/AssignmentDialogs'
 import { ErrorNote } from '../components/ErrorNote'
 import { EndorsementCapNote } from '../components/EndorsementCapNote'
 import { ReportDownloads } from '../components/ReportDownloads'
 import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
+import { missingUploadPath } from '../lib/missingUpload'
 import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
 import { COVERAGE_LABELS, EXPIRY_STATUS_LABELS, type CoverageClass, type ReadinessEntry } from '../types'
 
 const COVERAGE_STYLE: Record<CoverageClass, string> = {
-  missing: 'bg-navy-800 text-navy-300',
-  runs_out_before_start: 'bg-status-expired-bg/10 text-status-expired',
-  runs_out_during: 'bg-status-expiring-bg/10 text-status-expiring',
-  expiry_not_stated: 'bg-status-expiring-bg/10 text-status-expiring',
-  covers_all: 'bg-status-valid-bg/10 text-status-valid',
+  missing: BADGE_TONE.neutral,
+  runs_out_before_start: BADGE_TONE.bad,
+  runs_out_during: BADGE_TONE.warn,
+  expiry_not_stated: BADGE_TONE.warn,
+  covers_all: BADGE_TONE.ok,
 }
 
 function CoverageBadge({ coverage }: { coverage: CoverageClass }) {
@@ -32,7 +34,7 @@ function CoverageBadge({ coverage }: { coverage: CoverageClass }) {
   )
 }
 
-function EntryRow({ entry }: { entry: ReadinessEntry }) {
+function EntryRow({ entry, seafarerId }: { entry: ReadinessEntry; seafarerId: number }) {
   const cap = effectiveExpiryOf(entry, entry.expiry_date)
   const capped = entry.document_id !== null && hasCapNote(cap)
   return (
@@ -59,7 +61,17 @@ function EntryRow({ entry }: { entry: ReadinessEntry }) {
           !entry.suggestion && <p className="text-sm text-navy-400">Valid through {entry.expiry_date}</p>
         )}
       </div>
-      <CoverageBadge coverage={entry.coverage} />
+      <div className="flex flex-wrap items-center gap-2">
+        {entry.coverage === 'missing' && entry.document_id === null && (
+          <Link
+            to={missingUploadPath(seafarerId, entry.document_type_id)}
+            className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600"
+          >
+            Upload
+          </Link>
+        )}
+        <CoverageBadge coverage={entry.coverage} />
+      </div>
     </li>
   )
 }
@@ -68,9 +80,11 @@ function Bucket({
   title,
   entries,
   empty,
+  seafarerId,
   folded = false,
 }: {
   title: string
+  seafarerId: number
   entries: ReadinessEntry[]
   empty: string
   folded?: boolean
@@ -97,7 +111,7 @@ function Bucket({
         ) : (
           <ul className="divide-y divide-navy-800 border-t border-navy-800">
             {entries.map((e) => (
-              <EntryRow key={e.document_type_id} entry={e} />
+              <EntryRow key={e.document_type_id} entry={e} seafarerId={seafarerId} />
             ))}
           </ul>
         ))}
@@ -192,26 +206,31 @@ export function ReadinessPage() {
           <div className="space-y-4">
             <Bucket
               title={underWay ? 'Act now: sort out as soon as possible' : 'Before joining'}
+              seafarerId={a.seafarer_id}
               entries={view.buckets.before_joining}
               empty="Nothing to sort out first."
             />
             <Bucket
               title="Can be renewed at sea"
+              seafarerId={a.seafarer_id}
               entries={view.buckets.renewable_at_sea}
               empty="Nothing to renew at sea."
             />
             <Bucket
               title={EXPIRY_STATUS_LABELS.expiry_not_stated}
+              seafarerId={a.seafarer_id}
               entries={view.buckets.expiry_not_stated}
               empty="Every expiry is stated."
             />
             <Bucket
               title="Uploaded, not yet reviewed"
+              seafarerId={a.seafarer_id}
               entries={view.buckets.not_reviewed}
               empty="Nothing awaits review."
             />
             <Bucket
               title="Covers the whole assignment"
+              seafarerId={a.seafarer_id}
               entries={view.buckets.covers_all}
               empty="Nothing else."
               folded

@@ -1,4 +1,5 @@
 import { cn } from '../lib/cn'
+import { BADGE_TONE } from '../lib/badgeTone'
 
 /** "Active" / "Deactivated" / "Retired" etc. for reference data rows. */
 export function StateBadge({ on, label }: { on: boolean; label: string }) {
@@ -6,7 +7,7 @@ export function StateBadge({ on, label }: { on: boolean; label: string }) {
     <span
       className={cn(
         'rounded-full px-2.5 py-1 text-xs font-medium',
-        on ? 'bg-status-valid-bg/10 text-status-valid' : 'bg-navy-800 text-navy-400',
+        on ? BADGE_TONE.ok : BADGE_TONE.neutral,
       )}
     >
       {label}

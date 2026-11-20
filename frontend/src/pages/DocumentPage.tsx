@@ -8,6 +8,9 @@ import { ErrorNote } from '../components/ErrorNote'
 import { ExpiryStatusBadge } from '../components/ExpiryStatusBadge'
 import { EndorsementCapNote } from '../components/EndorsementCapNote'
 import { effectiveExpiryOf } from '../lib/effectiveExpiry'
+import { BADGE_TONE } from '../lib/badgeTone'
+import { cn } from '../lib/cn'
+import { SELF_REVIEW_REASON, isOwnUpload } from '../lib/missingUpload'
 import { VersionDialog, type VersionDialogState } from '../components/DocumentDialogs'
 import { ReviewDialog, VerificationDialog } from '../components/ReviewDialogs'
 import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
@@ -103,8 +106,8 @@ export function DocumentPage() {
                         <Download className="h-3.5 w-3.5" />
                         {v.original_filename}
                       </ActionButton>
-                      {v.uploaded_by === user?.id ? (
-                        <span className="self-center text-xs text-navy-400">You uploaded it; someone else reviews it.</span>
+                      {isOwnUpload(v.uploaded_by, user?.id) ? (
+                        <span className="self-center text-xs text-navy-400">{SELF_REVIEW_REASON}</span>
                       ) : (
                         <ActionButton onClick={() => setCheck({ kind: 'review', version: v })}>
                           <CheckCircle2 className="h-3.5 w-3.5" />
@@ -206,14 +209,14 @@ function ReviewStateTag({ version }: { version: Version }) {
   if (version.review_state === 'not_reviewed') return <NotReviewedTag />
   if (version.review_state === 'accepted') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-status-valid">
+      <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium', BADGE_TONE.ok)}>
         <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
         Reviewed
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-status-expired">
+    <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium', BADGE_TONE.bad)}>
       <XCircle className="h-3 w-3" aria-hidden="true" />
       Rejected
     </span>

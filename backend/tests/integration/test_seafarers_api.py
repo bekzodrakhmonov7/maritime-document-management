@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.domain import today_in
 from app.models.auth import UserPayload
 from app.scope import seafarer_scope
 from app.services import errors, seafarers
@@ -128,6 +129,27 @@ async def test_an_unknown_position_cannot_be_picked(client, admin):
 
 async def test_a_nationality_must_be_an_assigned_iso_code(client, admin, master):
     res = await client.post("/api/seafarers", json=_body(master, nationality="XX"), headers=admin)
+    assert res.status_code == 422
+
+
+async def test_the_date_of_birth_is_checked_against_the_company_today(
+    client, admin, master, owner_db, settings_reset
+):
+    # Kiritimati (UTC+14) is always at least a day ahead of Pago Pago (UTC-11).
+    ahead = today_in("Pacific/Kiritimati").isoformat()
+    await owner_db.execute("UPDATE public.settings SET time_zone = 'Pacific/Pago_Pago'")
+    res = await client.post("/api/seafarers", json=_body(master, date_of_birth=ahead), headers=admin)
+    assert res.status_code == 422
+    [error] = res.json()["detail"]
+    assert error["loc"] == ["body", "date_of_birth"]
+    assert "must be a date in the past" in error["msg"]
+
+    await owner_db.execute("UPDATE public.settings SET time_zone = 'Pacific/Kiritimati'")
+    seafarer = await _create(client, admin, _body(master, date_of_birth=ahead))
+    await owner_db.execute("UPDATE public.settings SET time_zone = 'Pacific/Pago_Pago'")
+    res = await client.put(
+        f"/api/seafarers/{seafarer['id']}", json=_body(master, date_of_birth=ahead), headers=admin
+    )
     assert res.status_code == 422
 
 

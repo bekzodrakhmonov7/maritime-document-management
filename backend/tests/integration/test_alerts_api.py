@@ -355,6 +355,40 @@ async def test_the_local_date_and_check_time_follow_the_settings(world, mailer, 
     ) is None
 
 
+async def test_a_scheduled_run_that_died_is_reclaimed_the_same_day_after_its_lease(
+    world, mailer, owner_db, app_db, monkeypatch
+):
+    doc = await world.document(world.anna, 25)
+
+    async def crash(to: str, subject: str, html: str) -> None:
+        raise RuntimeError("the function was killed mid-send")
+
+    with monkeypatch.context() as m:
+        m.setattr(mailer, "send", crash)
+        with pytest.raises(RuntimeError):
+            await daily_check.run_if_due(app_db, mailer, now=_utc(time(7, 0)))
+    [dead] = await owner_db.fetch("SELECT * FROM public.daily_check_run")
+    assert dead["finished_at"] is None
+
+    # Within the lease the run may still be alive: nobody takes it over.
+    assert await daily_check.run_if_due(app_db, mailer, now=_utc(time(7, 5))) is None
+    await owner_db.execute(
+        "UPDATE public.daily_check_run SET started_at = now() - $1::interval",
+        daily_check.RUN_LEASE + timedelta(minutes=1),
+    )
+
+    retry = await daily_check.run_if_due(app_db, mailer, now=_utc(time(7, 20)))
+    assert retry is not None and retry.run_id == dead["id"]
+    assert retry.raised == 0 and retry.sent >= 1
+    assert len(mailer.to(world.emails["officer_a"])) == 1
+    assert await owner_db.fetchval(
+        "SELECT count(*) FROM public.alert WHERE document_id = $1 AND NOT skipped", doc
+    ) == 1
+    [run] = await owner_db.fetch("SELECT * FROM public.daily_check_run")
+    assert run["finished_at"] is not None
+    assert await daily_check.run_if_due(app_db, mailer, now=_utc(time(7, 25))) is None
+
+
 async def test_a_manual_run_does_not_count_as_the_days_scheduled_run(
     client, world, mailer, owner_db, app_db
 ):

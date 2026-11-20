@@ -26,6 +26,19 @@
   --color-status-verified-bg: #dbeafe;
   --color-status-rejected: #ea580c;
   --color-status-rejected-bg: #ffedd5;
+
+  /* Status badges (NFR-04): solid background + light text, >= 4.5:1 in colour
+     and greyscale. Used through src/lib/badgeTone.ts. */
+  --color-badge-ok: #6ee7b7;
+  --color-badge-ok-bg: #022c22;
+  --color-badge-warn: #fcd34d;
+  --color-badge-warn-bg: #451a03;
+  --color-badge-bad: #fca5a5;
+  --color-badge-bad-bg: #450a0a;
+  --color-badge-neutral: #d9e2ec;
+  --color-badge-neutral-bg: #243b53;
+  --color-badge-muted: #9fb3c8;
+  --color-badge-muted-bg: #243b53;
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }

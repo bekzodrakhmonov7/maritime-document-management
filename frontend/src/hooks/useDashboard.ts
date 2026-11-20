@@ -1,35 +1,20 @@
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../lib/api'
-import type { Breakdown, Dashboard, FleetTotals } from '../types'
+import { filterParams, nextOffset, pageParams, type DashboardFilters } from '../lib/dashboardPaging'
+import type { Breakdown, Dashboard, DashboardQueue, FleetTotals } from '../types'
 
-/** The name text and click-to-add tags. Tags of one kind widen (any of them);
- * kinds narrow each other. `ashore` is the "Ashore / Unassigned" vessel value. */
-export interface DashboardFilters {
-  name: string
-  positionIds: number[]
-  vesselIds: number[]
-  ashore: boolean
-  documentTypeIds: number[]
-  showInactive: boolean
-}
+export type { DashboardFilters } from '../lib/dashboardPaging'
 
-function params(filters: DashboardFilters): string {
-  const p = new URLSearchParams()
-  if (filters.name.trim()) p.set('name', filters.name.trim())
-  filters.positionIds.forEach((id) => p.append('position_id', String(id)))
-  filters.vesselIds.forEach((id) => p.append('vessel_id', String(id)))
-  if (filters.ashore) p.set('ashore', 'true')
-  filters.documentTypeIds.forEach((id) => p.append('document_type_id', String(id)))
-  if (filters.showInactive) p.set('show_inactive', 'true')
-  return p.toString()
-}
-
-/** Administrators and crewing officers: the work queues within their Scope. */
-export function useDashboard(filters: DashboardFilters) {
-  const query = params(filters)
-  return useQuery({
-    queryKey: ['dashboard', 'queues', query],
-    queryFn: () => apiFetch<Dashboard>(query ? `/api/dashboard?${query}` : '/api/dashboard'),
+/** Administrators and crewing officers: the work queues within their Scope.
+ * Every queue's count comes with each page; the pages are of `queue` only,
+ * read one more at a time with `fetchNextPage`. */
+export function useDashboard(filters: DashboardFilters, queue: DashboardQueue) {
+  const query = filterParams(filters)
+  return useInfiniteQuery({
+    queryKey: ['dashboard', 'queues', query, queue],
+    queryFn: ({ pageParam }) => apiFetch<Dashboard>(`/api/dashboard?${pageParams(query, queue, pageParam)}`),
+    initialPageParam: 0,
+    getNextPageParam: (last: Dashboard) => nextOffset(last),
     placeholderData: (previous) => previous,
   })
 }
