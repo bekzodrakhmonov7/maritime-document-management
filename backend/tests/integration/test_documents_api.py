@@ -15,6 +15,7 @@ import pytest
 from PIL import Image
 
 from app.domain import today_in
+from app.services import documents as svc
 from tests.conftest import auth_header
 
 TODAY = today_in("UTC")
@@ -24,12 +25,16 @@ def day(offset: int) -> str:
     return (TODAY + timedelta(days=offset)).isoformat()
 
 
-def _pdf(pages: int = 1) -> bytes:
+def _pdf(pages: int = 1, *, script: bool = False, attachment: bool = False, **save) -> bytes:
     pdf = pikepdf.new()
     for _ in range(pages):
         pdf.add_blank_page()
+    if script:
+        pdf.Root.OpenAction = pikepdf.Dictionary(S=pikepdf.Name.JavaScript, JS=pikepdf.String("x"))
+    if attachment:
+        pdf.attachments["a.exe"] = pikepdf.AttachedFileSpec(pdf, b"MZ")
     buf = io.BytesIO()
-    pdf.save(buf)
+    pdf.save(buf, **save)
     return buf.getvalue()
 
 
@@ -90,13 +95,16 @@ def _details(**fields) -> dict:
     }
 
 
-async def _upload(client, headers, seafarer_id, type_id, *, data=PDF, filename="passport.pdf", **fields):
+async def _upload(
+    client, headers, seafarer_id, type_id, *, data=PDF, filename="passport.pdf",
+    content_type="application/octet-stream", **fields,
+):
     form = {k: v for k, v in _details(**fields).items() if v is not None}
     return await client.post(
         f"/api/seafarers/{seafarer_id}/documents",
         params={"document_type_id": type_id},
         data=form,
-        files={"file": (filename, data, "application/octet-stream")},
+        files={"file": (filename, data, content_type)},
         headers=headers,
     )
 
@@ -146,11 +154,11 @@ async def test_an_officer_uploads_a_pdf_which_is_stored_cleaned(client, world, s
 
 async def test_a_jpeg_is_stored_re_encoded_with_the_detected_type(client, world, storage, owner_db):
     doc = await _uploaded(
-        client, world["officer_a"], world["anna"], world["medical"], data=_jpeg(), filename="scan"
+        client, world["officer_a"], world["anna"], world["medical"], data=_jpeg(), filename="scan.jpeg"
     )
     [version] = doc["versions"]
     assert version["content_type"] == "image/jpeg"
-    assert version["original_filename"] == "scan"
+    assert version["original_filename"] == "scan.jpeg"
     path = await owner_db.fetchval("SELECT file_path FROM public.version WHERE id = $1", version["id"])
     content, content_type = storage.objects[path]
     assert path.endswith(".jpg") and content_type == "image/jpeg"
@@ -336,9 +344,14 @@ async def test_an_unknown_document_type_is_refused(client, world):
     "data, filename, status, code",
     [
         (b"GIF89a not accepted", "photo.gif", 415, "unsupported_type"),
+        (PDF, "passport", 415, "unsupported_type"),
+        (PDF, "passport.jpe", 415, "unsupported_type"),
         (PDF, "photo.png", 415, "type_mismatch"),
         (b"%PDF-1.7 broken", "cert.pdf", 422, "corrupt"),
         (_pdf(51), "big.pdf", 422, "too_many_pages"),
+        (_pdf(script=True), "cert.pdf", 422, "pdf_active_content"),
+        (_pdf(attachment=True), "cert.pdf", 422, "pdf_active_content"),
+        (_pdf(encryption=pikepdf.Encryption(owner="o", user="")), "cert.pdf", 422, "pdf_encrypted"),
     ],
 )
 async def test_a_failed_safety_check_is_refused_and_recorded(
@@ -359,6 +372,23 @@ async def test_a_failed_safety_check_is_refused_and_recorded(
     assert f'"filename": "{filename}"' in record["after"]
     assert storage.objects == {}
     assert await owner_db.fetchval("SELECT count(*) FROM public.document") == 0
+
+
+@pytest.mark.parametrize(
+    "data, filename, content_type",
+    [(PDF, "photo.png", "image/png"), (PDF, "passport", "application/pdf"), (b"GIF89a", "a.pdf", "application/pdf")],
+)
+async def test_the_content_type_header_never_lets_a_file_through(
+    client, world, storage, owner_db, data, filename, content_type
+):
+    res = await _upload(
+        client, world["officer_a"], world["anna"], world["passport"],
+        data=data, filename=filename, content_type=content_type,
+    )
+    assert res.status_code == 415
+    [record] = await _records(owner_db, "upload_rejected", seafarer_id=world["anna"])
+    assert record["reason"] == res.json()["detail"]["code"]
+    assert storage.objects == {}
 
 
 async def test_a_file_over_the_size_setting_is_413(client, world, storage, owner_db, settings_reset):
@@ -424,10 +454,10 @@ async def test_a_signed_url_is_issued_per_version_and_recorded(client, world, st
     assert record["seafarer_id"] == world["anna"]
 
 
-async def test_the_download_name_gets_the_detected_extension_when_it_has_none(client, world, storage):
-    doc = await _uploaded(client, world["officer_a"], world["anna"], world["medical"], data=_jpeg(), filename="scan")
-    res = await client.post(f"/api/versions/{doc['versions'][0]['id']}/file-url", headers=world["officer_a"])
-    assert res.json()["filename"] == "scan.jpg"
+def test_the_download_name_gets_the_detected_extension_when_it_has_none():
+    # Versions stored before the extension allow-list (SR-08) may have none.
+    assert svc.download_name("scan", "image/jpeg") == "scan.jpg"
+    assert svc.download_name("Pass port.PDF", "application/pdf") == "Pass port.PDF"
 
 
 # --- Immutability ----------------------------------------------------------------------

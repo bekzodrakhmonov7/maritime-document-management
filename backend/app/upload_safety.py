@@ -4,15 +4,18 @@ All checks live here, so they are unit-testable without HTTP:
 
 1. size: `read_capped` reads the upload in chunks and stops at the limit + 1
    byte; `validate` checks the size again;
-2. magic bytes: PDF, JPEG and PNG only. The client's Content-Type is never
-   looked at and the name never decides the type; a name whose extension
-   says another type is a disguise (`type_mismatch`);
+2. name and magic bytes: the name must end in .pdf, .jpg, .jpeg or .png
+   (any case; no extension is refused); the content must be PDF, JPEG or
+   PNG. The client's Content-Type is never looked at and the name never
+   decides the type; a name whose extension says another type is a
+   disguise (`type_mismatch`);
 3. parse, clean or reject:
    - images: Pillow with a 50 MP cap (its bomb warning raised as an error),
      orientation applied, re-encoded in their own format (PNG lossless, JPEG
      quality 90), which drops EXIF/GPS and anything trailing;
-   - PDFs: pikepdf with a page cap. JavaScript, Launch actions, embedded
-     files, RichMedia, XFA and encryption are refused; a harmless
+   - PDFs: pikepdf with a page cap. JavaScript, Launch, SubmitForm,
+     ImportData, GoToR and GoToE actions, embedded files, RichMedia, XFA
+     and encryption are refused (plain /URI links stay); a harmless
      /OpenAction, /AA or /AcroForm is stripped and the file re-saved. The
      parsed object tree is walked, never the raw bytes.
 
@@ -97,9 +100,13 @@ class _Format:
 
 
 _PDF = _Format("application/pdf", "pdf", (), None)
-_JPEG = _Format("image/jpeg", "jpg", ("jpeg", "jpe"), "JPEG")
+_JPEG = _Format("image/jpeg", "jpg", ("jpeg",), "JPEG")
 _PNG = _Format("image/png", "png", (), "PNG")
 _SIGNATURES = ((b"%PDF-", _PDF), (b"\xff\xd8\xff", _JPEG), (b"\x89PNG\r\n\x1a\n", _PNG))
+# The extension allow-list (SR-08), compared in lower case.
+ALLOWED_EXTENSIONS = frozenset(
+    ext for _, f in _SIGNATURES for ext in (f.extension, *f.other_extensions)
+)
 
 
 def too_large(max_bytes: int) -> Rejection:
@@ -135,15 +142,18 @@ def sanitise_filename(name: str | None) -> str | None:
     return name
 
 
-def validate(data: bytes, limits: Limits, *, filename: str | None = None) -> SafeFile | Rejection:
+def validate(data: bytes, limits: Limits, *, filename: str | None) -> SafeFile | Rejection:
     """Run the Safety Checks on a whole file; return it cleaned or refused."""
     if len(data) > limits.max_bytes:
         return too_large(limits.max_bytes)
 
+    extension = _extension(filename)
     fmt = next((f for magic, f in _SIGNATURES if data.startswith(magic)), None)
-    if fmt is None:
-        return Rejection("unsupported_type", "Only PDF, JPEG and PNG files are accepted.")
-    if _disguised(filename, fmt):
+    if extension not in ALLOWED_EXTENSIONS or fmt is None:
+        return Rejection(
+            "unsupported_type", "Only PDF, JPEG and PNG files (.pdf, .jpg, .jpeg, .png) are accepted."
+        )
+    if extension not in (fmt.extension, *fmt.other_extensions):
         return Rejection(
             "type_mismatch",
             f"The file's name says another type, but its content is a "
@@ -155,11 +165,11 @@ def validate(data: bytes, limits: Limits, *, filename: str | None = None) -> Saf
     return _clean_image(data, fmt)
 
 
-def _disguised(filename: str | None, fmt: _Format) -> bool:
-    if not filename or "." not in filename.strip("."):
-        return False
-    extension = filename.rsplit(".", 1)[1].lower()
-    return extension not in (fmt.extension, *fmt.other_extensions)
+def _extension(filename: str | None) -> str | None:
+    """The lower-case extension, or None for a name without one (".pdf" is
+    a hidden file's name, not an extension)."""
+    stem, dot, extension = (filename or "").rpartition(".")
+    return extension.lower() if dot and stem.strip(".") else None
 
 
 # --- Images ------------------------------------------------------------------------------
@@ -199,6 +209,8 @@ _ACTIVE = frozenset(
     {
         "/JavaScript", "/JS", "/Launch", "/EmbeddedFile", "/EmbeddedFiles", "/EF",
         "/RichMedia", "/RichMediaContent", "/RichMediaSettings", "/XFA",
+        # Actions that send form data or open other files (/URI links stay).
+        "/SubmitForm", "/ImportData", "/GoToR", "/GoToE",
     }
 )
 # Harmless once it carries no active content: stripped, not refused.
@@ -222,8 +234,8 @@ def _clean_pdf(data: bytes, max_pages: int) -> SafeFile | Rejection:
             if _has_active_content(pdf):
                 return Rejection(
                     "pdf_active_content",
-                    "The PDF contains active content (scripts, launch actions, embedded "
-                    "files, rich media or XFA forms).",
+                    "The PDF contains active content (scripts, launch or form-submit "
+                    "actions, links to other files, embedded files, rich media or XFA forms).",
                 )
             _strip_auto_actions(pdf)
             out = io.BytesIO()
