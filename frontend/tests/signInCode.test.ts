@@ -9,6 +9,7 @@ import {
   isCompleteCode,
   normaliseCode,
   passwordProblem,
+  resetError,
   secondsUntilResend,
   signInErrorMessage,
 } from '../src/lib/signInCode.ts'
@@ -106,4 +107,25 @@ test('the key is shown in groups of four', () => {
   assert.equal(groupSecret('A535CNTD555SWDNGVB3NUO3BEQYJ6QXB'), 'A535 CNTD 555S WDNG VB3N UO3B EQYJ 6QXB')
   assert.equal(groupSecret('ABCDE'), 'ABCD E')
   assert.equal(groupSecret(''), '')
+})
+
+test('a reset refused for the authenticator code is a message on that field', () => {
+  const required = resetError({ status: 400, code: 'totp_required', message: 'x' })
+  assert.equal(required.field, 'totp')
+  assert.match(required.message, /authenticator/)
+  const wrong = resetError({ status: 403, code: 'totp_invalid', message: 'x' })
+  assert.equal(wrong.field, 'totp')
+  assert.match(wrong.message, /wrong/)
+  // Both used up the e-mailed code: the person needs a new one.
+  for (const { message } of [required, wrong]) assert.match(message, /new code/)
+})
+
+test('other reset refusals stay a message for the whole form', () => {
+  const emailed = resetError({ status: 403, code: 'otp_invalid', message: 'x' })
+  assert.equal(emailed.field, null)
+  assert.match(emailed.message, /wrong or has expired/)
+  assert.deepEqual(resetError(new Error('Failed to fetch')), {
+    field: null,
+    message: 'Failed to fetch',
+  })
 })

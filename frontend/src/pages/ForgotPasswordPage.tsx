@@ -8,10 +8,10 @@ import {
   CODE_LENGTH,
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
-  codeErrorMessage,
   isCompleteCode,
   normaliseCode,
   passwordProblem,
+  resetError,
 } from '../lib/signInCode'
 
 const INPUT_CLASS =
@@ -20,9 +20,12 @@ const INPUT_CLASS =
 const BUTTON_CLASS =
   'flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 font-medium text-on-accent transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-50'
 
-/** Forgot password: e-mail, then the code e-mailed to it and a new password
- * (ADR 0005). Every session of the Account ends; the person then signs in
- * with the new password and their authenticator code as usual (ADR 0007). */
+/** Forgot password: e-mail, then the code e-mailed to it, a new password
+ * and the current code of the authenticator app (ADR 0005, ADR 0007). The
+ * authenticator code may be left empty only when the Account has none (e.g.
+ * just after an Administrator's "Reset authenticator"). Every session of
+ * the Account ends; the person then signs in with the new password and
+ * their authenticator code as usual. */
 export function ForgotPasswordPage() {
   const { requestPasswordReset, resetPassword, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
@@ -30,6 +33,8 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [codeSent, setCodeSent] = useState(false)
   const [code, setCode] = useState('')
+  const [totp, setTotp] = useState('')
+  const [totpError, setTotpError] = useState<string | null>(null)
   const [password, setPassword] = useState('')
   const [repeated, setRepeated] = useState('')
   const [loading, setLoading] = useState(false)
@@ -65,27 +70,33 @@ export function ForgotPasswordPage() {
       setError(`Enter the ${CODE_LENGTH}-digit code from the e-mail.`)
       return
     }
+    if (totp && !isCompleteCode(totp)) {
+      setError(null)
+      setTotpError(`Enter the ${CODE_LENGTH}-digit code from your authenticator app.`)
+      return
+    }
     const problem = passwordProblem(password, repeated)
     if (problem) {
       setError(problem)
       return
     }
     setError(null)
+    setTotpError(null)
     setLoading(true)
     try {
-      await resetPassword(email, code, password)
+      await resetPassword(email, code, password, totp || undefined)
       navigate('/login', {
         replace: true,
         state: { notice: 'Your password has been changed. Sign in with it now.' },
       })
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? codeErrorMessage(err)
-          : err instanceof Error
-            ? err.message
-            : 'Something went wrong. Try again.',
-      )
+      if (err instanceof ApiError) {
+        const refused = resetError(err)
+        if (refused.field === 'totp') setTotpError(refused.message)
+        else setError(refused.message)
+      } else {
+        setError(err instanceof Error ? err.message : 'Something went wrong. Try again.')
+      }
       setLoading(false)
     }
   }
@@ -139,6 +150,39 @@ export function ForgotPasswordPage() {
                   className={`${INPUT_CLASS} text-center font-mono text-xl tracking-[0.5em] placeholder-ink-faint`}
                   placeholder="000000"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="totp" className="mb-2 block text-sm font-medium text-ink">
+                  Authenticator code
+                </label>
+                <input
+                  id="totp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]*"
+                  maxLength={CODE_LENGTH}
+                  value={totp}
+                  onChange={(e) => {
+                    setTotp(normaliseCode(e.target.value))
+                    setTotpError(null)
+                  }}
+                  disabled={loading}
+                  aria-invalid={totpError ? true : undefined}
+                  aria-describedby={totpError ? 'totp-hint totp-error' : 'totp-hint'}
+                  className={`${INPUT_CLASS} text-center font-mono text-xl tracking-[0.5em] placeholder-ink-faint`}
+                  placeholder="000000"
+                />
+                <p id="totp-hint" className="mt-1.5 text-xs text-ink-faint">
+                  The code your authenticator app shows now. Leave it empty only if an
+                  Administrator has just reset your authenticator.
+                </p>
+                {totpError && (
+                  <p id="totp-error" role="alert" className="mt-1.5 text-sm text-danger">
+                    {totpError}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -196,7 +240,9 @@ export function ForgotPasswordPage() {
                 onClick={() => {
                   setCodeSent(false)
                   setCode('')
+                  setTotp('')
                   setError(null)
+                  setTotpError(null)
                 }}
                 disabled={loading}
                 className="flex items-center gap-1 rounded text-sm font-medium text-ink-muted transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50"

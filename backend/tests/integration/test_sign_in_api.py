@@ -152,7 +152,17 @@ class FakeAuth:
             self.reset_codes[email.lower()] = CODE
 
     async def set_password(self, access_token, password, client_ip):
+        self.calls.append(("set_password",))
+        self._check()
         sub = self._user(access_token)
+        # As GoTrue: with a verified factor, only an aal2 session may change
+        # the password (the bug of F-01 when the reset skipped the TOTP).
+        verified = any(f["status"] == "verified" for f in self.factors.get(sub, []))
+        if verified and self._claims(access_token).get("aal") != "aal2":
+            raise SignInRefused(
+                401, "insufficient_aal",
+                "AAL2 session is required to update email or password when MFA is enabled.",
+            )
         self.passwords_set.append((sub, password))
         for account in self.accounts.values():
             if account["id"] == sub:
@@ -925,10 +935,10 @@ async def test_a_reset_sets_the_password_and_signs_out_everywhere(
 
     res = await client.post(
         "/api/auth/password/reset",
-        json={"email": email, "code": CODE, "password": "a-new-password-2"},
+        json={"email": email, "code": CODE, "password": "a-new-password-2", "totp": TOTP},
     )
 
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     assert fake_auth.passwords_set == [(user_id, "a-new-password-2")]
     assert [scope for _, scope in fake_auth.signed_out] == ["global"]
     # The session signed in before the reset no longer gets in.
@@ -959,6 +969,111 @@ async def test_a_wrong_reset_code_changes_nothing(client, owner_db, fake_auth, o
     [rec] = await _records(owner_db, "password_reset", email)
     assert rec["outcome"] == "refused"
     assert rec["reason"] == "otp_invalid"
+
+
+async def _reset_with(client, email: str, **extra):
+    await client.post("/api/auth/password/forgot", json={"email": email})
+    return await client.post(
+        "/api/auth/password/reset",
+        json={"email": email, "code": CODE, "password": "a-new-password-2", **extra},
+    )
+
+
+async def test_a_recovery_session_alone_cannot_set_the_password_of_an_account_with_an_authenticator(
+    fake_auth, officer
+):
+    """The fake keeps GoTrue's rule, so skipping the TOTP fails here as it
+    did against the real Supabase Auth."""
+    email, _ = officer
+    await fake_auth.send_password_reset(email, None)
+    recovery = await fake_auth.verify_code(email, CODE, None, type="recovery")
+
+    with pytest.raises(SignInRefused) as refused:
+        await fake_auth.set_password(recovery["access_token"], "a-new-password-2", None)
+
+    assert refused.value.code == "insufficient_aal"
+
+
+async def test_a_reset_without_the_authenticator_code_is_refused(
+    client, owner_db, fake_auth, officer
+):
+    email, user_id = officer
+
+    res = await _reset_with(client, email)
+
+    assert res.status_code == 400
+    assert res.json()["detail"]["code"] == "totp_required"
+    assert fake_auth.passwords_set == []
+    # The recovery session is of no further use.
+    assert [scope for _, scope in fake_auth.signed_out] == ["local"]
+    [rec] = await _records(owner_db, "password_reset", email)
+    assert rec["actor_id"] == user_id
+    assert (rec["outcome"], rec["reason"]) == ("refused", "totp_required")
+
+
+async def test_a_reset_with_a_wrong_authenticator_code_changes_nothing(
+    client, owner_db, fake_auth, officer
+):
+    email, user_id = officer
+
+    res = await _reset_with(client, email, totp="000000")
+
+    assert res.status_code == 403
+    detail = res.json()["detail"]
+    assert detail["code"] == "totp_invalid"
+    assert "new code" in detail["message"]
+    assert fake_auth.passwords_set == []
+    assert [scope for _, scope in fake_auth.signed_out] == ["local"]
+    [rec] = await _records(owner_db, "password_reset", email)
+    assert (rec["outcome"], rec["reason"]) == ("refused", "totp_invalid")
+    # The old password still works for step 1.
+    assert (await client.post(
+        "/api/auth/login", json={"email": email, "password": PASSWORD}
+    )).status_code == 200
+
+
+async def test_an_account_without_an_authenticator_resets_with_the_emailed_code_alone(
+    client, owner_db, fake_auth, newcomer
+):
+    """E.g. right after an Administrator's "Reset authenticator"."""
+    email, user_id = newcomer
+
+    res = await _reset_with(client, email)
+
+    assert res.status_code == 200, res.text
+    assert fake_auth.passwords_set == [(user_id, "a-new-password-2")]
+    assert fake_auth.called("verify_totp") == []
+    [rec] = await _records(owner_db, "password_reset", email)
+    assert rec["outcome"] == "succeeded"
+
+
+@pytest.mark.parametrize("step", ["list_factors", "challenge", "verify_totp", "set_password"])
+async def test_a_reset_with_auth_down_after_the_emailed_code_is_503(
+    client, owner_db, fake_auth, officer, step
+):
+    email, _ = officer
+
+    async def down(*args, **kwargs):
+        raise AuthUnavailable()
+
+    setattr(fake_auth, step, down)
+    res = await _reset_with(client, email, totp=TOTP)
+
+    assert res.status_code == 503
+    assert res.json()["detail"]["code"] == "auth_unavailable"
+    assert fake_auth.passwords_set == []
+    [rec] = await _records(owner_db, "password_reset", email)
+    assert (rec["outcome"], rec["reason"]) == ("refused", "auth_unavailable")
+
+
+@pytest.mark.parametrize("totp", ["12345", "abcdef", "1234567"])
+async def test_a_reset_authenticator_code_is_six_digits(client, fake_auth, officer, totp):
+    email, _ = officer
+
+    res = await _reset_with(client, email, totp=totp)
+
+    assert res.status_code == 422
+    assert fake_auth.called("verify_code") == []
 
 
 # --- password rules (SR-02) ------------------------------------------------------
@@ -997,7 +1112,8 @@ async def _register(client, password: str):
 async def _reset(client, email: str, password: str):
     await client.post("/api/auth/password/forgot", json={"email": email})
     return await client.post(
-        "/api/auth/password/reset", json={"email": email, "code": CODE, "password": password}
+        "/api/auth/password/reset",
+        json={"email": email, "code": CODE, "password": password, "totp": TOTP},
     )
 
 
@@ -1586,5 +1702,96 @@ async def test_real_auth_a_session_made_without_the_proxy_does_not_get_in(client
             me = await client.get("/api/me", headers={"Authorization": f"Bearer {aal2}"})
             assert me.status_code == 401
             assert me.json()["detail"]["code"] == "session_not_verified"
+    finally:
+        await _remove(owner_db, user_id)
+
+
+async def _wait_for_code(email: str) -> str:
+    """The code of the only e-mail to `email`, once Mailpit has it."""
+    import asyncio
+
+    for _ in range(50):
+        async with httpx.AsyncClient(base_url=MAILPIT_URL) as http:
+            found = await http.get("/api/v1/search", params={"query": f'to:"{email}"'})
+        if found.json()["messages"]:
+            return await _code_from_mailpit(email)
+        await asyncio.sleep(0.2)
+    raise AssertionError(f"no e-mail to {email}")
+
+
+async def _real_user_with_authenticator(client, email: str) -> tuple[UUID, str]:
+    """A real user who signed in once through the proxy and so enrolled an
+    authenticator; returns its id and the TOTP secret."""
+    user_id = await _real_user(email)
+    first = await client.post("/api/auth/login", json={"email": email, "password": PASSWORD})
+    assert first.json()["step"] == "enrol", first.text
+    secret = first.json()["secret"]
+    enrolled = await _verify(client, email, first.json()["challenge"], _totp(secret))
+    assert enrolled.status_code == 200, enrolled.text
+    return user_id, secret
+
+
+async def _real_reset(client, email: str, **extra):
+    forgot = await client.post("/api/auth/password/forgot", json={"email": email})
+    assert forgot.status_code == 200, forgot.text
+    code = await _wait_for_code(email)
+    return await client.post(
+        "/api/auth/password/reset",
+        json={"email": email, "code": code, "password": NEW_PASSWORD, **extra},
+    )
+
+
+NEW_PASSWORD = "lighthouse-keeper-7"
+
+
+@needs_auth
+@needs_mailpit
+async def test_real_auth_reset_with_the_authenticator_then_sign_in(client, owner_db, pwned):
+    email = _unique_email()
+    user_id, secret = await _real_user_with_authenticator(client, email)
+    try:
+        res = await _real_reset(client, email, totp=_totp(secret))
+
+        assert res.status_code == 200, res.text
+        [rec] = await _records(owner_db, "password_reset", email)
+        assert rec["outcome"] == "succeeded"
+        old = await client.post("/api/auth/login", json={"email": email, "password": PASSWORD})
+        assert old.status_code == 400
+        new = await client.post(
+            "/api/auth/login", json={"email": email, "password": NEW_PASSWORD}
+        )
+        assert new.status_code == 200, new.text
+        assert new.json()["step"] == "totp"
+        signed_in = await _verify(client, email, new.json()["challenge"], _totp(secret))
+        assert signed_in.status_code == 200, signed_in.text
+        me = await client.get("/api/me", headers=_bearer(signed_in.json()))
+        assert me.status_code == 200, me.text
+    finally:
+        await _remove(owner_db, user_id)
+
+
+@needs_auth
+@needs_mailpit
+@pytest.mark.parametrize(
+    ("totp", "status_code", "code"),
+    [(None, 400, "totp_required"), ("000000", 403, "totp_invalid")],
+)
+async def test_real_auth_a_reset_needs_the_right_authenticator_code(
+    client, owner_db, pwned, totp, status_code, code
+):
+    email = _unique_email()
+    user_id, secret = await _real_user_with_authenticator(client, email)
+    try:
+        if totp == _totp(secret):
+            totp = "111111"
+        res = await _real_reset(client, email, **({"totp": totp} if totp else {}))
+
+        assert res.status_code == status_code, res.text
+        assert res.json()["detail"]["code"] == code
+        [rec] = await _records(owner_db, "password_reset", email)
+        assert (rec["outcome"], rec["reason"]) == ("refused", code)
+        # The password is unchanged.
+        old = await client.post("/api/auth/login", json={"email": email, "password": PASSWORD})
+        assert old.status_code == 200, old.text
     finally:
         await _remove(owner_db, user_id)

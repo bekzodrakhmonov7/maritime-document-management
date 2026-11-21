@@ -109,3 +109,17 @@ export function codeErrorMessage(err: Refusal): string {
   if (err.status === 429) return TOO_MANY_MESSAGE
   return err.message
 }
+
+/** Where a refused password reset is shown: under the authenticator code
+ * field (`totp`) or above the whole form (`null`). A missing or wrong
+ * authenticator code used up the e-mailed code, so a new one is needed. */
+export function resetError(err: Refusal): { field: 'totp' | null; message: string } {
+  const again = ' Go back and send a new code to the e-mail, then try again.'
+  if (err.code === 'totp_required') {
+    return { field: 'totp', message: 'Enter the code from your authenticator app.' + again }
+  }
+  if (err.code === 'totp_invalid') {
+    return { field: 'totp', message: 'That authenticator code is wrong.' + again }
+  }
+  return { field: null, message: codeErrorMessage(err) }
+}
