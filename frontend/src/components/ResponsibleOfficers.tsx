@@ -18,20 +18,20 @@ export function ResponsibleOfficers({ vesselId, isAdmin }: { vesselId: number; i
 
   return (
     <section className="space-y-3">
-      <h3 className="text-lg font-semibold text-navy-50">Responsible Officers</h3>
+      <h3 className="text-lg font-medium text-ink">Responsible Officers</h3>
       {error && <ErrorNote message={error.message} />}
       {action.error && <ErrorNote message={action.error.message} />}
-      <ul className="divide-y divide-navy-800 rounded-xl border border-navy-800 bg-navy-900">
+      <ul className="divide-y divide-line rounded-md border border-line bg-canvas">
         {officers?.length === 0 && (
-          <li className="px-4 py-3 text-sm text-navy-400">
+          <li className="px-4 py-3 text-sm text-ink-faint">
             No Responsible Officer: only administrators manage this vessel's crew.
           </li>
         )}
         {officers?.map((officer) => (
           <li key={officer.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
             <div className="flex items-center gap-3">
-              <span className="text-navy-50">{officer.full_name || officer.email}</span>
-              <span className="text-navy-400">{officer.email}</span>
+              <span className="text-ink">{officer.full_name || officer.email}</span>
+              <span className="text-ink-faint">{officer.email}</span>
               {officer.status !== 'active' && (
                 <StateBadge on={false} label="Deactivated: link ignored" />
               )}

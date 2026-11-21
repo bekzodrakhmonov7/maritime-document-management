@@ -22,8 +22,8 @@ export function PositionsPage() {
     <div className="max-w-3xl space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-navy-50">Positions</h2>
-          <p className="mt-1 text-sm text-navy-400">
+          <h2 className="text-xl font-medium text-ink">Positions</h2>
+          <p className="mt-1 text-sm text-ink-faint">
             The jobs seafarers hold or are planned for. A Position in use is retired, not deleted.
           </p>
         </div>
@@ -35,33 +35,33 @@ export function PositionsPage() {
 
       {error && <ErrorNote message={error.message} />}
 
-      <div className="overflow-x-auto rounded-xl border border-navy-800 bg-navy-900">
+      <div className="overflow-x-auto rounded-md border border-line bg-canvas">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-navy-800 text-xs uppercase tracking-wider text-navy-400">
+          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
             <tr>
               <th scope="col" className="px-4 py-3">Name</th>
               <th scope="col" className="px-4 py-3">Status</th>
               <th scope="col" className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-navy-800">
+          <tbody className="divide-y divide-line">
             {isLoading && (
               <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={3} className="px-4 py-6 text-center text-ink-faint">
                   Loading…
                 </td>
               </tr>
             )}
             {positions?.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={3} className="px-4 py-6 text-center text-ink-faint">
                   No Positions yet.
                 </td>
               </tr>
             )}
             {positions?.map((position) => (
               <tr key={position.id}>
-                <td className="px-4 py-3 text-navy-50">{position.name}</td>
+                <td className="px-4 py-3 text-ink">{position.name}</td>
                 <td className="px-4 py-3">
                   <StateBadge on={!position.retired} label={position.retired ? 'Retired' : 'In use'} />
                 </td>

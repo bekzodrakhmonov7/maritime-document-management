@@ -74,13 +74,13 @@ export function SettingsPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-navy-50">Settings</h2>
-        <p className="mt-1 text-sm text-navy-400">
+        <h2 className="text-xl font-medium text-ink">Settings</h2>
+        <p className="mt-1 text-sm text-ink-faint">
           Changes apply from the next request or the next daily check. No restart is needed.
         </p>
       </div>
 
-      {isLoading && <p className="text-navy-400">Loading…</p>}
+      {isLoading && <p className="text-ink-faint">Loading…</p>}
       {error && <ErrorNote message={error.message} />}
       {data && (
         // A new version (after a save or a reload) starts the form afresh.
@@ -124,22 +124,22 @@ function LastCleanupPanel({
   return (
     <section
       aria-labelledby="last-cleanup-heading"
-      className="space-y-2 rounded-xl border border-navy-800 bg-navy-900 p-6"
+      className="space-y-2 rounded-md border border-line bg-canvas p-6"
     >
-      <h3 id="last-cleanup-heading" className="text-sm font-semibold text-navy-50">
+      <h3 id="last-cleanup-heading" className="text-sm font-medium text-ink">
         Last retention clean-up
       </h3>
       {cleanup === null ? (
-        <p className="text-sm text-navy-400">
+        <p className="text-sm text-ink-faint">
           No clean-up has run yet. It runs as the last step of the scheduled daily check.
         </p>
       ) : (
-        <p className="text-sm text-navy-200">
+        <p className="text-sm text-ink-muted">
           {when(cleanup.finished_at)}: removed {plural(cleanup.versions, 'Replaced Version')} and{' '}
           {plural(cleanup.seafarers, 'Inactive seafarer')}.
         </p>
       )}
-      <p className="text-sm text-navy-400">
+      <p className="text-sm text-ink-faint">
         Old Audit Records are removed by a nightly database job (03:17 UTC).{' '}
         {auditCleanup === null
           ? 'It has removed none yet.'
@@ -158,13 +158,13 @@ function DailyCheckPanel() {
   return (
     <section
       aria-labelledby="daily-check-heading"
-      className="space-y-3 rounded-xl border border-navy-800 bg-navy-900 p-6"
+      className="space-y-3 rounded-md border border-line bg-canvas p-6"
     >
       <div>
-        <h3 id="daily-check-heading" className="text-sm font-semibold text-navy-50">
+        <h3 id="daily-check-heading" className="text-sm font-medium text-ink">
           Daily check
         </h3>
-        <p className="mt-1 text-xs text-navy-400">
+        <p className="mt-1 text-xs text-ink-faint">
           Runs once a day at the check time. Running it now raises any alerts due, sends the
           digests and retries failed e-mails; it doesn’t replace today’s scheduled run and never
           removes anything (retention runs only in the scheduled check).
@@ -172,7 +172,7 @@ function DailyCheckPanel() {
       </div>
       {run.error && <ErrorNote message={run.error.message} />}
       {result && (
-        <p className="text-sm text-navy-200" role="status">
+        <p className="text-sm text-ink-muted" role="status">
           Raised {result.raised} alert{result.raised === 1 ? '' : 's'}, sent {result.sent} digest
           {result.sent === 1 ? '' : 's'}
           {result.failed > 0 && `, ${result.failed} failed (retried on the next run)`}.
@@ -228,7 +228,7 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-6 rounded-xl border border-navy-800 bg-navy-900 p-6"
+      className="space-y-6 rounded-md border border-line bg-canvas p-6"
     >
       <AlertStepsEditor steps={steps} onChange={setSteps} />
 
@@ -249,7 +249,7 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
               onChange={(e) => setNumbers({ ...numbers, [field.key]: e.target.value })}
               className={FIELD_CLASS}
             />
-            <p className="mt-1 text-xs text-navy-400">
+            <p className="mt-1 text-xs text-ink-faint">
               {field.min}–{field.max} {field.unit}. {field.hint}
             </p>
           </div>
@@ -273,7 +273,7 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-navy-400">
+          <p className="mt-1 text-xs text-ink-faint">
             Decides “today” for statuses and alerts, and how times are shown.
           </p>
         </div>
@@ -293,13 +293,13 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-navy-400">In the company time zone, every 15 minutes.</p>
+          <p className="mt-1 text-xs text-ink-faint">In the company time zone, every 15 minutes.</p>
         </div>
       </div>
 
       <fieldset>
         <legend className={LABEL_CLASS}>Retention Periods (whole years)</legend>
-        <p className="mb-3 text-xs text-navy-400">
+        <p className="mb-3 text-xs text-ink-faint">
           Removed automatically when the period ends, as the last step of the scheduled daily
           check. Audit Records about a removed seafarer are kept.
         </p>
@@ -320,7 +320,7 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
                 onChange={(e) => setNumbers({ ...numbers, [field.key]: e.target.value })}
                 className={FIELD_CLASS}
               />
-              <p className="mt-1 text-xs text-navy-400">
+              <p className="mt-1 text-xs text-ink-faint">
                 1–{MAX_RETENTION_YEARS} years. {field.hint}
               </p>
             </div>
@@ -339,13 +339,13 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
           )}
         </div>
       )}
-      {save.isSuccess && <p className="text-sm text-status-valid">Settings saved.</p>}
+      {save.isSuccess && <p className="text-sm text-ink-muted">Settings saved.</p>}
 
       <div className="flex justify-end">
         <button
           type="submit"
           disabled={save.isPending || stale}
-          className="flex items-center gap-2 rounded-lg bg-navy-600 px-4 py-2 text-sm font-medium text-navy-50 hover:bg-navy-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           Save settings
@@ -385,11 +385,11 @@ function AlertStepsEditor({
         {steps.map((step) => (
           <li
             key={step}
-            className="flex items-center gap-1.5 rounded-full bg-navy-800 px-3 py-1 text-sm text-navy-50"
+            className="flex items-center gap-1.5 rounded-full bg-surface-active px-3 py-1 text-sm text-ink"
           >
             {step === 0 ? (
               <>
-                <Lock className="h-3.5 w-3.5 text-navy-400" aria-hidden="true" />
+                <Lock className="h-3.5 w-3.5 text-ink-faint" aria-hidden="true" />
                 0 (expiry day)
               </>
             ) : (
@@ -398,7 +398,7 @@ function AlertStepsEditor({
                 <button
                   type="button"
                   onClick={() => onChange(steps.filter((s) => s !== step))}
-                  className="rounded-full p-0.5 text-navy-400 hover:text-navy-100"
+                  className="rounded-full p-0.5 text-ink-faint hover:text-ink"
                   aria-label={`Remove ${step} days`}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -434,7 +434,7 @@ function AlertStepsEditor({
           Add step
         </ActionButton>
       </div>
-      <p className="mt-1 text-xs text-navy-400">
+      <p className="mt-1 text-xs text-ink-faint">
         Up to {MAX_ALERT_STEPS} steps, all different. Only the most urgent step reached is sent.
       </p>
     </fieldset>

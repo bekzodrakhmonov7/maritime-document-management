@@ -177,7 +177,7 @@ function SeafarerForm({ seafarer, onClose }: { seafarer: Seafarer | null; onClos
           ))}
         </select>
         {seafarer && Number(positionId) !== seafarer.position_id && (
-          <p className="mt-1 text-xs text-status-expiring">
+          <p className="mt-1 text-xs text-warning">
             The held Position changes from {seafarer.position_name}. The change is recorded.
           </p>
         )}
@@ -204,7 +204,7 @@ function SetInactive({ seafarer, onClose }: { seafarer: Seafarer; onClose: () =>
       canSubmit={!!trimmed}
       error={action.error}
     >
-      <p className="text-sm text-navy-300">
+      <p className="text-sm text-ink-muted">
         The record is kept but drops out of the working lists. It can be reactivated later.
       </p>
       <div>

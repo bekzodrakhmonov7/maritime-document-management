@@ -16,9 +16,9 @@ import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
 import { COVERAGE_LABELS, EXPIRY_STATUS_LABELS, type CoverageClass, type ReadinessEntry } from '../types'
 
 const COVERAGE_STYLE: Record<CoverageClass, string> = {
-  missing: BADGE_TONE.neutral,
+  missing: BADGE_TONE.bad,
   runs_out_before_start: BADGE_TONE.bad,
-  runs_out_during: BADGE_TONE.warn,
+  runs_out_during: BADGE_TONE.bad,
   expiry_not_stated: BADGE_TONE.warn,
   covers_all: BADGE_TONE.ok,
 }
@@ -42,30 +42,30 @@ function EntryRow({ entry, seafarerId }: { entry: ReadinessEntry; seafarerId: nu
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           {entry.document_id ? (
-            <Link to={`/documents/${entry.document_id}`} className="font-medium text-navy-50 hover:underline">
+            <Link to={`/documents/${entry.document_id}`} className="font-medium text-ink hover:underline">
               {entry.name}
             </Link>
           ) : (
-            <span className="font-medium text-navy-50">{entry.name}</span>
+            <span className="font-medium text-ink">{entry.name}</span>
           )}
           {entry.verified && <VerifiedShield />}
           {entry.review_state === 'not_reviewed' && <NotReviewedTag />}
         </div>
-        {entry.suggestion && <p className="text-sm text-navy-300">{entry.suggestion}</p>}
+        {entry.suggestion && <p className="text-sm text-ink-muted">{entry.suggestion}</p>}
         {capped ? (
           <p>
             <EndorsementCapNote {...cap} />
           </p>
         ) : (
           entry.expiry_date &&
-          !entry.suggestion && <p className="text-sm text-navy-400">Valid through {entry.expiry_date}</p>
+          !entry.suggestion && <p className="text-sm text-ink-faint">Valid through {entry.expiry_date}</p>
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {entry.coverage === 'missing' && entry.document_id === null && (
           <Link
             to={missingUploadPath(seafarerId, entry.document_type_id)}
-            className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600"
+            className="h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active"
           >
             Upload
           </Link>
@@ -92,24 +92,24 @@ function Bucket({
   const [open, setOpen] = useState(!folded)
   const Chevron = open ? ChevronDown : ChevronRight
   return (
-    <section className="rounded-xl border border-navy-800 bg-navy-900">
+    <section className="rounded-md border border-line bg-canvas">
       <h3>
         <button
           type="button"
           onClick={() => setOpen(!open)}
           aria-expanded={open}
-          className="flex w-full items-center gap-2 px-4 py-3 text-left font-semibold text-navy-50"
+          className="flex w-full items-center gap-2 px-4 py-3 text-left font-medium text-ink"
         >
-          <Chevron className="h-4 w-4 text-navy-400" aria-hidden="true" />
+          <Chevron className="h-4 w-4 text-ink-faint" aria-hidden="true" />
           {title}
-          <span className="text-sm font-normal text-navy-400">({entries.length})</span>
+          <span className="text-sm font-normal text-ink-faint">({entries.length})</span>
         </button>
       </h3>
       {open &&
         (entries.length === 0 ? (
-          <p className="border-t border-navy-800 px-4 py-3 text-sm text-navy-400">{empty}</p>
+          <p className="border-t border-line px-4 py-3 text-sm text-ink-faint">{empty}</p>
         ) : (
-          <ul className="divide-y divide-navy-800 border-t border-navy-800">
+          <ul className="divide-y divide-line border-t border-line">
             {entries.map((e) => (
               <EntryRow key={e.document_type_id} entry={e} seafarerId={seafarerId} />
             ))}
@@ -121,9 +121,9 @@ function Bucket({
 
 function Counter({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-navy-800 bg-navy-900 p-4">
-      <dt className="text-xs uppercase tracking-wider text-navy-400">{label}</dt>
-      <dd className="mt-1 text-2xl font-semibold text-navy-50">{value}</dd>
+    <div className="rounded-md border border-line bg-canvas p-4">
+      <dt className="text-xs text-ink-faint">{label}</dt>
+      <dd className="mt-1 text-xl font-medium text-ink">{value}</dd>
     </div>
   )
 }
@@ -143,45 +143,45 @@ export function ReadinessPage() {
       {a ? (
         <Link
           to={`/seafarers/${a.seafarer_id}`}
-          className="inline-flex items-center gap-1 text-sm text-navy-300 hover:text-navy-100"
+          className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink"
         >
           <ArrowLeft className="h-4 w-4" />
           {seafarerName}
         </Link>
       ) : (
-        <Link to="/seafarers" className="inline-flex items-center gap-1 text-sm text-navy-300 hover:text-navy-100">
+        <Link to="/seafarers" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
           <ArrowLeft className="h-4 w-4" />
           All seafarers
         </Link>
       )}
 
-      {isLoading && <p className="text-sm text-navy-400">Loading…</p>}
+      {isLoading && <p className="text-sm text-ink-faint">Loading…</p>}
       {error && <ErrorNote message={error.message} />}
 
       {view && a && (
         <>
           <header className="space-y-2">
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-2xl font-semibold text-navy-50">
+              <h2 className="text-xl font-medium text-ink">
                 Readiness: {seafarerName}
               </h2>
               <AssignmentStateBadge state={view.state} />
             </div>
-            <p className="text-sm text-navy-300">
+            <p className="text-sm text-ink-muted">
               {a.position_name} on{' '}
               <Link to={`/vessels/${a.vessel_id}`} className="hover:underline">
                 {a.vessel_name}
               </Link>{' '}
               ({flagLabel(a.vessel_flag)}), {a.start_date} → {a.end_date}
             </p>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-navy-300">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
               Status Report:
               <ReportDownloads kind="assignment" id={a.id} label="this assignment's Status Report" />
             </div>
           </header>
 
           {view.position_notice && (
-            <p className="flex items-start gap-2 rounded-lg border border-status-expiring/40 bg-status-expiring-bg/10 p-3 text-sm text-status-expiring">
+            <p className="flex items-start gap-2 rounded-md border border-warning/40 p-3 text-sm text-warning">
               <UserCog className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               {view.position_notice}
             </p>
@@ -189,7 +189,7 @@ export function ReadinessPage() {
 
           <p
             role="note"
-            className="flex items-start gap-2 rounded-lg border border-navy-600 bg-navy-800 p-3 text-sm text-navy-100"
+            className="flex items-start gap-2 rounded-md border border-line-strong bg-surface-active p-3 text-sm text-ink"
           >
             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             This view only advises: it flags gaps and suggests renewals. It approves and blocks

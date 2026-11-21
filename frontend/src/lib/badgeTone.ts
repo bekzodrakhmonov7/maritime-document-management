@@ -1,14 +1,28 @@
-/** Colours for every status badge (NFR-04). Each tone is a solid background
- * with light text, so its contrast does not depend on the surface underneath
- * and stays at least 4.5:1 in colour and in greyscale. Values live in
- * src/index.css (`--color-badge-*`); tests/badgeContrast.test.ts checks them.
- * The hue carries meaning only alongside the label (and icon), never alone. */
+/** Every status (NFR-04) is a dot and a word: the word in `ink-muted` carries
+ * the meaning, the dot is a second signal. Only problems get a hue: `warn`
+ * (needs attention) and `bad` (blocks an assignment). Each tone string ends
+ * with the overrides that strip a caller's pill styles (callers merge it last
+ * with `cn`). Colours live in src/index.css; tests/badgeContrast.test.ts
+ * checks the word against the grounds and each dot at 3:1. */
 export type BadgeTone = 'ok' | 'warn' | 'bad' | 'neutral' | 'muted'
 
+const BASE =
+  'inline-flex items-center gap-1.5 rounded-none bg-transparent px-0 py-0 font-normal text-ink-muted ' +
+  'before:size-1.5 before:shrink-0 before:rounded-full before:content-[""]'
+
 export const BADGE_TONE: Record<BadgeTone, string> = {
-  ok: 'bg-badge-ok-bg text-badge-ok',
-  warn: 'bg-badge-warn-bg text-badge-warn',
-  bad: 'bg-badge-bad-bg text-badge-bad',
-  neutral: 'bg-badge-neutral-bg text-badge-neutral',
-  muted: 'bg-badge-muted-bg text-badge-muted',
+  ok: `${BASE} before:bg-ink-faint`,
+  warn: `${BASE} before:bg-warning`,
+  bad: `${BASE} before:bg-danger`,
+  neutral: `${BASE} before:ring-1 before:ring-inset before:ring-ink-faint`,
+  muted: `${BASE} text-ink-faint before:ring-1 before:ring-inset before:ring-ink-faint`,
+}
+
+/** The dot colour token of each tone, for the contrast test. */
+export const DOT_COLOUR: Record<BadgeTone, string> = {
+  ok: 'ink-faint',
+  warn: 'warning',
+  bad: 'danger',
+  neutral: 'ink-faint',
+  muted: 'ink-faint',
 }

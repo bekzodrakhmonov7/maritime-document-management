@@ -23,39 +23,39 @@ export function VesselPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <Link to="/vessels" className="inline-flex items-center gap-1 text-sm text-navy-300 hover:text-navy-100">
+      <Link to="/vessels" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
         <ArrowLeft className="h-4 w-4" />
         All vessels
       </Link>
 
-      {isLoading && <p className="text-sm text-navy-400">Loading…</p>}
+      {isLoading && <p className="text-sm text-ink-faint">Loading…</p>}
       {error && <ErrorNote message={error.message} />}
 
       {vessel && (
         <>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-semibold text-navy-50">{vessel.name}</h2>
+              <h2 className="text-xl font-medium text-ink">{vessel.name}</h2>
               <StateBadge on={vessel.active} label={vessel.active ? 'Active' : 'Deactivated'} />
             </div>
             {isAdmin && <VesselActions vessel={vessel} onOpen={setDialog} />}
           </div>
 
-          <dl className="grid gap-4 rounded-xl border border-navy-800 bg-navy-900 p-6 sm:grid-cols-2">
+          <dl className="grid gap-4 rounded-md border border-line bg-canvas p-6 sm:grid-cols-2">
             <div>
-              <dt className="text-xs uppercase tracking-wider text-navy-400">IMO number</dt>
-              <dd className="mt-1 font-mono text-navy-50">{vessel.imo_number}</dd>
+              <dt className="text-xs text-ink-faint">IMO number</dt>
+              <dd className="mt-1 font-mono text-ink">{vessel.imo_number}</dd>
             </div>
             <div>
-              <dt className="text-xs uppercase tracking-wider text-navy-400">Flag</dt>
-              <dd className="mt-1 text-navy-50">{flagLabel(vessel.flag)}</dd>
+              <dt className="text-xs text-ink-faint">Flag</dt>
+              <dd className="mt-1 text-ink">{flagLabel(vessel.flag)}</dd>
             </div>
           </dl>
 
           <ResponsibleOfficers vesselId={vessel.id} isAdmin={isAdmin} />
 
           <section className="space-y-3">
-            <h3 className="text-lg font-semibold text-navy-50">Crew under way and upcoming</h3>
+            <h3 className="text-lg font-medium text-ink">Crew under way and upcoming</h3>
             {crew.error && <ErrorNote message={crew.error.message} />}
             <AssignmentsTable
               assignments={crew.data}

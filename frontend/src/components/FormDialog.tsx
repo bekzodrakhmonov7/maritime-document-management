@@ -35,29 +35,29 @@ export function FormDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/70 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 px-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
     >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md space-y-4 rounded-xl border border-navy-800 bg-navy-900 p-6 shadow-2xl"
+        className="w-full max-w-md space-y-4 rounded-md border border-line bg-canvas p-6"
       >
         <div className="flex items-start justify-between">
           <div>
-            <h3 id={titleId} className="text-lg font-semibold text-navy-50">
+            <h3 id={titleId} className="text-lg font-medium text-ink">
               {title}
             </h3>
-            {subtitle && <p className="text-sm text-navy-400">{subtitle}</p>}
+            {subtitle && <p className="text-sm text-ink-faint">{subtitle}</p>}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-navy-400 hover:text-navy-100"
+            className="rounded p-1 text-ink-faint hover:text-ink"
             aria-label="Close"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
@@ -69,14 +69,14 @@ export function FormDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-navy-300 hover:bg-navy-800"
+            className="h-8 shrink-0 whitespace-nowrap rounded-md px-3 text-sm text-ink-muted hover:bg-surface-active hover:text-ink"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={pending || !canSubmit}
-            className="flex items-center gap-2 rounded-lg bg-navy-600 px-4 py-2 text-sm font-medium text-navy-50 hover:bg-navy-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-accent px-3 text-sm font-medium text-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
             {submitLabel}
@@ -88,6 +88,6 @@ export function FormDialog({
 }
 
 export const FIELD_CLASS =
-  'w-full rounded-lg border border-navy-700 bg-navy-950 px-3 py-2 text-navy-50 focus:border-navy-400 focus:outline-none'
+  'w-full rounded-md border border-line-strong bg-canvas px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none'
 
-export const LABEL_CLASS = 'mb-1 block text-sm font-medium text-navy-100'
+export const LABEL_CLASS = 'mb-1 block text-xs text-ink-muted'

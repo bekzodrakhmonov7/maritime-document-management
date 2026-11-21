@@ -14,14 +14,14 @@ export function EndorsementCapNote({
 }: EffectiveExpiryFields & { className?: string }) {
   if (certificateMissing) {
     return (
-      <span className={cn('text-sm text-status-expired', className)}>
+      <span className={cn('text-sm text-danger', className)}>
         Certificate missing: counts as expired
       </span>
     )
   }
   if (!cappedBy || !effectiveExpiry) return null
   return (
-    <span className={cn('text-sm text-navy-300', className)}>
+    <span className={cn('text-sm text-ink-muted', className)}>
       Valid until {effectiveExpiry} (capped by {cappedBy}; own expiry {ownExpiry ?? 'none'})
     </span>
   )

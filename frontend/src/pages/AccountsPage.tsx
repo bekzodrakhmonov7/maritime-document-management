@@ -21,7 +21,7 @@ const FILTERS: { value: Filter; label: string }[] = [
 const STATUS_STYLE: Record<AccountStatus, string> = {
   pending: BADGE_TONE.warn,
   active: BADGE_TONE.ok,
-  deactivated: BADGE_TONE.bad,
+  deactivated: BADGE_TONE.neutral,
 }
 
 const FORM_TITLE: Record<FormKind, string> = {
@@ -61,8 +61,8 @@ export function AccountsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-navy-50">Accounts</h2>
-        <p className="mt-1 text-sm text-navy-400">
+        <h2 className="text-xl font-medium text-ink">Accounts</h2>
+        <p className="mt-1 text-sm text-ink-faint">
           New sign-ups wait here until you approve them with a role. Accounts are never deleted:
           switch them off instead.
         </p>
@@ -77,15 +77,15 @@ export function AccountsPage() {
             aria-selected={filter === f.value}
             onClick={() => setFilter(f.value)}
             className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium',
+              'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium',
               filter === f.value
-                ? 'bg-navy-700 text-navy-50'
-                : 'text-navy-300 hover:bg-navy-800 hover:text-navy-100',
+                ? 'bg-surface-active text-ink'
+                : 'text-ink-muted hover:bg-surface-active hover:text-ink',
             )}
           >
             {f.label}
             {f.value === 'pending' && (pending ?? 0) > 0 && (
-              <span className="rounded-full bg-status-expiring px-2 py-0.5 text-xs font-semibold text-navy-950">
+              <span className="text-xs font-medium text-warning">
                 {pending}
               </span>
             )}
@@ -95,9 +95,9 @@ export function AccountsPage() {
 
       {error && <ErrorNote message={error.message} />}
 
-      <div className="overflow-x-auto rounded-xl border border-navy-800 bg-navy-900">
+      <div className="overflow-x-auto rounded-md border border-line bg-canvas">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-navy-800 text-xs uppercase tracking-wider text-navy-400">
+          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
             <tr>
               <th scope="col" className="px-4 py-3">Name</th>
               <th scope="col" className="px-4 py-3">E-mail</th>
@@ -107,17 +107,17 @@ export function AccountsPage() {
               <th scope="col" className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-navy-800">
+          <tbody className="divide-y divide-line">
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
                   Loading…
                 </td>
               </tr>
             )}
             {accounts?.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
                   No accounts here.
                 </td>
               </tr>
@@ -126,8 +126,8 @@ export function AccountsPage() {
               const isSelf = account.id === user?.id
               return (
                 <tr key={account.id}>
-                  <td className="px-4 py-3 text-navy-50">{account.full_name}</td>
-                  <td className="px-4 py-3 text-navy-200">{account.email}</td>
+                  <td className="px-4 py-3 text-ink">{account.full_name}</td>
+                  <td className="px-4 py-3 text-ink-muted">{account.email}</td>
                   <td className="px-4 py-3">
                     <span
                       className={cn(
@@ -138,15 +138,15 @@ export function AccountsPage() {
                       {account.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-navy-200">
+                  <td className="px-4 py-3 text-ink-muted">
                     {account.role ? ROLE_LABELS[account.role] : '—'}
                   </td>
-                  <td className="max-w-xs truncate px-4 py-3 text-navy-400" title={account.status_reason ?? ''}>
+                  <td className="max-w-xs truncate px-4 py-3 text-ink-faint" title={account.status_reason ?? ''}>
                     {account.status_reason ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {isSelf ? (
-                      <span className="text-xs text-navy-500">You</span>
+                      <span className="text-xs text-ink-faint">You</span>
                     ) : (
                       <div className="flex justify-end gap-2">
                         {ACTIONS[account.status].map(({ kind, label }) => (
@@ -155,10 +155,8 @@ export function AccountsPage() {
                             type="button"
                             onClick={() => setForm({ account, kind })}
                             className={cn(
-                              'whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-navy-400/40',
-                              kind === 'deactivate'
-                                ? 'bg-navy-800 text-status-expired hover:bg-navy-700'
-                                : 'bg-navy-700 text-navy-50 hover:bg-navy-600',
+                              'h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium hover:bg-surface-active focus:outline-none focus:ring-2 focus:ring-accent/40',
+                              kind === 'deactivate' ? 'text-danger' : 'text-ink',
                             )}
                           >
                             {label}
@@ -263,7 +261,7 @@ function AccountForm({
             ))}
           </select>
           {kind === 'role' && account.role === 'crewing_officer' && (
-            <p className="mt-1 text-xs text-status-expiring">
+            <p className="mt-1 text-xs text-warning">
               Changing a crewing officer's role removes their vessel links.
             </p>
           )}
@@ -273,14 +271,14 @@ function AccountForm({
       {pickVessels && (
         <fieldset>
           <legend className={LABEL_CLASS}>Vessels (Responsible Officer)</legend>
-          <p className="mb-2 text-xs text-navy-400">
+          <p className="mb-2 text-xs text-ink-faint">
             Leave empty to start with the Unassigned Pool only.
           </p>
-          <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-navy-700 bg-navy-950 p-2">
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-line-strong bg-canvas p-2">
             {(vessels ?? [])
               .filter((v) => v.active)
               .map((v) => (
-                <label key={v.id} className="flex items-center gap-2 text-sm text-navy-100">
+                <label key={v.id} className="flex items-center gap-2 text-sm text-ink">
                   <input
                     type="checkbox"
                     checked={vesselIds.includes(v.id)}
@@ -289,7 +287,7 @@ function AccountForm({
                         e.target.checked ? [...ids, v.id] : ids.filter((id) => id !== v.id),
                       )
                     }
-                    className="h-4 w-4 rounded border-navy-700 bg-navy-950"
+                    className="h-4 w-4 rounded border-line-strong bg-canvas"
                   />
                   {v.name}
                 </label>
@@ -299,14 +297,14 @@ function AccountForm({
       )}
 
       {kind === 'second-factor/reset' && (
-        <p className="text-sm text-navy-300">
+        <p className="text-sm text-ink-muted">
           Use this when they have lost their authenticator app. They are signed out, and at their
           next sign-in they set up a new authenticator with their password.
         </p>
       )}
 
       {kind === 'deactivate' && (
-        <p className="text-sm text-navy-300">
+        <p className="text-sm text-ink-muted">
           {account.status === 'pending'
             ? 'The sign-up is kept as a deactivated account. It can be switched on later.'
             : 'They are refused and signed out on their next request.'}

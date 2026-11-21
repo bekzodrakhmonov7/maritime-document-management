@@ -12,7 +12,7 @@ import {
 } from '../lib/signInCode'
 
 const INPUT_CLASS =
-  'w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-navy-50 placeholder-navy-500 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50'
+  'w-full rounded-md border border-line-strong bg-canvas px-4 py-2.5 text-ink placeholder-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50'
 
 /** Register: full name, e-mail and password, then the code e-mailed to the
  * address, then enrolling an authenticator app (ADR 0005, ADR 0007). The only
@@ -64,21 +64,21 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-navy-950 px-4 py-8">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-8">
       <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-navy-800 ring-1 ring-navy-700">
-            <Anchor className="h-8 w-8 text-navy-200" />
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-active ring-1 ring-line">
+            <Anchor className="h-8 w-8 text-ink-muted" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-navy-50">
+          <h1 className="text-xl font-medium tracking-tight text-ink">
             Create your account
           </h1>
-          <p className="mt-2 text-sm text-navy-400">
+          <p className="mt-2 text-sm text-ink-faint">
             Register to start monitoring crew document expiry
           </p>
         </div>
 
-        <div className="rounded-xl border border-navy-800 bg-navy-900 p-8 shadow-2xl">
+        <div className="rounded-md border border-line bg-canvas p-8">
           {step ? (
             <CodeStep
               key={step.challenge}
@@ -103,7 +103,7 @@ export function RegisterPage() {
               <div>
                 <label
                   htmlFor="fullName"
-                  className="mb-2 block text-sm font-medium text-navy-100"
+                  className="mb-2 block text-sm font-medium text-ink"
                 >
                   Full Name
                 </label>
@@ -127,7 +127,7 @@ export function RegisterPage() {
               <div>
                 <label
                   htmlFor="email"
-                  className="mb-2 block text-sm font-medium text-navy-100"
+                  className="mb-2 block text-sm font-medium text-ink"
                 >
                   Email
                 </label>
@@ -149,7 +149,7 @@ export function RegisterPage() {
               <div>
                 <label
                   htmlFor="password"
-                  className="mb-2 block text-sm font-medium text-navy-100"
+                  className="mb-2 block text-sm font-medium text-ink"
                 >
                   Password
                 </label>
@@ -168,7 +168,7 @@ export function RegisterPage() {
                   aria-invalid={error ? true : undefined}
                   className={INPUT_CLASS}
                 />
-                <p id="password-hint" className="mt-1.5 text-xs text-navy-400">
+                <p id="password-hint" className="mt-1.5 text-xs text-ink-faint">
                   At least {MIN_PASSWORD_LENGTH} characters, and not a common or breached password.
                 </p>
               </div>
@@ -176,7 +176,7 @@ export function RegisterPage() {
               <div>
                 <label
                   htmlFor="repeated"
-                  className="mb-2 block text-sm font-medium text-navy-100"
+                  className="mb-2 block text-sm font-medium text-ink"
                 >
                   Repeat password
                 </label>
@@ -198,7 +198,7 @@ export function RegisterPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-navy-600 px-4 py-2.5 font-medium text-navy-50 transition-colors hover:bg-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 font-medium text-on-accent transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading && <Loader2 className="h-5 w-5 animate-spin" />}
                 {loading ? (
@@ -214,17 +214,17 @@ export function RegisterPage() {
           )}
         </div>
 
-        <p className="mt-6 text-center text-sm text-navy-400">
+        <p className="mt-6 text-center text-sm text-ink-faint">
           Already have an account?{' '}
           <Link
             to="/login"
-            className="font-medium text-navy-200 transition-colors hover:text-navy-50 focus:outline-none focus:ring-2 focus:ring-navy-400/40 rounded"
+            className="font-medium text-ink-muted transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 rounded"
           >
             Sign in
           </Link>
         </p>
 
-        <p className="mt-3 text-center text-xs text-navy-500">
+        <p className="mt-3 text-center text-xs text-ink-faint">
           Maritime Crew Document Expiry Monitoring System
         </p>
       </div>
