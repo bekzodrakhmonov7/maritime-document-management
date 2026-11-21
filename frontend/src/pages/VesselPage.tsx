@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useVesselCrew } from '../hooks/useAssignments'
 import { useVessel } from '../hooks/useReferenceData'
 import { flagLabel } from '../lib/flags'
+import { isNotFound } from '../lib/retry'
 import { AssignmentsTable } from '../components/AssignmentDialogs'
 import { ErrorNote } from '../components/ErrorNote'
 import { ResponsibleOfficers } from '../components/ResponsibleOfficers'
@@ -12,7 +13,8 @@ import { StateBadge } from '../components/StateBadge'
 import { VesselActions, VesselDialog, type VesselDialogState } from '../components/VesselDialogs'
 
 /** One vessel's details, Responsible Officers and crew under way and upcoming.
- * Read-only for crewing officers, who see only the crew within their Scope. */
+ * Read-only for crewing officers; for a vessel outside their Scope the API
+ * answers 404 for the crew, and the page says so instead of listing it. */
 export function VesselPage() {
   const { id } = useParams()
   const { role } = useAuth()
@@ -56,16 +58,20 @@ export function VesselPage() {
 
           <section className="space-y-3">
             <h3 className="text-lg font-medium text-ink">Crew under way and upcoming</h3>
-            {crew.error && <ErrorNote message={crew.error.message} />}
-            <AssignmentsTable
-              assignments={crew.data}
-              show="seafarer"
-              empty={
-                isAdmin
-                  ? 'Nobody is on board or planned.'
-                  : 'Nobody on board or planned that you are responsible for.'
-              }
-            />
+            {isNotFound(crew.error) ? (
+              <p className="text-sm text-ink-faint">
+                Crew is not shown for Vessels outside your Scope.
+              </p>
+            ) : (
+              <>
+                {crew.error && <ErrorNote message={crew.error.message} />}
+                <AssignmentsTable
+                  assignments={crew.data}
+                  show="seafarer"
+                  empty="Nobody is on board or planned."
+                />
+              </>
+            )}
           </section>
         </>
       )}

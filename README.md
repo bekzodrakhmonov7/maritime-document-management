@@ -106,8 +106,15 @@ rate-limited.
 **Lost authenticator:** an administrator presses **Reset authenticator** on the
 **Accounts** page (`POST /api/accounts/{id}/second-factor/reset`, recorded as
 *second factor reset*). The Account is signed out and enrols a new app at its
-next sign-in. **Forgot password?** on the Sign in page e-mails a code for
-setting a new password; the next sign-in still needs the authenticator.
+next sign-in. **Forgot password?** on the Sign in page e-mails a code; the
+reset form takes that code, the new password and the current authenticator
+code (`POST /api/auth/password/reset` with `{email, code, password, totp}`).
+The e-mailed code opens an `aal1` recovery session, the authenticator code
+raises it to `aal2`, and only then is the password set; missing code: 400
+`totp_required`, wrong code: 403 `totp_invalid` (both recorded as a refused
+*password reset* and needing a new e-mailed code). An Account without an
+authenticator (just after **Reset authenticator**) resets with the e-mailed
+code alone. Every session of the Account then ends.
 
 Locally, any authenticator app works (scan the QR code from the browser), or
 generate the code from the key shown on the enrolment step:
@@ -201,8 +208,8 @@ uv run uvicorn app.main:app --reload --port 8000
 
 ### 3. Frontend setup
 
-Create `frontend/.env` from its example and set `VITE_SUPABASE_ANON_KEY` to the
-same `ANON_KEY` as above (the Supabase client refuses to start without it):
+Create `frontend/.env` from its example (it only sets `VITE_API_BASE`; the web
+client talks to the API alone, never to Supabase):
 
 ```bash
 cd frontend
@@ -519,7 +526,7 @@ wipe production data.
 │   │   ├── pages/               # Route pages
 │   │   ├── components/          # Reusable UI components
 │   │   ├── hooks/               # React hooks
-│   │   ├── lib/                 # API client & Supabase
+│   │   ├── lib/                 # API client, sign-in helpers
 │   │   └── context/             # Auth context
 │   └── public/
 ├── api/
@@ -545,14 +552,14 @@ library.
 | Uvicorn | 0.49.0 | BSD-3-Clause |
 | asyncpg | 0.31.0 | Apache-2.0 |
 | pydantic-settings | 2.14.2 | MIT |
-| PyJWT | 2.13.0 | MIT |
+| PyJWT | 2.15.1 | MIT |
 | httpx | 0.28.1 | BSD-3-Clause |
 | python-multipart | 0.0.32 | Apache-2.0 |
 | Jinja2 | 3.1.6 | BSD-3-Clause |
 | supabase (Python) | 2.31.0 | MIT |
 | resend | 2.32.2 | MIT |
 | pikepdf | 10.18.1 | MPL-2.0 |
-| Pillow | 12.2.0 | MIT-CMU |
+| Pillow | 13.0.0 | MIT-CMU |
 | fpdf2 | 2.9.0 | LGPL-3.0-only |
 | ReportLab | 5.0.0 | BSD |
 | tzdata | 2026.6 | Apache-2.0 |
@@ -560,7 +567,7 @@ library.
 | pytest / pytest-cov / pytest-asyncio (dev) | 9.1.1 / 7.1.0 / 1.4.0 | MIT / MIT / Apache-2.0 |
 | **Frontend (npm)** | | |
 | React, React DOM | 19.2.7 | MIT |
-| React Router | 7.18.0 | MIT |
+| React Router | 7.18.6 | MIT |
 | TanStack Query / Table | 5.101.0 / 8.21.3 | MIT |
 | Tailwind CSS, @tailwindcss/vite | 4.3.1 | MIT |
 | Radix UI Slider | 1.4.1 | MIT |
@@ -568,7 +575,7 @@ library.
 | react-dropzone | 15.0.0 | MIT |
 | zustand | 5.0.14 | MIT |
 | clsx / tailwind-merge | 2.1.1 / 3.6.0 | MIT |
-| Vite (dev) | 8.0.16 | MIT |
+| Vite (dev) | 8.3.8 | MIT |
 | TypeScript (dev) | 6.0.3 | Apache-2.0 |
 | **Services and tools** | | |
 | Supabase CLI and local stack | 2.122.1 | Apache-2.0 (PostgreSQL: PostgreSQL Licence) |

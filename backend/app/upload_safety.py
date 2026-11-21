@@ -15,7 +15,8 @@ All checks live here, so they are unit-testable without HTTP:
      quality 90), which drops EXIF/GPS and anything trailing;
    - PDFs: pikepdf with a page cap. JavaScript, Launch, SubmitForm,
      ImportData, GoToR and GoToE actions, embedded files, RichMedia, XFA
-     and encryption are refused (plain /URI links stay); a harmless
+     and encryption are refused (plain /URI links stay); a file qpdf had
+     to repair (any qpdf warning, e.g. truncated) is `pdf_damaged`; a harmless
      /OpenAction, /AA or /AcroForm is stripped and the file re-saved. The
      parsed object tree is walked, never the raw bytes.
 
@@ -53,6 +54,7 @@ ReasonCode = Literal[
     "corrupt",
     "pdf_active_content",
     "pdf_encrypted",
+    "pdf_damaged",
     "too_many_pages",
     "image_too_large",
 ]
@@ -220,8 +222,18 @@ _STRIPPED_FROM_ROOT = ("/OpenAction", "/AA", "/AcroForm")
 def _clean_pdf(data: bytes, max_pages: int) -> SafeFile | Rejection:
     encrypted = Rejection("pdf_encrypted", "Password-protected or encrypted PDFs are not accepted.")
     corrupt = Rejection("corrupt", "The PDF file is damaged or can't be read.")
+    damaged = Rejection(
+        "pdf_damaged",
+        "The PDF file is damaged or incomplete (for example cut off "
+        "while copying); please upload the original file again.",
+    )
     try:
         with pikepdf.open(io.BytesIO(data)) as pdf:
+            # qpdf warns while opening only when it had to recover the file
+            # (truncated, xref rebuilt): its repair would not be the file sent.
+            # Later warnings (e.g. a wrong stream /Length) are benign quirks.
+            if pdf.get_warnings():
+                return damaged
             if pdf.is_encrypted:
                 return encrypted
             pages = len(pdf.pages)
@@ -237,6 +249,9 @@ def _clean_pdf(data: bytes, max_pages: int) -> SafeFile | Rejection:
                     "The PDF contains active content (scripts, launch or form-submit "
                     "actions, links to other files, embedded files, rich media or XFA forms).",
                 )
+            # qpdf --check: errors (not warnings) mean broken structure or streams.
+            if any(p.startswith("ERROR") for p in pdf.check_pdf_syntax()):
+                return damaged
             _strip_auto_actions(pdf)
             out = io.BytesIO()
             pdf.save(out)

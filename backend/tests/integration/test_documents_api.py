@@ -410,6 +410,7 @@ async def test_an_unknown_document_type_is_refused(client, world):
         (_pdf(script=True), "cert.pdf", 422, "pdf_active_content"),
         (_pdf(attachment=True), "cert.pdf", 422, "pdf_active_content"),
         (_pdf(encryption=pikepdf.Encryption(owner="o", user="")), "cert.pdf", 422, "pdf_encrypted"),
+        (_pdf(2)[:-120], "cert.pdf", 422, "pdf_damaged"),
     ],
 )
 async def test_a_failed_safety_check_is_refused_and_recorded(
@@ -510,6 +511,28 @@ async def test_a_signed_url_is_issued_per_version_and_recorded(client, world, st
     [record] = await _records(owner_db, "file_url_issued", target_id=str(version_id))
     assert record["target_type"] == "version"
     assert record["seafarer_id"] == world["anna"]
+
+
+async def test_a_version_whose_file_is_missing_from_storage_answers_404_file_missing(
+    client, world, storage, owner_db
+):
+    doc = await _uploaded(client, world["officer_a"], world["anna"], world["passport"])
+    version_id = doc["versions"][0]["id"]
+    storage.objects.clear()
+    res = await client.post(f"/api/versions/{version_id}/file-url", headers=world["officer_a"])
+    assert res.status_code == 404, res.text
+    assert res.json()["detail"]["code"] == "file_missing"
+    assert await _records(owner_db, "file_url_issued", target_id=str(version_id)) == []
+
+
+async def test_a_storage_outage_on_a_file_url_still_answers_503(client, world, storage, owner_db):
+    doc = await _uploaded(client, world["officer_a"], world["anna"], world["passport"])
+    version_id = doc["versions"][0]["id"]
+    storage.unreachable = True
+    res = await client.post(f"/api/versions/{version_id}/file-url", headers=world["officer_a"])
+    assert res.status_code == 503, res.text
+    assert "try again" in res.json()["detail"]
+    assert await _records(owner_db, "file_url_issued", target_id=str(version_id)) == []
 
 
 def test_the_download_name_gets_the_detected_extension_when_it_has_none():

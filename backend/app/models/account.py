@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field
 
 from app.models.auth import AccountStatus, Role
+from app.models.text import TrimmedText
 
-Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+Reason = TrimmedText(1000)
 
 
 class AccountRead(BaseModel):

@@ -20,9 +20,16 @@ Signing in is two steps, and no session leaves here before both are done:
   verified (only verified aal2 sessions get past `get_signed_in_user`),
   *Login succeeded* is recorded and Supabase's session is returned to the web
   client, which stores it itself. Five wrong codes end the challenge.
-- `POST /api/auth/password/forgot` and `/password/reset` replace a forgotten
-  password with an e-mailed code; every session of the Account then ends.
-  The next sign-in still needs the authenticator.
+- `POST /api/auth/password/forgot` e-mails a code for a forgotten password.
+  `/password/reset` takes that code, the new password and the current code
+  of the authenticator: the e-mailed code opens an aal1 recovery session; if
+  the Account has a verified TOTP factor, the authenticator's code raises it
+  to aal2 (missing: 400 `totp_required`; wrong: 403 `totp_invalid`), and only
+  then is the password set. An Account without one (e.g. after "Reset
+  authenticator") resets with the e-mailed code alone. A refused reset signs
+  the recovery session out, so a new e-mailed code is needed. Every session
+  of the Account then ends; a reset never gets past the second factor
+  (ADR 0007, ASVS 6.4.3).
 
 A new password (register, reset) has at least 12 characters, is not on the
 common list and not known to Pwned Passwords (SR-02, `app.password_policy`,
@@ -49,6 +56,7 @@ from app.deps import SessionRefused, account_refused, get_account
 from app.deps import get_db
 from app import password_policy
 from app.models.auth import UserPayload
+from app.models.text import NO_NUL, TrimmedText
 from app.pwned_passwords import PwnedPasswords, get_pwned_passwords
 from app.services import login_block, sign_in
 from app.supabase_auth import (
@@ -60,7 +68,7 @@ from app.supabase_auth import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-Email = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=320)]
+Email = TrimmedText(320)
 # A new password (SR-02). bcrypt reads at most 72 bytes; Supabase Auth
 # refuses longer passwords.
 Password = Annotated[
@@ -68,9 +76,10 @@ Password = Annotated[
     StringConstraints(
         min_length=password_policy.MIN_LENGTH, max_length=password_policy.MAX_LENGTH
     ),
+    NO_NUL,
 ]
 Code = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[0-9]{6}$")]
-ChallengeToken = Annotated[str, StringConstraints(min_length=1, max_length=200)]
+ChallengeToken = Annotated[str, StringConstraints(min_length=1, max_length=200), NO_NUL]
 
 CODE_SENT = "We've e-mailed you a 6-digit code."
 TOTP_ASKED = "Enter the 6-digit code from your authenticator app."
@@ -102,14 +111,12 @@ BLOCKED_MESSAGE = "Too many failed sign-in attempts. Wait 15 minutes, then try a
 
 class LoginRequest(BaseModel):
     email: Email
-    password: Annotated[str, StringConstraints(min_length=1, max_length=72)]
+    password: Annotated[str, StringConstraints(min_length=1, max_length=72), NO_NUL]
 
 
 class RegisterRequest(BaseModel):
     email: Email
-    full_name: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
-    ]
+    full_name: TrimmedText(200)
     password: Password
 
 
@@ -131,6 +138,8 @@ class ResetRequest(BaseModel):
     email: Email
     code: Code
     password: Password
+    # The authenticator's code; needed when the Account has one (ADR 0007).
+    totp: Code | None = None
 
 
 # --- step 1 -----------------------------------------------------------------------
@@ -252,7 +261,7 @@ async def _second_factor_step(
             f for f in await supabase_auth.list_factors(access_token, ip)
             if f.get("factor_type") == "totp"
         ]
-        verified = next((f for f in factors if f.get("status") == "verified"), None)
+        verified = _verified_totp(factors)
         if verified is None:
             for factor in factors:
                 await supabase_auth.unenroll(access_token, str(factor["id"]), ip)
@@ -477,7 +486,8 @@ async def reset_password(
     supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
     pwned: PwnedPasswords = Depends(get_pwned_passwords),
 ) -> dict[str, str]:
-    """Check the code, set the new password and end every session."""
+    """Check the e-mailed code, then the authenticator's code (when the
+    Account has one), set the new password and end every session."""
     ip = client_ip(request)
     # Before the code is used, so it still works for a better password.
     weakness = await _weakness(body.password, pwned)
@@ -488,13 +498,16 @@ async def reset_password(
         session = await supabase_auth.verify_code(body.email, body.code, ip, type="recovery")
     except SignInRefused as exc:
         await _record_reset(db, request, body.email, outcome="refused", reason=exc.code)
-        raise HTTPException(exc.status_code, {"code": exc.code, "message": exc.message})
+        raise _refusal(exc)
     except AuthUnavailable:
         await _record_reset(db, request, body.email, outcome="refused", reason=AuthUnavailable.code)
         raise _unavailable()
 
     _, user_id = sign_in.session_ids(session)
     try:
+        # The recovery session is aal1; with an authenticator, its code
+        # raises it to aal2, which Supabase Auth needs to change the password.
+        session = await _reset_second_factor(supabase_auth, session, body.totp, ip)
         await supabase_auth.set_password(session["access_token"], body.password, ip)
     except SignInRefused as exc:
         await _sign_out_quietly(supabase_auth, session, ip)
@@ -511,6 +524,37 @@ async def reset_password(
         await sign_in.end_all_sessions(db, user_id)
     await _record_reset(db, request, body.email, outcome="succeeded", reason=None)
     return {"message": "Your password has been changed. Sign in with it now."}
+
+
+TOTP_REQUIRED = "totp_required"
+NEW_RESET_CODE = " Ask for a new code by e-mail and try again."
+
+
+async def _reset_second_factor(
+    supabase_auth: SupabaseAuth, session: dict[str, Any], totp: str | None, ip: str | None
+) -> dict[str, Any]:
+    """The recovery session, raised to aal2 with the authenticator's code
+    when the Account has a verified TOTP factor; as it is otherwise."""
+    access_token = str(session["access_token"])
+    verified = _verified_totp(await supabase_auth.list_factors(access_token, ip))
+    if verified is None:
+        return session
+    if totp is None:
+        raise SignInRefused(
+            status.HTTP_400_BAD_REQUEST, TOTP_REQUIRED,
+            "Enter the code from your authenticator app." + NEW_RESET_CODE,
+        )
+    factor_id = str(verified["id"])
+    challenge_id = await supabase_auth.challenge(access_token, factor_id, ip)
+    try:
+        return await supabase_auth.verify_totp(access_token, factor_id, challenge_id, totp, ip)
+    except SignInRefused as exc:
+        if exc.code != TOTP_REFUSED:
+            raise
+        raise SignInRefused(
+            status.HTTP_403_FORBIDDEN, TOTP_INVALID,
+            "The authenticator code is wrong." + NEW_RESET_CODE,
+        )
 
 
 async def _record_reset(
@@ -567,6 +611,14 @@ async def _sign_out_quietly(
         await supabase_auth.sign_out(str(token), scope, ip)  # type: ignore[arg-type]
     except (SignInRefused, AuthUnavailable):
         pass
+
+
+def _verified_totp(factors: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The Account's verified TOTP factor (at most one), if any."""
+    return next(
+        (f for f in factors if f.get("factor_type") == "totp" and f.get("status") == "verified"),
+        None,
+    )
 
 
 def _refusal(exc: SignInRefused, message: str | None = None) -> HTTPException:
@@ -630,7 +682,7 @@ async def _refuse_if_blocked(db: asyncpg.Connection, request: Request, email: st
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    refresh_token: Annotated[str, StringConstraints(min_length=1, max_length=200), NO_NUL]
 
 
 @router.post("/refresh")

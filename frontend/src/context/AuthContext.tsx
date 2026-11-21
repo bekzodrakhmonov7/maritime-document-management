@@ -48,7 +48,8 @@ interface AuthContextValue {
   /** Forgot password: e-mail a code for setting a new one. */
   requestPasswordReset: (email: string) => Promise<void>
   /** Set a new password with that code; every session of the Account ends. */
-  resetPassword: (email: string, code: string, password: string) => Promise<void>
+  /** `totp`: the authenticator's code, when the Account has one (ADR 0007). */
+  resetPassword: (email: string, code: string, password: string, totp?: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -204,8 +205,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await post('/api/auth/password/forgot', { email })
   }
 
-  const resetPassword = async (email: string, code: string, password: string) => {
-    await post('/api/auth/password/reset', { email, code, password })
+  const resetPassword = async (email: string, code: string, password: string, totp?: string) => {
+    await post('/api/auth/password/reset', totp ? { email, code, password, totp } : { email, code, password })
   }
 
   return (

@@ -215,3 +215,24 @@ def test_expiry_not_stated_is_counted_and_titled_in_both_pdfs():
         assert r"Expiry not stated - check manually \(1\)" in text
         assert f"Expiry not stated: {counter}" in text
         assert "[Expiry not stated - check manually]" in text
+
+
+# --- Every PDF entry states its Review and Verification (F-21) -------------------------------
+
+
+def test_every_documented_pdf_entry_states_its_review_and_verification():
+    from app.reports import to_pdf
+
+    section = _section(
+        _assignment(),
+        _doc("Passport", 1, date(2030, 1, 1), verified=True),
+        _doc("Medical", 3, date(2030, 1, 1), review="rejected"),
+        _doc("Visa", 4, date(2030, 1, 1), review="not_reviewed"),
+        _doc("CoC", 2, missing=True),
+    )
+    text = _pdf_text(to_pdf(_report(section)))
+    assert "[Covers all] [Accepted] [Verified]" in text
+    assert "[Covers all] [Rejected] [Not verified]" in text
+    assert "[Covers all] [Not reviewed] [Not verified]" in text
+    # No document, nothing to review or verify: like the web readiness view.
+    assert re.search(r"\[Missing\](?!\s*\[)", text), text

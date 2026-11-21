@@ -24,35 +24,46 @@ The left-hand menu shows only the pages your role can open: **Dashboard**, **Sea
 
 ## 2. Registering and signing in
 
-Signing in always takes two steps: your password, then a **Sign-in Code** e-mailed to you. Neither alone is enough.
+Signing in always takes two steps: your password, then a 6-digit code from an **authenticator app** on your phone (for example Google Authenticator, Microsoft Authenticator or 1Password). Neither alone is enough. Nothing is e-mailed when you sign in.
 
 ### Register (first time)
 
 1. On the sign-in page, click **Register**.
-2. Fill in **Full Name**, **Email**, **Password** (at least 8 characters) and **Repeat password**, then click **Create Account**.
-3. We e-mail you a 6-digit code. Type it into **Sign-in Code** and click **Continue**.
-4. You now see **Waiting for approval**. An administrator must approve your account and give it a role before you can use the system. Nobody picks their own role.
-5. Once you are told you have been approved, click **Check again** (or sign in again).
+2. Fill in **Full Name**, **Email**, **Password** (at least 12 characters, not a common or breached password) and **Repeat password**, then click **Create Account**.
+3. We e-mail you a 6-digit code. Type it into **Code from the e-mail** and click **Continue**. If it does not arrive, click **Send a new code** (at most every 60 seconds; the button counts down). The code is valid for 10 minutes; only the newest one works.
+4. Set up your authenticator (see below).
+5. You now see **Waiting for approval**. An administrator must approve your account and give it a role before you can use the system. Nobody picks their own role.
+6. Once you are told you have been approved, click **Check again** (or sign in again).
+
+### Setting up the authenticator
+
+The first time you sign in (straight after registering, or after an administrator has reset your authenticator) the page shows a **QR code**:
+
+1. In your authenticator app, add an account and scan the QR code. If you cannot scan it, type the key shown under **Can't scan it?** into the app instead.
+2. Type the 6-digit code the app now shows into **Code from your authenticator app** and click **Continue**.
+
+From then on the app shows a new code for Crew Monitor every 30 seconds. Keep the app; you need it at every sign-in and to reset a forgotten password.
 
 ### Sign in
 
 1. Enter **Email** and **Password** and click **Sign in**.
-2. Type the 6-digit code from the e-mail into **Sign-in Code** and click **Continue**.
+2. Type the 6-digit code your authenticator app shows now into **Code from your authenticator app** and click **Continue**.
 
-About the code:
+About the code step:
 
-- It is valid for **10 minutes** and can be used once.
-- If it does not arrive, click **Send a new code**. You can ask for a new one at most every 60 seconds (the button counts down). A new code replaces the old one.
-- After 10 minutes or 5 wrong codes you must start again with your password.
-- The e-mail contains only the code, never a link.
+- You have **10 minutes** to enter the code; after that, or after **5 wrong codes**, the attempt ends and you start again with your password.
 - **Back** returns you to the password step.
+- 10 failed sign-ins (wrong passwords or codes) within 15 minutes block signing in for 15 minutes.
+- Lost or replaced your phone? Ask an administrator to **Reset authenticator** (section 10). At your next sign-in you set up the app again.
 
 ### Forgot password
 
 1. On the sign-in page, click **Forgot password?**.
 2. Enter your **Email** and click **Send me a code**.
-3. Type the **Code** from the e-mail, choose a **New password**, repeat it in **Repeat new password** and click **Save new password**.
-4. You return to the sign-in page with the message "Your password has been changed. Sign in with it now." Sign in as usual (password, then code). You are signed out everywhere else.
+3. Type the **Code** from the e-mail and the **Authenticator code** your app shows now, choose a **New password**, repeat it in **Repeat new password** and click **Save new password**.
+4. You return to the sign-in page with the message "Your password has been changed. Sign in with it now." Sign in as usual (password, then authenticator code). You are signed out everywhere else.
+
+Leave **Authenticator code** empty only if an administrator has just reset your authenticator; then the e-mailed code alone is enough. If the authenticator code is missing or wrong, the e-mailed code is used up: click **Back**, send a new code and try again. Without the e-mail and the authenticator together, nobody can change your password.
 
 ---
 
@@ -294,6 +305,7 @@ New sign-ups wait here until you approve them. Filter by **Pending**, **Active**
 - **Reject** (pending sign-ups): kept as a deactivated account; it can be switched on later.
 - **Change role**: changing a crewing officer's role removes their vessel links.
 - **Switch off**: the person is refused and signed out on their next request. **Switch on** reverses it.
+- **Reset authenticator**: for someone who has lost or replaced the phone with their authenticator app. Their authenticator is removed and they are signed out; at their next sign-in they enter their password and set up the app again (QR code or key). Until then they can also reset a forgotten password with the e-mailed code alone. Check who is asking before you do it.
 
 Every action needs a **Reason**, which is recorded in the Audit Log. Accounts are never deleted.
 
@@ -358,8 +370,14 @@ Administrators can download any report; crewing officers only for vessels they a
 
 ## 12. Troubleshooting and FAQ
 
-**The Sign-in Code has not arrived.**
-Wait a minute and check your spam folder. Then click **Send a new code** (available every 60 seconds); only the newest code works. If "That code is wrong or has expired" appears, send a new code. After 10 minutes or 5 wrong codes, start again with your password.
+**The code from the e-mail has not arrived (Register, Forgot password).**
+Wait a minute and check your spam folder. Then send a new code (every 60 seconds); only the newest code works. Signing in never sends an e-mail: use your authenticator app.
+
+**"That code is wrong" at sign-in.**
+Enter the code the authenticator app shows now (it changes every 30 seconds) and check the phone's clock is set automatically. After 5 wrong codes, start again with your password.
+
+**I lost my phone or deleted the authenticator app.**
+Ask an administrator to **Reset authenticator** on **Accounts**. At your next sign-in you set up the app again.
 
 **"Too many attempts. Wait a minute, then try again."**
 You asked for codes or tried passwords too quickly. Wait a minute.

@@ -3,7 +3,8 @@
 - Responsible Officers: administrators and crewing officers read;
   administrators add and remove links.
 - Crew under way and upcoming: administrators and crewing officers, limited
-  to the caller's Scope (an officer sees another vessel's page, not its crew).
+  to the caller's Scope. An officer asking for the crew of a vessel they
+  aren't a Responsible Officer for gets 404, recorded as Access refused.
 """
 
 from uuid import UUID
@@ -33,7 +34,7 @@ async def list_crew(
     access: CrewAccess = Depends(get_crew_access),
 ):
     with errors_as_http():
-        return await assignments.list_for_vessel(db, access.scope, vessel_id)
+        return await assignments.list_for_vessel(db, access.user, access.scope, vessel_id)
 
 
 @router.get("/responsible-officers", response_model=list[ResponsibleOfficerRead])

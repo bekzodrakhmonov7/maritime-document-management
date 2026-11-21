@@ -45,7 +45,7 @@ from app.models.document import (
 from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
 from app.services import documents as svc
 from app.services import reviews
-from app.storage import FileStorage, StorageUnavailable, get_storage
+from app.storage import FileMissing, FileStorage, StorageUnavailable, get_storage
 from app.upload_safety import (
     Limits,
     Rejection,
@@ -170,6 +170,8 @@ async def issue_file_url(
             return await svc.issue_file_url(
                 db, audit_context_for(request, access.user), access.scope, storage, version_id
             )
+    except FileMissing:
+        raise _file_missing()
     except StorageUnavailable:
         raise _storage_unavailable()
 
@@ -250,12 +252,18 @@ async def issue_proof_url(
             return await reviews.issue_proof_url(
                 db, audit_context_for(request, access.user), access.scope, storage, verification_id
             )
+    except FileMissing:
+        raise _file_missing("The proof file for this Verification was not found in storage.")
     except StorageUnavailable:
         raise _storage_unavailable()
 
 
 def _storage_unavailable() -> HTTPException:
     return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "File storage is unavailable; try again.")
+
+
+def _file_missing(message: str = "The file for this Version was not found in storage.") -> HTTPException:
+    return HTTPException(status.HTTP_404_NOT_FOUND, {"code": "file_missing", "message": message})
 
 
 # --- Receiving a file ----------------------------------------------------------------------

@@ -1,13 +1,13 @@
 """Seafarer records (FR-04, T3)."""
 
 from datetime import date, datetime
-from typing import Annotated
 
-from pydantic import BaseModel, StringConstraints, ValidationInfo, field_validator
+from pydantic import BaseModel, ValidationInfo, field_validator
 
 from app.models.reference import CountryCode
+from app.models.text import TrimmedText
 
-PersonName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+PersonName = TrimmedText(100)
 
 
 class SeafarerWrite(BaseModel):
@@ -40,7 +40,7 @@ class SeafarerWrite(BaseModel):
 
 
 class SetInactive(BaseModel):
-    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    reason: TrimmedText(500)
 
 
 class SeafarerRead(BaseModel):
