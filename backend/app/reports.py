@@ -49,6 +49,7 @@ COVERAGE_LABELS = {
     "expiry_not_stated": EXPIRY_NOT_STATED,
     "covers_all": "Covers all",
 }
+REVIEW_LABELS = {"not_reviewed": "Not reviewed", "accepted": "Accepted", "rejected": "Rejected"}
 STATE_LABELS = {"upcoming": "upcoming", "under_way": "under way"}
 ADVICE_ONLY = (
     "This report only advises: it flags gaps and suggests renewals. It approves and "
@@ -281,11 +282,12 @@ class _Pdf(FPDF):
             self.ln(2)
 
     def entry(self, entry: Mapping[str, Any]) -> None:
-        badges = [COVERAGE_LABELS[entry["coverage"]]]
-        if entry["review_state"] == "not_reviewed":
-            badges.append("Not reviewed")
-        if entry["verified"]:
-            badges.append("Verified")
+        # Review and Verification always shown (F-21): no badge never means "fine".
+        badges = [
+            COVERAGE_LABELS[entry["coverage"]],
+            REVIEW_LABELS.get(entry["review_state"], "Not reviewed"),
+            "Verified" if entry["verified"] else "Not verified",
+        ]
         self.set_x(self.l_margin + 4)
         self.set_font("Helvetica", "B", 10)
         self.cell(self.get_string_width(_latin1(entry["name"])) + 2, 5, _latin1(entry["name"]))
