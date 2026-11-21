@@ -32,7 +32,7 @@ async def world(crew, make_account):
     await crew.link(officer_a, alpha)
     await crew.link(officer_b, bravo)
     return {
-        "ids": {"officer_a": officer_a, "manager": manager},
+        "ids": {"officer_a": officer_a, "officer_b": officer_b, "manager": manager},
         "master": master,
         "cook": cook,
         "alpha": alpha,
@@ -492,9 +492,7 @@ async def test_another_vessels_crew_is_404_and_recorded(client, world, owner_db)
 
 
 async def test_an_empty_vessel_in_scope_has_an_empty_crew(client, world, owner_db):
-    officer_b = await owner_db.fetchval(
-        "SELECT user_id FROM public.responsible_officer WHERE vessel_id = $1", world["bravo"]
-    )
+    officer_b = world["ids"]["officer_b"]
     before = await owner_db.fetchval(
         "SELECT count(*) FROM public.audit_log WHERE actor_id = $1", officer_b
     )
