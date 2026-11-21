@@ -120,7 +120,7 @@ function VesselForm({ vessel, onClose }: { vessel: Vessel | null; onClose: () =>
           ))}
         </select>
         {vessel && flag !== vessel.flag && (
-          <p className="mt-1 text-xs text-status-expiring">
+          <p className="mt-1 text-xs text-warning">
             Only the current flag is kept: {flagLabel(vessel.flag)} is replaced.
           </p>
         )}

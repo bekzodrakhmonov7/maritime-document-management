@@ -135,7 +135,7 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
         </div>
       )}
       {state.kind === 'details' && (
-        <p className="text-sm text-navy-300">
+        <p className="text-sm text-ink-muted">
           The new version keeps the current file and waits for review.
         </p>
       )}
@@ -180,19 +180,19 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
         )}
       </div>
       {type?.expires && (
-        <label className="flex items-center gap-2 text-sm text-navy-200">
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
           <input
             type="checkbox"
             checked={notStated}
             onChange={(e) => setDetails((d) => ({ ...d, expiry_not_stated: e.target.checked }))}
-            className="h-4 w-4 rounded border-navy-700 bg-navy-950"
+            className="h-4 w-4 rounded border-line-strong bg-canvas"
           />
           Expiry not stated on the document
         </label>
       )}
-      {type?.expires === false && <p className="text-xs text-navy-400">This document type doesn't expire.</p>}
+      {type?.expires === false && <p className="text-xs text-ink-faint">This document type doesn't expire.</p>}
       {type?.max_validity_months && (
-        <p className="text-xs text-navy-400">
+        <p className="text-xs text-ink-faint">
           Valid for at most {type.max_validity_months} months from the issue date.
         </p>
       )}
@@ -219,9 +219,9 @@ export function DocumentsTable({
   onRenew?: (document: DocumentSummary) => void
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-navy-800 bg-navy-900">
+    <div className="overflow-x-auto rounded-md border border-line bg-canvas">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-navy-800 text-xs uppercase tracking-wider text-navy-400">
+        <thead className="border-b border-line bg-surface text-xs text-ink-faint">
           <tr>
             <th scope="col" className="px-4 py-3">Document</th>
             <th scope="col" className="px-4 py-3">Number</th>
@@ -231,10 +231,10 @@ export function DocumentsTable({
             {onRenew && <th scope="col" className="px-4 py-3 text-right">Actions</th>}
           </tr>
         </thead>
-        <tbody className="divide-y divide-navy-800">
+        <tbody className="divide-y divide-line">
           {documents?.length === 0 && (
             <tr>
-              <td colSpan={onRenew ? 6 : 5} className="px-4 py-6 text-center text-navy-400">
+              <td colSpan={onRenew ? 6 : 5} className="px-4 py-6 text-center text-ink-faint">
                 No documents yet.
               </td>
             </tr>
@@ -242,14 +242,14 @@ export function DocumentsTable({
           {documents?.map((d) => (
             <tr key={d.id}>
               <td className="px-4 py-3">
-                <Link to={`/documents/${d.id}`} className="inline-flex items-center gap-2 text-navy-50 hover:underline">
-                  <FileText className="h-4 w-4 text-navy-400" aria-hidden="true" />
+                <Link to={`/documents/${d.id}`} className="inline-flex items-center gap-2 text-ink hover:underline">
+                  <FileText className="h-4 w-4 text-ink-faint" aria-hidden="true" />
                   {d.document_type_name}
                 </Link>
-                {d.document_type_retired && <span className="ml-2 text-xs text-navy-400">(retired type)</span>}
+                {d.document_type_retired && <span className="ml-2 text-xs text-ink-faint">(retired type)</span>}
               </td>
-              <td className="px-4 py-3 text-navy-200">{d.current_version?.document_number ?? '—'}</td>
-              <td className="px-4 py-3 text-navy-200">
+              <td className="px-4 py-3 text-ink-muted">{d.current_version?.document_number ?? '—'}</td>
+              <td className="px-4 py-3 text-ink-muted">
                 <ExpiryCell document={d} />
               </td>
               <td className="px-4 py-3">
@@ -259,14 +259,14 @@ export function DocumentsTable({
                   {d.verified && <VerifiedShield />}
                 </div>
               </td>
-              <td className="px-4 py-3 text-navy-300">{d.version_count}</td>
+              <td className="px-4 py-3 text-ink-muted">{d.version_count}</td>
               {onRenew && (
                 <td className="px-4 py-3 text-right">
                   {!d.document_type_retired && (
                     <button
                       type="button"
                       onClick={() => onRenew(d)}
-                      className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600"
+                      className="h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active"
                     >
                       New version
                     </button>

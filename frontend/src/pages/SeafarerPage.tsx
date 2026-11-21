@@ -25,8 +25,8 @@ import type { SeafarerRecord } from '../types'
 function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wider text-navy-400">{label}</dt>
-      <dd className="mt-1 text-navy-50">{children}</dd>
+      <dt className="text-xs text-ink-faint">{label}</dt>
+      <dd className="mt-1 text-ink">{children}</dd>
     </div>
   )
 }
@@ -45,15 +45,15 @@ function MissingDocumentsStrip({
     ? `as on board ${seafarer.current_vessel_name}`
     : `for ${seafarer.position_name}, ashore`
   if (missing.length === 0) {
-    return <p className="text-sm text-navy-400">No required documents missing ({basis}).</p>
+    return <p className="text-sm text-ink-faint">No required documents missing ({basis}).</p>
   }
   return (
     <section
       aria-label="Missing documents"
-      className="flex flex-wrap items-center gap-2 rounded-lg border border-status-expired/40 bg-status-expired-bg/10 p-3 text-sm"
+      className="flex flex-wrap items-center gap-2 rounded-md border border-danger/40 p-3 text-sm"
     >
-      <FileWarning className="h-4 w-4 shrink-0 text-status-expired" aria-hidden="true" />
-      <span className="font-medium text-status-expired">
+      <FileWarning className="h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
+      <span className="font-medium text-danger">
         {missing.length} missing ({basis}):
       </span>
       {missing.map((m) =>
@@ -61,7 +61,7 @@ function MissingDocumentsStrip({
           <Link
             key={m.document_type_id}
             to={`/documents/${m.document_id}`}
-            className="rounded-full bg-navy-800 px-2.5 py-0.5 text-xs text-navy-100 hover:underline"
+            className="rounded-full bg-surface-active px-2.5 py-0.5 text-xs text-ink hover:underline"
             title="Every Version was rejected"
           >
             {m.name}
@@ -71,7 +71,7 @@ function MissingDocumentsStrip({
             key={m.document_type_id}
             type="button"
             onClick={() => onUpload(m.document_type_id)}
-            className="rounded-full bg-navy-800 px-2.5 py-0.5 text-xs text-navy-100 hover:underline"
+            className="rounded-full bg-surface-active px-2.5 py-0.5 text-xs text-ink hover:underline"
             title={`Upload ${m.name}`}
           >
             {m.name}
@@ -120,37 +120,37 @@ export function SeafarerPage() {
     <div className="max-w-3xl space-y-6">
       <Link
         to="/seafarers"
-        className="inline-flex items-center gap-1 text-sm text-navy-300 hover:text-navy-100"
+        className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink"
       >
         <ArrowLeft className="h-4 w-4" />
         All seafarers
       </Link>
 
-      {isLoading && <p className="text-sm text-navy-400">Loading…</p>}
+      {isLoading && <p className="text-sm text-ink-faint">Loading…</p>}
       {error && <ErrorNote message={error.message} />}
 
       {seafarer && (
         <>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-semibold text-navy-50">{fullName(seafarer)}</h2>
+              <h2 className="text-xl font-medium text-ink">{fullName(seafarer)}</h2>
               <SeafarerStatusBadge seafarer={seafarer} />
             </div>
             <SeafarerActions seafarer={seafarer} onOpen={setDialog} />
           </div>
 
           {seafarer.inactive_since && (
-            <p className="rounded-lg border border-navy-700 bg-navy-900 p-3 text-sm text-navy-300">
+            <p className="rounded-md border border-line-strong bg-canvas p-3 text-sm text-ink-muted">
               Inactive since {new Date(seafarer.inactive_since).toLocaleDateString()}:{' '}
               {seafarer.inactive_reason}
             </p>
           )}
 
-          <dl className="grid gap-4 rounded-xl border border-navy-800 bg-navy-900 p-6 sm:grid-cols-2">
+          <dl className="grid gap-4 rounded-md border border-line bg-canvas p-6 sm:grid-cols-2">
             <Detail label="Position">
               {seafarer.position_name}
               {seafarer.position_retired && (
-                <span className="ml-2 text-xs text-navy-400">(retired Position)</span>
+                <span className="ml-2 text-xs text-ink-faint">(retired Position)</span>
               )}
             </Detail>
             <Detail label="Nationality">
@@ -172,7 +172,7 @@ export function SeafarerPage() {
 
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-lg font-semibold text-navy-50">Assignments</h3>
+              <h3 className="text-lg font-medium text-ink">Assignments</h3>
               {!seafarer.inactive_since && (
                 <ActionButton
                   tone="primary"
@@ -195,7 +195,7 @@ export function SeafarerPage() {
 
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-lg font-semibold text-navy-50">Documents</h3>
+              <h3 className="text-lg font-medium text-ink">Documents</h3>
               {!seafarer.inactive_since && (
                 <ActionButton
                   tone="primary"

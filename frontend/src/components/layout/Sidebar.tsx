@@ -89,7 +89,7 @@ export function Sidebar({ role, isOpen, onClose }: SidebarProps) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 z-30 bg-navy-950/60 lg:hidden"
+          className="fixed inset-0 z-30 bg-ink/20 lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -97,20 +97,20 @@ export function Sidebar({ role, isOpen, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-navy-800 bg-navy-900 transition-transform duration-200 lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-58 flex-col border-r border-line bg-surface max-lg:transition-transform max-lg:duration-200 lg:static lg:translate-x-0',
           isOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-16 items-center gap-3 border-b border-navy-800 px-6">
-          <Anchor className="h-6 w-6 text-navy-300" />
-          <span className="text-sm font-semibold tracking-wide text-navy-100">Crew Monitor</span>
+        <div className="flex h-14 items-center gap-2 border-b border-line px-4">
+          <Anchor className="h-4 w-4 text-ink-muted" />
+          <span className="text-sm font-medium text-ink">Crew Monitor</span>
         </div>
 
-        <nav className="flex-1 space-y-6 overflow-y-auto p-4" aria-label="Main navigation">
+        <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-4" aria-label="Main navigation">
           {groups.map((group) => (
-            <div key={group.label ?? 'main'} className="space-y-1">
+            <div key={group.label ?? 'main'} className="space-y-0.5">
               {group.label && (
-                <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-navy-500">
+                <p className="px-3 pb-1 text-xs text-ink-faint">
                   {group.label}
                 </p>
               )}
@@ -125,18 +125,18 @@ export function Sidebar({ role, isOpen, onClose }: SidebarProps) {
                     onClick={onClose}
                     className={({ isActive }) =>
                       cn(
-                        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                        'group flex h-8 items-center gap-2 rounded-md px-3 text-sm transition-colors',
                         isActive
-                          ? 'bg-navy-700 text-navy-50'
-                          : 'text-navy-300 hover:bg-navy-800 hover:text-navy-100',
+                          ? 'bg-accent-soft font-medium text-ink'
+                          : 'text-ink-muted hover:bg-surface-active hover:text-ink',
                       )
                     }
                   >
-                    <Icon className="h-5 w-5 shrink-0" />
+                    <Icon className="h-4 w-4 shrink-0 text-ink-faint group-aria-[current=page]:text-accent" />
                     <span className="flex-1">{item.label}</span>
                     {count > 0 && (
                       <span
-                        className="rounded-full bg-status-expiring px-2 py-0.5 text-xs font-semibold text-navy-950"
+                        className="text-xs font-medium text-warning"
                         aria-label={item.badge === 'open-alerts' ? `${count} open` : `${count} pending`}
                       >
                         {count}
@@ -149,8 +149,8 @@ export function Sidebar({ role, isOpen, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        <div className="border-t border-navy-800 p-4">
-          <p className="text-xs text-navy-500">Crew Document Management</p>
+        <div className="p-4">
+          <p className="text-xs text-ink-faint">Crew Document Management</p>
         </div>
       </aside>
     </>

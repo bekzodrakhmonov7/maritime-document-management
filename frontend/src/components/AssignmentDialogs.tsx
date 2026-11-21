@@ -67,9 +67,9 @@ export function AssignmentsTable({
   empty: string
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-navy-800 bg-navy-900">
+    <div className="overflow-x-auto rounded-md border border-line bg-canvas">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-navy-800 text-xs uppercase tracking-wider text-navy-400">
+        <thead className="border-b border-line bg-surface text-xs text-ink-faint">
           <tr>
             <th scope="col" className="px-4 py-3">{show === 'vessel' ? 'Vessel' : 'Seafarer'}</th>
             <th scope="col" className="px-4 py-3">Position</th>
@@ -79,10 +79,10 @@ export function AssignmentsTable({
             <th scope="col" className="px-4 py-3 text-right">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-navy-800">
+        <tbody className="divide-y divide-line">
           {assignments?.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-4 py-6 text-center text-navy-400">
+              <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
                 {empty}
               </td>
             </tr>
@@ -91,28 +91,28 @@ export function AssignmentsTable({
             <tr key={a.id}>
               <td className="px-4 py-3">
                 {show === 'vessel' ? (
-                  <Link to={`/vessels/${a.vessel_id}`} className="text-navy-50 hover:underline">
+                  <Link to={`/vessels/${a.vessel_id}`} className="text-ink hover:underline">
                     {a.vessel_name}
                   </Link>
                 ) : (
-                  <Link to={`/seafarers/${a.seafarer_id}`} className="text-navy-50 hover:underline">
+                  <Link to={`/seafarers/${a.seafarer_id}`} className="text-ink hover:underline">
                     {a.seafarer_first_name} {a.seafarer_last_name}
                   </Link>
                 )}
               </td>
-              <td className="px-4 py-3 text-navy-200">
+              <td className="px-4 py-3 text-ink-muted">
                 {a.position_name}
                 {a.position_differs && (
                   <span
-                    className="ml-2 text-xs text-status-expiring"
+                    className="ml-2 text-xs text-warning"
                     title="Differs from the held Position"
                   >
                     (not the held Position)
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 text-navy-200">{a.start_date}</td>
-              <td className="px-4 py-3 text-navy-200">{a.end_date}</td>
+              <td className="px-4 py-3 text-ink-muted">{a.start_date}</td>
+              <td className="px-4 py-3 text-ink-muted">{a.end_date}</td>
               <td className="px-4 py-3">
                 <span title={a.cancel_reason ?? undefined}>
                   <AssignmentStateBadge state={a.state} />
@@ -123,7 +123,7 @@ export function AssignmentsTable({
                   <div className="flex items-center justify-end gap-2">
                     <Link
                       to={`/assignments/${a.id}/readiness`}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600 focus:outline-none focus:ring-2 focus:ring-navy-400/40"
+                      className="inline-flex items-center gap-1.5 h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active focus:outline-none focus:ring-2 focus:ring-accent/40"
                     >
                       Readiness
                     </Link>
@@ -233,7 +233,7 @@ function AssignmentForm({
           ))}
         </select>
         {heldPositionDiffers && (
-          <p className="mt-1 text-xs text-status-expiring">
+          <p className="mt-1 text-xs text-warning">
             This differs from the held Position ({seafarer.position_name}). The held Position
             doesn't change by itself: edit the seafarer to record a promotion.
           </p>
@@ -269,7 +269,7 @@ function AssignmentForm({
         </div>
       </div>
       {!datesInOrder && (
-        <p className="text-xs text-status-expired">The end date can't be before the start date.</p>
+        <p className="text-xs text-danger">The end date can't be before the start date.</p>
       )}
     </FormDialog>
   )
@@ -293,7 +293,7 @@ function CancelAssignment({ assignment, onClose }: { assignment: Assignment; onC
       canSubmit={!!trimmed}
       error={action.error}
     >
-      <p className="text-sm text-navy-300">
+      <p className="text-sm text-ink-muted">
         Cancelling is permanent. The Assignment is kept, marked cancelled, with the reason.
       </p>
       <div>

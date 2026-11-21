@@ -85,8 +85,8 @@ export function AuditLogPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-navy-50">Audit Log</h2>
-          <p className="mt-1 text-sm text-navy-400">
+          <h2 className="text-xl font-medium text-ink">Audit Log</h2>
+          <p className="mt-1 text-sm text-ink-faint">
             Who did what and when. Nobody can change it; each search and export is recorded too.
             Times are in the company time zone{data ? ` (${data.time_zone})` : ''}.
           </p>
@@ -103,7 +103,7 @@ export function AuditLogPage() {
 
       <form
         onSubmit={onSearch}
-        className="space-y-4 rounded-xl border border-navy-800 bg-navy-900 p-4"
+        className="space-y-4 rounded-md border border-line bg-canvas p-4"
         aria-label="Audit Log filters"
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -191,14 +191,14 @@ export function AuditLogPage() {
           <legend className={LABEL_CLASS}>
             Actions {draft.actions.length > 0 && `(${draft.actions.length} chosen)`}
           </legend>
-          <div className="grid max-h-48 gap-1 overflow-y-auto rounded-lg border border-navy-800 p-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid max-h-48 gap-1 overflow-y-auto rounded-md border border-line p-2 sm:grid-cols-2 lg:grid-cols-3">
             {ACTIONS.map(([action, label]) => (
-              <label key={action} className="flex items-center gap-2 text-sm text-navy-200">
+              <label key={action} className="flex items-center gap-2 text-sm text-ink-muted">
                 <input
                   type="checkbox"
                   checked={draft.actions.includes(action)}
                   onChange={() => toggleAction(action)}
-                  className="h-4 w-4 rounded border-navy-700 bg-navy-950"
+                  className="h-4 w-4 rounded border-line-strong bg-canvas"
                 />
                 {label}
               </label>
@@ -218,7 +218,7 @@ export function AuditLogPage() {
       {error && <ErrorNote message={error.message} />}
       {exportLog.error && <ErrorNote message={exportLog.error.message} />}
       {exported && (
-        <p role="status" className="text-sm text-navy-300">
+        <p role="status" className="text-sm text-ink-muted">
           Exported {exported.rows.toLocaleString()} records.
           {exported.truncated &&
             ' That is the export limit: narrow the search to export the rest.'}
@@ -227,12 +227,12 @@ export function AuditLogPage() {
 
       <div
         className={cn(
-          'overflow-x-auto rounded-xl border border-navy-800 bg-navy-900',
+          'overflow-x-auto rounded-md border border-line bg-canvas',
           isFetching && 'opacity-70',
         )}
       >
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-navy-800 text-xs uppercase tracking-wider text-navy-400">
+          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
             <tr>
               <th scope="col" className="px-4 py-3">When</th>
               <th scope="col" className="px-4 py-3">Actor</th>
@@ -242,53 +242,53 @@ export function AuditLogPage() {
               <th scope="col" className="px-4 py-3">Details</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-navy-800">
+          <tbody className="divide-y divide-line">
             {isLoading && (
               <tr>
-                <td colSpan={COLUMNS} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={COLUMNS} className="px-4 py-6 text-center text-ink-faint">
                   Loading…
                 </td>
               </tr>
             )}
             {data?.items.length === 0 && (
               <tr>
-                <td colSpan={COLUMNS} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={COLUMNS} className="px-4 py-6 text-center text-ink-faint">
                   No Audit Records match these filters.
                 </td>
               </tr>
             )}
             {data?.items.map((record) => (
               <tr key={record.id} className="align-top">
-                <td className="whitespace-nowrap px-4 py-3 text-navy-200">
+                <td className="whitespace-nowrap px-4 py-3 text-ink-muted">
                   {formatTime(record.occurred_at)}
                 </td>
-                <td className="px-4 py-3 text-navy-200">
+                <td className="px-4 py-3 text-ink-muted">
                   <div>{actor(record)}</div>
                   {record.actor_role && record.actor_role !== 'system' && (
-                    <div className="text-xs text-navy-400">{record.actor_role}</div>
+                    <div className="text-xs text-ink-faint">{record.actor_role}</div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-navy-50">{actionLabel(record.action)}</td>
+                <td className="px-4 py-3 text-ink">{actionLabel(record.action)}</td>
                 <td className="px-4 py-3">
                   <span
                     className={cn(
                       'text-xs font-medium',
-                      record.outcome === 'refused' ? 'text-status-expired' : 'text-navy-300',
+                      record.outcome === 'refused' ? 'text-danger' : 'text-ink-muted',
                     )}
                   >
                     {record.outcome === 'refused' ? 'Refused' : 'Succeeded'}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-navy-200">
+                <td className="px-4 py-3 text-ink-muted">
                   <div>{target(record)}</div>
                   {record.seafarer_id !== null && (
-                    <div className="text-xs text-navy-400">Seafarer {record.seafarer_id}</div>
+                    <div className="text-xs text-ink-faint">Seafarer {record.seafarer_id}</div>
                   )}
                 </td>
-                <td className="max-w-md px-4 py-3 text-xs text-navy-300">
+                <td className="max-w-md px-4 py-3 text-xs text-ink-muted">
                   {record.reason && <div>Reason: {record.reason}</div>}
                   {changes(record) && <div className="break-all font-mono">{changes(record)}</div>}
-                  {record.ip && <div className="text-navy-500">IP {record.ip}</div>}
+                  {record.ip && <div className="text-ink-faint">IP {record.ip}</div>}
                 </td>
               </tr>
             ))}
@@ -297,7 +297,7 @@ export function AuditLogPage() {
       </div>
 
       {data && data.total > 0 && (
-        <nav className="flex items-center justify-between text-sm text-navy-300" aria-label="Pages">
+        <nav className="flex items-center justify-between text-sm text-ink-muted" aria-label="Pages">
           <span>
             {data.total.toLocaleString()} records · page {data.page} of {pages}
           </span>

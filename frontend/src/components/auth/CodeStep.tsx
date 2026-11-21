@@ -13,7 +13,7 @@ import {
 } from '../../lib/signInCode'
 
 const INPUT_CLASS =
-  'w-full rounded-lg border border-navy-700 bg-navy-950 px-4 py-2.5 text-center font-mono text-2xl tracking-[0.5em] text-navy-50 placeholder-navy-600 transition-colors focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50'
+  'w-full rounded-md border border-line-strong bg-canvas px-4 py-2.5 text-center font-mono text-xl tracking-[0.5em] text-ink placeholder-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50'
 
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error('Something went wrong. Try again.')
@@ -105,11 +105,11 @@ export function CodeStep({
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
       <div
         role="status"
-        className="flex items-start gap-3 rounded-lg border border-navy-700 bg-navy-950 p-4"
+        className="flex items-start gap-3 rounded-md border border-line-strong bg-canvas p-4"
       >
-        <MailCheck className="mt-0.5 h-5 w-5 shrink-0 text-navy-300" aria-hidden="true" />
-        <p className="text-sm text-navy-200">
-          {CODE_SENT_MESSAGE} It was sent to <strong className="text-navy-50">{email}</strong> and
+        <MailCheck className="mt-0.5 h-5 w-5 shrink-0 text-ink-muted" aria-hidden="true" />
+        <p className="text-sm text-ink-muted">
+          {CODE_SENT_MESSAGE} It was sent to <strong className="text-ink">{email}</strong> and
           is valid for 10 minutes.
         </p>
       </div>
@@ -117,7 +117,7 @@ export function CodeStep({
       {error && <ErrorNote message={error} />}
 
       <div>
-        <label htmlFor="code" className="mb-2 block text-sm font-medium text-navy-100">
+        <label htmlFor="code" className="mb-2 block text-sm font-medium text-ink">
           Sign-in Code
         </label>
         <input
@@ -143,7 +143,7 @@ export function CodeStep({
       <button
         type="submit"
         disabled={busy}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-navy-600 px-4 py-2.5 font-medium text-navy-50 transition-colors hover:bg-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 font-medium text-on-accent transition-colors hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {verifying && <Loader2 className="h-5 w-5 animate-spin" />}
         {verifying ? 'Checking code...' : 'Continue'}
@@ -154,7 +154,7 @@ export function CodeStep({
           type="button"
           onClick={onBack}
           disabled={verifying}
-          className="flex items-center gap-1 rounded font-medium text-navy-300 transition-colors hover:text-navy-50 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:opacity-50"
+          className="flex items-center gap-1 rounded font-medium text-ink-muted transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back
@@ -163,7 +163,7 @@ export function CodeStep({
           type="button"
           onClick={() => void handleResend()}
           disabled={busy || wait > 0}
-          className="flex items-center gap-1 rounded font-medium text-navy-300 transition-colors hover:text-navy-50 focus:outline-none focus:ring-2 focus:ring-navy-400/40 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-1 rounded font-medium text-ink-muted transition-colors hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {resending ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

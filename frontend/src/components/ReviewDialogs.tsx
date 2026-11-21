@@ -32,14 +32,14 @@ export function ReviewDialog({ version, onClose }: { version: Version; onClose: 
       <fieldset className="flex gap-4">
         <legend className={LABEL_CLASS}>Decision</legend>
         {(['accept', 'reject'] as const).map((d) => (
-          <label key={d} className="flex items-center gap-2 text-sm text-navy-100">
+          <label key={d} className="flex items-center gap-2 text-sm text-ink">
             <input type="radio" name="decision" checked={decision === d} onChange={() => setDecision(d)} />
             {d === 'accept' ? 'Accept' : 'Reject'}
           </label>
         ))}
       </fieldset>
       {decision === 'reject' && version.is_current && (
-        <p className="text-sm text-navy-300">
+        <p className="text-sm text-ink-muted">
           The previous version that isn't rejected becomes current again; with none, the document counts as missing.
         </p>
       )}

@@ -82,7 +82,7 @@ function TagButton({ tag, onAdd, className }: { tag: Tag; onAdd: (tag: Tag) => v
       onClick={() => onAdd(tag)}
       title={`Filter by this ${TAG_KIND_LABELS[tag.kind].toLowerCase()}`}
       className={cn(
-        'rounded-full border border-navy-700 px-2 py-0.5 text-xs text-navy-300 hover:border-navy-500 hover:text-navy-100',
+        'rounded-full border border-line-strong px-2 py-0.5 text-xs text-ink-muted hover:border-line-strong hover:text-ink',
         className,
       )}
     >
@@ -113,16 +113,16 @@ function GroupCard({ group, onAdd }: { group: SeafarerGroup; onAdd: (tag: Tag) =
   const { user } = useAuth()
   const s = group.seafarer
   return (
-    <li className="rounded-xl border border-navy-800 bg-navy-900">
-      <div className="flex flex-wrap items-center gap-2 border-b border-navy-800 px-4 py-3">
-        <Link to={`/seafarers/${s.id}`} className="font-medium text-navy-50 hover:underline">
+    <li className="rounded-md border border-line bg-canvas">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+        <Link to={`/seafarers/${s.id}`} className="font-medium text-ink hover:underline">
           {fullName(s)}
         </Link>
-        {s.inactive && <span className="text-xs text-navy-400">(Inactive)</span>}
+        {s.inactive && <span className="text-xs text-ink-faint">(Inactive)</span>}
         <TagButton tag={{ kind: 'position', id: s.position_id, name: s.position_name }} onAdd={onAdd} />
         <TagButton tag={vesselTag(s)} onAdd={onAdd} />
       </div>
-      <ul className="divide-y divide-navy-800">
+      <ul className="divide-y divide-line">
         {group.entries.map((entry) => (
           <li
             key={entry.document_type_id}
@@ -133,17 +133,17 @@ function GroupCard({ group, onAdd }: { group: SeafarerGroup; onAdd: (tag: Tag) =
               <TagButton
                 tag={{ kind: 'document_type', id: entry.document_type_id, name: entry.document_type_name }}
                 onAdd={onAdd}
-                className="border-transparent text-sm font-medium text-navy-100"
+                className="border-transparent text-sm font-medium text-ink"
               />
               {entry.review_state === 'not_reviewed' && <NotReviewedTag />}
               <QueueExpiry entry={entry} />
             </div>
             {entry.action === 'review' && isOwnUpload(entry.uploaded_by, user?.id) ? (
               <span className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-navy-400">{SELF_REVIEW_REASON}</span>
+                <span className="text-xs text-ink-faint">{SELF_REVIEW_REASON}</span>
                 <Link
                   to={actionLink(s.id, entry)}
-                  className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600"
+                  className="h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active"
                 >
                   {ACTION_LABELS.open}
                 </Link>
@@ -151,7 +151,7 @@ function GroupCard({ group, onAdd }: { group: SeafarerGroup; onAdd: (tag: Tag) =
             ) : (
               <Link
                 to={actionLink(s.id, entry)}
-                className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600"
+                className="h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active"
               >
                 {ACTION_LABELS[entry.action]}
               </Link>
@@ -165,24 +165,24 @@ function GroupCard({ group, onAdd }: { group: SeafarerGroup; onAdd: (tag: Tag) =
 
 function Counter({ label, value }: { label: string; value: number }) {
   return (
-    <span className="text-xs text-navy-300">
-      {label} <strong className={cn(value > 0 ? 'text-navy-50' : 'text-navy-500')}>{value}</strong>
+    <span className="text-xs text-ink-muted">
+      {label} <strong className={cn(value > 0 ? 'text-ink' : 'text-ink-faint')}>{value}</strong>
     </span>
   )
 }
 
 function StartingSoonRow({ entry, onAdd }: { entry: StartingSoonEntry; onAdd: (tag: Tag) => void }) {
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-navy-800 bg-navy-900 px-4 py-3">
+    <li className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-canvas px-4 py-3">
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-navy-200">{entry.start_date}</span>
-          <Link to={`/seafarers/${entry.seafarer.id}`} className="font-medium text-navy-50 hover:underline">
+          <span className="text-sm font-medium text-ink-muted">{entry.start_date}</span>
+          <Link to={`/seafarers/${entry.seafarer.id}`} className="font-medium text-ink hover:underline">
             {fullName(entry.seafarer)}
           </Link>
           <TagButton tag={{ kind: 'position', id: entry.position_id, name: entry.position_name }} onAdd={onAdd} />
           <TagButton tag={{ kind: 'vessel', id: entry.vessel_id, name: entry.vessel_name }} onAdd={onAdd} />
-          <span className="text-xs text-navy-400">until {entry.end_date}</span>
+          <span className="text-xs text-ink-faint">until {entry.end_date}</span>
         </div>
         <div className="flex flex-wrap gap-4">
           <Counter label="Before joining" value={entry.counters.before_joining} />
@@ -193,7 +193,7 @@ function StartingSoonRow({ entry, onAdd }: { entry: StartingSoonEntry; onAdd: (t
       </div>
       <Link
         to={`/assignments/${entry.assignment_id}/readiness`}
-        className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600"
+        className="h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active"
       >
         Readiness
       </Link>
@@ -230,7 +230,7 @@ function WorkQueues() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-4">
         <div className="relative w-full max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-navy-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
           <label htmlFor="dashboard-search" className="sr-only">
             Filter by seafarer name
           </label>
@@ -244,12 +244,12 @@ function WorkQueues() {
             className={`${FIELD_CLASS} pl-9`}
           />
         </div>
-        <label className="flex items-center gap-2 text-sm text-navy-300">
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
           <input
             type="checkbox"
             checked={showInactive}
             onChange={(e) => setShowInactive(e.target.checked)}
-            className="h-4 w-4 rounded border-navy-700 bg-navy-950"
+            className="h-4 w-4 rounded border-line-strong bg-canvas"
           />
           Show inactive
         </label>
@@ -257,7 +257,7 @@ function WorkQueues() {
 
       <div className="flex flex-wrap items-center gap-2" aria-live="polite">
         {tags.length === 0 ? (
-          <p className="text-xs text-navy-500">
+          <p className="text-xs text-ink-faint">
             Click a Position, vessel or document type in the list to filter by it.
           </p>
         ) : (
@@ -265,24 +265,24 @@ function WorkQueues() {
             {tags.map((tag) => (
               <span
                 key={`${tag.kind}-${tag.id}`}
-                className="inline-flex items-center gap-1 rounded-full bg-navy-700 py-0.5 pl-2.5 pr-1 text-xs text-navy-50"
+                className="inline-flex items-center gap-1 rounded-full bg-surface-active py-0.5 pl-2.5 pr-1 text-xs text-ink"
               >
-                <span className="text-navy-300">{TAG_KIND_LABELS[tag.kind]}:</span> {tag.name}
+                <span className="text-ink-muted">{TAG_KIND_LABELS[tag.kind]}:</span> {tag.name}
                 <button
                   type="button"
                   onClick={() => removeTag(tag)}
-                  className="rounded-full p-0.5 hover:bg-navy-600"
+                  className="rounded-full p-0.5 hover:bg-line"
                   aria-label={`Remove filter ${tag.name}`}
                 >
                   <X className="h-3 w-3" />
                 </button>
               </span>
             ))}
-            <button type="button" onClick={() => setTags([])} className="text-xs text-navy-400 hover:text-navy-200">
+            <button type="button" onClick={() => setTags([])} className="text-xs text-ink-faint hover:text-ink-muted">
               Clear all
             </button>
             {reportVessel && canReport(reportVessel.id) && (
-              <span className="ml-auto inline-flex items-center gap-2 text-xs text-navy-300">
+              <span className="ml-auto inline-flex items-center gap-2 text-xs text-ink-muted">
                 Status Report for {reportVessel.name}:
                 <ReportDownloads
                   kind="vessel"
@@ -295,7 +295,7 @@ function WorkQueues() {
         )}
       </div>
 
-      <div role="tablist" aria-label="Work queues" className="flex flex-wrap gap-1 border-b border-navy-800">
+      <div role="tablist" aria-label="Work queues" className="flex flex-wrap gap-1 border-b border-line">
         {QUEUES.map((q) => (
           <button
             key={q}
@@ -306,12 +306,12 @@ function WorkQueues() {
             className={cn(
               '-mb-px flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium',
               queue === q
-                ? 'border-navy-300 text-navy-50'
-                : 'border-transparent text-navy-400 hover:text-navy-200',
+                ? 'border-accent text-ink'
+                : 'border-transparent text-ink-faint hover:text-ink-muted',
             )}
           >
             {DASHBOARD_QUEUE_LABELS[q]}
-            <span className="rounded-full bg-navy-800 px-2 py-0.5 text-xs text-navy-200">
+            <span className="rounded-full bg-surface-active px-2 py-0.5 text-xs text-ink-muted">
               {first?.counts[q] ?? '–'}
             </span>
           </button>
@@ -319,16 +319,16 @@ function WorkQueues() {
       </div>
 
       {error && <ErrorNote message={error.message} />}
-      {(isLoading || (data && !pages && !error)) && <p className="text-sm text-navy-400">Loading…</p>}
+      {(isLoading || (data && !pages && !error)) && <p className="text-sm text-ink-faint">Loading…</p>}
 
       {pages && queue === 'starting_soon' && (
         <>
-          <p className="text-xs text-navy-400">
+          <p className="text-xs text-ink-faint">
             Upcoming assignments starting within the next {first?.planning_horizon_days} days, by start date.
             Position and vessel tags match the assignment; document type tags don't apply here.
           </p>
           {joiners.length === 0 ? (
-            <p className="text-sm text-navy-400">No assignments starting soon.</p>
+            <p className="text-sm text-ink-faint">No assignments starting soon.</p>
           ) : (
             <ul className="space-y-2">
               {joiners.map((entry) => (
@@ -341,7 +341,7 @@ function WorkQueues() {
 
       {pages && queue !== 'starting_soon' && (
         groups.length === 0 ? (
-          <p className="text-sm text-navy-400">Nothing in this queue.</p>
+          <p className="text-sm text-ink-faint">Nothing in this queue.</p>
         ) : (
           <ul className="space-y-3">
             {groups.map((group) => (
@@ -353,7 +353,7 @@ function WorkQueues() {
 
       {pages && first && first.total > 0 && (
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-xs text-navy-400">
+          <p className="text-xs text-ink-faint">
             Showing {shown} of {pages[pages.length - 1].total}{' '}
             {queue === 'starting_soon' ? 'assignments' : 'seafarers'}
           </p>
@@ -362,7 +362,7 @@ function WorkQueues() {
               type="button"
               onClick={() => fetchNextPage()}
               disabled={isFetchingNextPage}
-              className="rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-navy-50 hover:bg-navy-600 disabled:opacity-60"
+              className="h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active disabled:opacity-60"
             >
               {isFetchingNextPage ? 'Loading…' : 'Load more'}
             </button>
@@ -399,20 +399,20 @@ function FleetTotalsView() {
   return (
     <div className="space-y-6">
       {error && <ErrorNote message={error.message} />}
-      {isLoading && <p className="text-sm text-navy-400">Loading…</p>}
+      {isLoading && <p className="text-sm text-ink-faint">Loading…</p>}
       {data && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             {TOTALS_COLUMNS.map((c) => (
-              <div key={c.key} className="rounded-xl border border-navy-800 bg-navy-900 px-4 py-3">
-                <p className="text-xs text-navy-400">{c.label}</p>
-                <p className="text-2xl font-semibold text-navy-50">{data.totals[c.key]}</p>
+              <div key={c.key} className="rounded-md border border-line bg-canvas px-4 py-3">
+                <p className="text-xs text-ink-faint">{c.label}</p>
+                <p className="text-xl font-medium text-ink">{data.totals[c.key]}</p>
               </div>
             ))}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <label htmlFor="breakdown" className="text-sm text-navy-300">
+            <label htmlFor="breakdown" className="text-sm text-ink-muted">
               Break down by
             </label>
             <select
@@ -429,9 +429,9 @@ function FleetTotalsView() {
             </select>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-navy-800 bg-navy-900">
+          <div className="overflow-x-auto rounded-md border border-line bg-canvas">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-navy-800 text-xs uppercase tracking-wider text-navy-400">
+              <thead className="border-b border-line bg-surface text-xs text-ink-faint">
                 <tr>
                   <th scope="col" className="px-4 py-3">{BREAKDOWN_LABELS[data.breakdown]}</th>
                   {TOTALS_COLUMNS.map((c) => (
@@ -441,19 +441,19 @@ function FleetTotalsView() {
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-navy-800">
+              <tbody className="divide-y divide-line">
                 {data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={TOTALS_COLUMNS.length + 1} className="px-4 py-6 text-center text-navy-400">
+                    <td colSpan={TOTALS_COLUMNS.length + 1} className="px-4 py-6 text-center text-ink-faint">
                       Nothing to count yet.
                     </td>
                   </tr>
                 )}
                 {data.rows.map((row) => (
                   <tr key={row.id ?? 'none'}>
-                    <th scope="row" className="px-4 py-3 font-medium text-navy-100">{row.name}</th>
+                    <th scope="row" className="px-4 py-3 font-medium text-ink">{row.name}</th>
                     {TOTALS_COLUMNS.map((c) => (
-                      <td key={c.key} className="px-4 py-3 text-right text-navy-200">
+                      <td key={c.key} className="px-4 py-3 text-right text-ink-muted">
                         {row.counts[c.key]}
                       </td>
                     ))}
@@ -489,13 +489,13 @@ export function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-navy-50">Dashboard</h2>
-          <p className="mt-1 text-sm text-navy-400">
+          <h2 className="text-xl font-medium text-ink">Dashboard</h2>
+          <p className="mt-1 text-sm text-ink-faint">
             {subtitle(shown, role)}
           </p>
         </div>
         {role === 'administrator' && (
-          <div className="flex gap-1 rounded-lg bg-navy-900 p-1">
+          <div className="flex gap-1 rounded-md bg-canvas p-1">
             {(['queues', 'totals'] as const).map((v) => (
               <button
                 key={v}
@@ -504,7 +504,7 @@ export function DashboardPage() {
                 aria-pressed={view === v}
                 className={cn(
                   'rounded-md px-3 py-1.5 text-xs font-medium',
-                  view === v ? 'bg-navy-700 text-navy-50' : 'text-navy-400 hover:text-navy-200',
+                  view === v ? 'bg-surface-active text-ink' : 'text-ink-faint hover:text-ink-muted',
                 )}
               >
                 {v === 'queues' ? 'Work queues' : 'Fleet totals'}
@@ -523,5 +523,5 @@ function QueueExpiry({ entry }: { entry: QueueEntry }) {
   const cap = effectiveExpiryOf(entry, entry.expiry_date)
   if (entry.expiry_status && hasCapNote(cap)) return <EndorsementCapNote {...cap} />
   if (!entry.expiry_date) return null
-  return <span className="text-sm text-navy-400">Expiry {entry.expiry_date}</span>
+  return <span className="text-sm text-ink-faint">Expiry {entry.expiry_date}</span>
 }

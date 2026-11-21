@@ -22,7 +22,7 @@ export function ReportDownloads({ kind, id, label }: { kind: ReportKind; id: num
         </ActionButton>
       ))}
       {download.error && (
-        <span role="alert" className="text-xs text-status-expired">
+        <span role="alert" className="text-xs text-danger">
           {download.error.message}
         </span>
       )}

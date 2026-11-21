@@ -9,7 +9,7 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-navy-950">
+    <div className="flex h-screen overflow-hidden bg-canvas">
       <Sidebar
         role={role}
         isOpen={sidebarOpen}
@@ -21,7 +21,7 @@ export function AppShell() {
 
         <main
           id="main-content"
-          className="flex-1 overflow-y-auto p-4 lg:p-6"
+          className="flex-1 overflow-y-auto p-4 lg:p-8"
           tabIndex={-1}
         >
           <Outlet />

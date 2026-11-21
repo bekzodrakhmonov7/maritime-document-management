@@ -23,8 +23,8 @@ export function DocumentTypesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-navy-50">Document Types</h2>
-          <p className="mt-1 text-sm text-navy-400">
+          <h2 className="text-xl font-medium text-ink">Document Types</h2>
+          <p className="mt-1 text-sm text-ink-faint">
             The kinds of document the company tracks and their rules. A type that depends on a
             certificate is an Endorsement. A type in use is retired, not deleted.
           </p>
@@ -37,9 +37,9 @@ export function DocumentTypesPage() {
 
       {error && <ErrorNote message={error.message} />}
 
-      <div className="overflow-x-auto rounded-xl border border-navy-800 bg-navy-900">
+      <div className="overflow-x-auto rounded-md border border-line bg-canvas">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-navy-800 text-xs uppercase tracking-wider text-navy-400">
+          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
             <tr>
               <th scope="col" className="px-4 py-3">Name</th>
               <th scope="col" className="px-4 py-3">Expires</th>
@@ -50,30 +50,30 @@ export function DocumentTypesPage() {
               <th scope="col" className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-navy-800">
+          <tbody className="divide-y divide-line">
             {isLoading && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-ink-faint">
                   Loading…
                 </td>
               </tr>
             )}
             {types?.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-ink-faint">
                   No Document Types yet.
                 </td>
               </tr>
             )}
             {types?.map((t) => (
               <tr key={t.id}>
-                <td className="px-4 py-3 text-navy-50">{t.name}</td>
-                <td className="px-4 py-3 text-navy-200">{t.expires ? 'Yes' : 'No'}</td>
-                <td className="px-4 py-3 text-navy-200">
+                <td className="px-4 py-3 text-ink">{t.name}</td>
+                <td className="px-4 py-3 text-ink-muted">{t.expires ? 'Yes' : 'No'}</td>
+                <td className="px-4 py-3 text-ink-muted">
                   {t.max_validity_months ? `${t.max_validity_months} months` : '—'}
                 </td>
-                <td className="px-4 py-3 text-navy-200">{t.renewable_at_sea ? 'Yes' : 'No'}</td>
-                <td className="px-4 py-3 text-navy-200">
+                <td className="px-4 py-3 text-ink-muted">{t.renewable_at_sea ? 'Yes' : 'No'}</td>
+                <td className="px-4 py-3 text-ink-muted">
                   {t.depends_on_id ? nameOf.get(t.depends_on_id) : '—'}
                 </td>
                 <td className="px-4 py-3">
@@ -183,7 +183,7 @@ function DocumentTypeForm({
         />
       </div>
 
-      <label className="flex items-start gap-2 text-sm text-navy-100">
+      <label className="flex items-start gap-2 text-sm text-ink">
         <input
           type="checkbox"
           checked={expires}
@@ -193,7 +193,7 @@ function DocumentTypeForm({
         />
         <span>
           Expires
-          <span className="block text-xs text-navy-400">
+          <span className="block text-xs text-ink-faint">
             {isCertificate
               ? 'It has Endorsements, so it must keep expiring.'
               : 'On: every document needs an expiry date. Off: it must have none.'}
@@ -217,13 +217,13 @@ function DocumentTypeForm({
             className={FIELD_CLASS}
             placeholder="No maximum"
           />
-          <p className="mt-1 text-xs text-navy-400">
+          <p className="mt-1 text-xs text-ink-faint">
             An upload whose expiry date is later than its issue date plus this is refused.
           </p>
         </div>
       )}
 
-      <label className="flex items-start gap-2 text-sm text-navy-100">
+      <label className="flex items-start gap-2 text-sm text-ink">
         <input
           type="checkbox"
           checked={renewableAtSea}
@@ -232,7 +232,7 @@ function DocumentTypeForm({
         />
         <span>
           Renewable at sea
-          <span className="block text-xs text-navy-400">
+          <span className="block text-xs text-ink-faint">
             Advice only: it can be renewed on board rather than before joining.
           </span>
         </span>
@@ -257,7 +257,7 @@ function DocumentTypeForm({
             </option>
           ))}
         </select>
-        <p className="mt-1 text-xs text-navy-400">
+        <p className="mt-1 text-xs text-ink-faint">
           {isCertificate
             ? `Endorsements depend on this type (${endorsements.map((t) => t.name).join(', ')}), so it can't be one itself.`
             : 'Only an expiring type that is not itself an Endorsement can be picked.'}

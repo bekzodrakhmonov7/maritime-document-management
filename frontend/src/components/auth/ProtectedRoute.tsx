@@ -10,7 +10,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-navy-400 border-t-navy-50" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-line-strong border-t-ink" />
       </div>
     )
   }
@@ -26,17 +26,17 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (status !== 'active') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-navy-950 px-4">
-        <div className="w-full max-w-md rounded-xl border border-navy-800 bg-navy-900 p-8 text-center">
-          <AlertCircle className="mx-auto mb-4 h-10 w-10 text-status-expired" aria-hidden="true" />
-          <h1 className="text-xl font-semibold text-navy-50">Your account can't be loaded</h1>
-          <p className="mt-2 text-sm text-navy-300">
+      <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
+        <div className="w-full max-w-md rounded-md border border-line bg-canvas p-8 text-center">
+          <AlertCircle className="mx-auto mb-4 h-10 w-10 text-danger" aria-hidden="true" />
+          <h1 className="text-xl font-medium text-ink">Your account can't be loaded</h1>
+          <p className="mt-2 text-sm text-ink-muted">
             The server didn't recognise this sign-in. Try again later or sign out.
           </p>
           <button
             type="button"
             onClick={() => void signOut()}
-            className="mt-6 rounded-lg bg-navy-700 px-4 py-2 text-sm font-medium text-navy-50 hover:bg-navy-600 focus:outline-none focus:ring-2 focus:ring-navy-400/40"
+            className="mt-6 h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active focus:outline-none focus:ring-2 focus:ring-accent/40"
           >
             Sign out
           </button>

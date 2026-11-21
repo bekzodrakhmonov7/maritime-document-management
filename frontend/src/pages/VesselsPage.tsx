@@ -26,8 +26,8 @@ export function VesselsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-navy-50">Vessels</h2>
-          <p className="mt-1 text-sm text-navy-400">
+          <h2 className="text-xl font-medium text-ink">Vessels</h2>
+          <p className="mt-1 text-sm text-ink-faint">
             The company's fleet with each vessel's current flag.
             {isAdmin && ' Vessels are deactivated, never deleted.'}
           </p>
@@ -40,21 +40,21 @@ export function VesselsPage() {
         )}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-navy-300">
+      <label className="flex items-center gap-2 text-sm text-ink-muted">
         <input
           type="checkbox"
           checked={withoutOfficer}
           onChange={(e) => setWithoutOfficer(e.target.checked)}
-          className="h-4 w-4 rounded border-navy-700 bg-navy-950"
+          className="h-4 w-4 rounded border-line-strong bg-canvas"
         />
         Only vessels with no active Responsible Officer
       </label>
 
       {error && <ErrorNote message={error.message} />}
 
-      <div className="overflow-x-auto rounded-xl border border-navy-800 bg-navy-900">
+      <div className="overflow-x-auto rounded-md border border-line bg-canvas">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-navy-800 text-xs uppercase tracking-wider text-navy-400">
+          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
             <tr>
               <th scope="col" className="px-4 py-3">Name</th>
               <th scope="col" className="px-4 py-3">IMO number</th>
@@ -66,17 +66,17 @@ export function VesselsPage() {
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-navy-800">
+          <tbody className="divide-y divide-line">
             {isLoading && (
               <tr>
-                <td colSpan={columns} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={columns} className="px-4 py-6 text-center text-ink-faint">
                   Loading…
                 </td>
               </tr>
             )}
             {vessels?.length === 0 && (
               <tr>
-                <td colSpan={columns} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={columns} className="px-4 py-6 text-center text-ink-faint">
                   {withoutOfficer ? 'Every vessel has an active Responsible Officer.' : 'No vessels yet.'}
                 </td>
               </tr>
@@ -86,13 +86,13 @@ export function VesselsPage() {
                 <td className="px-4 py-3">
                   <Link
                     to={`/vessels/${vessel.id}`}
-                    className="font-medium text-navy-50 underline-offset-2 hover:underline"
+                    className="font-medium text-ink underline-offset-2 hover:underline"
                   >
                     {vessel.name}
                   </Link>
                 </td>
-                <td className="px-4 py-3 font-mono text-navy-200">{vessel.imo_number}</td>
-                <td className="px-4 py-3 text-navy-200">{flagLabel(vessel.flag)}</td>
+                <td className="px-4 py-3 font-mono text-ink-muted">{vessel.imo_number}</td>
+                <td className="px-4 py-3 text-ink-muted">{flagLabel(vessel.flag)}</td>
                 <td className="px-4 py-3">
                   <StateBadge on={vessel.active} label={vessel.active ? 'Active' : 'Deactivated'} />
                 </td>

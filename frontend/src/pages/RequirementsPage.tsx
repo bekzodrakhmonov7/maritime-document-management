@@ -28,8 +28,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'preview', label: 'Preview' },
 ]
 
-const TABLE_CLASS = 'overflow-x-auto rounded-xl border border-navy-800 bg-navy-900'
-const HEAD_CLASS = 'border-b border-navy-800 text-xs uppercase tracking-wider text-navy-400'
+const TABLE_CLASS = 'overflow-x-auto rounded-md border border-line bg-canvas'
+const HEAD_CLASS = 'border-b border-line bg-surface text-xs text-ink-faint'
 
 /** Which documents each Position needs, and the local exceptions (administrators only). */
 export function RequirementsPage() {
@@ -38,15 +38,15 @@ export function RequirementsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-navy-50">Requirements</h2>
-        <p className="mt-1 text-sm text-navy-400">
+        <h2 className="text-xl font-medium text-ink">Requirements</h2>
+        <p className="mt-1 text-sm text-ink-faint">
           The matrix says which Document Types each Position needs. Exceptions add or remove one for
           a vessel or a flag: a vessel exception beats a flag one, and one for a single Position beats
           one for all.
         </p>
       </div>
 
-      <div role="tablist" aria-label="Requirements" className="flex gap-1 border-b border-navy-800">
+      <div role="tablist" aria-label="Requirements" className="flex gap-1 border-b border-line">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -59,8 +59,8 @@ export function RequirementsPage() {
             className={cn(
               '-mb-px border-b-2 px-4 py-2 text-sm font-medium',
               tab === t.id
-                ? 'border-navy-300 text-navy-50'
-                : 'border-transparent text-navy-400 hover:text-navy-100',
+                ? 'border-accent text-ink'
+                : 'border-transparent text-ink-faint hover:text-ink',
             )}
           >
             {t.label}
@@ -91,18 +91,18 @@ function MatrixTab() {
   const error = positions.error ?? types.error ?? matrix.error ?? action.error
 
   if (positions.isLoading || types.isLoading || matrix.isLoading) {
-    return <p className="text-sm text-navy-400">Loading…</p>
+    return <p className="text-sm text-ink-faint">Loading…</p>
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-navy-400">
+      <p className="text-sm text-ink-faint">
         Tick a box to require a type for a Position. Retired Positions and types are not shown and
         never count as required. Clearing a certificate leaves its Endorsements as they are.
       </p>
       {error && <ErrorNote message={error.message} />}
       {activePositions.length === 0 || activeTypes.length === 0 ? (
-        <p className="text-sm text-navy-400">Add Positions and Document Types first.</p>
+        <p className="text-sm text-ink-faint">Add Positions and Document Types first.</p>
       ) : (
         <div className={TABLE_CLASS}>
           <table className="w-full text-left text-sm">
@@ -121,15 +121,15 @@ function MatrixTab() {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-navy-800">
+            <tbody className="divide-y divide-line">
               {activeTypes.map((t) => {
                 const missing = activePositions.filter((p) => !cells.has(`${p.id}/${t.id}`))
                 return (
                   <tr key={t.id}>
-                    <th scope="row" className="px-4 py-3 font-normal text-navy-50">
+                    <th scope="row" className="px-4 py-3 font-normal text-ink">
                       {t.name}
                       {t.depends_on_id !== null && (
-                        <span className="ml-2 text-xs text-navy-400">Endorsement</span>
+                        <span className="ml-2 text-xs text-ink-faint">Endorsement</span>
                       )}
                     </th>
                     {activePositions.map((p) => {
@@ -148,7 +148,7 @@ function MatrixTab() {
                                 documentTypeId: t.id,
                               })
                             }
-                            className="h-4 w-4 accent-navy-400"
+                            className="h-4 w-4 accent-accent"
                           />
                         </td>
                       )
@@ -186,7 +186,7 @@ function EffectBadge({ effect }: { effect: ExceptionEffect }) {
   return (
     <span
       className={cn(
-        'rounded-full px-2 py-0.5 text-xs font-semibold',
+        'rounded-full px-2 py-0.5 text-xs font-medium',
         effect === 'add' ? BADGE_TONE.ok : BADGE_TONE.bad,
       )}
     >
@@ -220,30 +220,30 @@ function ExceptionsTab() {
               <th scope="col" className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-navy-800">
+          <tbody className="divide-y divide-line">
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
                   Loading…
                 </td>
               </tr>
             )}
             {exceptions?.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-navy-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
                   No exceptions: the matrix applies everywhere.
                 </td>
               </tr>
             )}
             {exceptions?.map((e) => (
               <tr key={e.id}>
-                <td className="px-4 py-3 text-navy-50">{scopeLabel(e)}</td>
-                <td className="px-4 py-3 text-navy-300">{e.position_name ?? 'All positions'}</td>
-                <td className="px-4 py-3 text-navy-50">{e.document_type_name}</td>
+                <td className="px-4 py-3 text-ink">{scopeLabel(e)}</td>
+                <td className="px-4 py-3 text-ink-muted">{e.position_name ?? 'All positions'}</td>
+                <td className="px-4 py-3 text-ink">{e.document_type_name}</td>
                 <td className="px-4 py-3">
                   <EffectBadge effect={e.effect} />
                 </td>
-                <td className="px-4 py-3 text-navy-300">{e.reason}</td>
+                <td className="px-4 py-3 text-ink-muted">{e.reason}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
                     <ActionButton onClick={() => setDialog({ kind: 'edit', exception: e })}>
@@ -333,7 +333,7 @@ function ExceptionForm({
     >
       <fieldset>
         <legend className={LABEL_CLASS}>Applies to</legend>
-        <div className="flex gap-4 text-sm text-navy-100">
+        <div className="flex gap-4 text-sm text-ink">
           {(['flag', 'vessel'] as const).map((s) => (
             <label key={s} className="flex items-center gap-2">
               <input
@@ -341,7 +341,7 @@ function ExceptionForm({
                 name="exception-scope"
                 checked={scope === s}
                 onChange={() => setScope(s)}
-                className="accent-navy-400"
+                className="accent-accent"
               />
               {s === 'flag' ? 'Every vessel of a flag' : 'One vessel'}
             </label>
@@ -429,7 +429,7 @@ function ExceptionForm({
 
       <fieldset>
         <legend className={LABEL_CLASS}>Effect</legend>
-        <div className="flex gap-4 text-sm text-navy-100">
+        <div className="flex gap-4 text-sm text-ink">
           {(['add', 'remove'] as const).map((e) => (
             <label key={e} className="flex items-center gap-2">
               <input
@@ -437,7 +437,7 @@ function ExceptionForm({
                 name="exception-effect"
                 checked={effect === e}
                 onChange={() => setEffect(e)}
-                className="accent-navy-400"
+                className="accent-accent"
               />
               {e === 'add' ? 'Add: require it' : 'Remove: don’t require it'}
             </label>
@@ -537,28 +537,28 @@ function PreviewTab() {
       </div>
 
       {evaluation.error && <ErrorNote message={evaluation.error.message} />}
-      {!positionId && <p className="text-sm text-navy-400">Pick a Position to see what it needs.</p>}
+      {!positionId && <p className="text-sm text-ink-faint">Pick a Position to see what it needs.</p>}
 
       {result && (
         <div className="space-y-4">
-          <section className="rounded-xl border border-navy-800 bg-navy-900 p-4">
-            <h3 className="text-sm font-semibold text-navy-100">
+          <section className="rounded-md border border-line bg-canvas p-4">
+            <h3 className="text-sm font-medium text-ink">
               Required ({result.required.length})
               {result.vessel && (
-                <span className="font-normal text-navy-400">
+                <span className="font-normal text-ink-faint">
                   {' '}
                   on {result.vessel.name}, flag {flagLabel(result.vessel.flag)}
                 </span>
               )}
             </h3>
             {result.required.length === 0 ? (
-              <p className="mt-2 text-sm text-navy-400">Nothing is required.</p>
+              <p className="mt-2 text-sm text-ink-faint">Nothing is required.</p>
             ) : (
               <ul className="mt-2 space-y-1 text-sm">
                 {result.required.map((t) => (
                   <li key={t.id} className="flex justify-between gap-4">
-                    <span className="text-navy-50">{t.name}</span>
-                    <span className="text-xs text-navy-400">
+                    <span className="text-ink">{t.name}</span>
+                    <span className="text-xs text-ink-faint">
                       {t.exception_id === null ? 'Matrix' : 'Added by an exception'}
                     </span>
                   </li>
@@ -568,17 +568,17 @@ function PreviewTab() {
           </section>
 
           {result.vessel && (
-            <section className="rounded-xl border border-navy-800 bg-navy-900 p-4">
-              <h3 className="text-sm font-semibold text-navy-100">Exceptions applied</h3>
+            <section className="rounded-md border border-line bg-canvas p-4">
+              <h3 className="text-sm font-medium text-ink">Exceptions applied</h3>
               {result.applied_exceptions.length === 0 ? (
-                <p className="mt-2 text-sm text-navy-400">None: the matrix applies as it is.</p>
+                <p className="mt-2 text-sm text-ink-faint">None: the matrix applies as it is.</p>
               ) : (
                 <ul className="mt-2 space-y-2 text-sm">
                   {result.applied_exceptions.map((e) => (
                     <li key={e.id} className="flex flex-wrap items-center gap-2">
                       <EffectBadge effect={e.effect} />
-                      <span className="text-navy-50">{e.document_type_name}</span>
-                      <span className="text-navy-400">
+                      <span className="text-ink">{e.document_type_name}</span>
+                      <span className="text-ink-faint">
                         · {scopeLabel(e)} · {e.position_name ?? 'All positions'} · {e.reason}
                       </span>
                     </li>

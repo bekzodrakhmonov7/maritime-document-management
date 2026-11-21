@@ -1,12 +1,12 @@
-// NFR-04: every status badge's text is >= 4.5:1 against its badge background,
-// in colour and after the CSS grayscale(1) filter. Colours are resolved from
+// NFR-04: every status's word is >= 4.5:1 and its dot >= 3:1 against the grounds
+// it sits on, in colour and after the CSS grayscale(1) filter. Colours are resolved from
 // the classes the badges actually use (src/lib/badgeTone.ts) to the values in
 // src/index.css, so a change to either is checked here.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { BADGE_TONE } from '../src/lib/badgeTone.ts'
+import { BADGE_TONE, DOT_COLOUR } from '../src/lib/badgeTone.ts'
 
 const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
 
@@ -19,14 +19,11 @@ function token(name: string): RGB {
   return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as RGB
 }
 
-/** The text and background colours of a tone's classes (`text-x`, `bg-x`). */
-function colours(classes: string): { text: RGB; bg: RGB } {
-  const parts = classes.split(/\s+/)
-  const text = parts.find((c) => c.startsWith('text-'))
-  const bg = parts.find((c) => c.startsWith('bg-'))
-  assert.ok(text && bg, `"${classes}" names a text and a background colour`)
-  assert.ok(!text.includes('/') && !bg.includes('/'), 'badge colours are opaque')
-  return { text: token(text.slice(5)), bg: token(bg.slice(3)) }
+/** The word colour of a tone: its last `text-<colour>` class (later wins). */
+function wordColour(classes: string): RGB {
+  const texts = classes.split(/\s+/).filter((c) => /^text-(ink|warning|danger)/.test(c))
+  assert.ok(texts.length > 0, `"${classes}" names a text colour`)
+  return token(texts[texts.length - 1].slice(5))
 }
 
 const channel = (v: number) => {
@@ -52,12 +49,32 @@ test('the contrast formula matches known WCAG values', () => {
   assert.equal(contrast([118, 118, 118], [255, 255, 255]).toFixed(2), '4.54')
 })
 
+// Statuses sit on the page (canvas) and on the frame (surface, table headers).
+const GROUNDS = ['canvas', 'surface', 'surface-active'] as const
+
 for (const [tone, classes] of Object.entries(BADGE_TONE)) {
-  test(`badge tone "${tone}" is at least 4.5:1 in colour and in greyscale`, () => {
-    const { text, bg } = colours(classes)
-    const inColour = contrast(text, bg)
-    const inGrey = contrast(grayscale(text), grayscale(bg))
-    assert.ok(inColour >= 4.5, `${tone}: ${inColour.toFixed(2)}:1 in colour`)
-    assert.ok(inGrey >= 4.5, `${tone}: ${inGrey.toFixed(2)}:1 in greyscale`)
+  test(`status tone "${tone}": word >= 4.5:1 and dot >= 3:1 on every ground, in colour and greyscale`, () => {
+    const word = wordColour(classes)
+    const dot = token(DOT_COLOUR[tone as keyof typeof DOT_COLOUR])
+    for (const g of GROUNDS) {
+      const ground = token(g)
+      for (const [name, fg, min] of [['word', word, 4.5], ['dot', dot, 3]] as const) {
+        const inColour = contrast(fg, ground)
+        const inGrey = contrast(grayscale(fg), grayscale(ground))
+        assert.ok(inColour >= min, `${tone} ${name} on ${g}: ${inColour.toFixed(2)}:1 in colour`)
+        assert.ok(inGrey >= min, `${tone} ${name} on ${g}: ${inGrey.toFixed(2)}:1 in greyscale`)
+      }
+    }
   })
 }
+
+test('body text, danger and warning text read at 4.5:1 on every ground', () => {
+  for (const fg of ['ink', 'ink-muted', 'ink-faint', 'danger', 'warning']) {
+    for (const g of GROUNDS) {
+      const r = contrast(token(fg), token(g))
+      assert.ok(r >= 4.5, `${fg} on ${g}: ${r.toFixed(2)}:1`)
+    }
+  }
+  const r = contrast(token('on-accent'), token('accent'))
+  assert.ok(r >= 4.5, `on-accent on accent: ${r.toFixed(2)}:1`)
+})

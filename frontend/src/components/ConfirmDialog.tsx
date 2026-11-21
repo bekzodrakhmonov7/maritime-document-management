@@ -16,7 +16,7 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({ confirmLabel, onConfirm, children, ...rest }: ConfirmDialogProps) {
   return (
     <FormDialog {...rest} submitLabel={confirmLabel} onSubmit={onConfirm} canSubmit>
-      <div className="text-sm text-navy-300">{children}</div>
+      <div className="text-sm text-ink-muted">{children}</div>
     </FormDialog>
   )
 }
