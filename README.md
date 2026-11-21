@@ -106,8 +106,15 @@ rate-limited.
 **Lost authenticator:** an administrator presses **Reset authenticator** on the
 **Accounts** page (`POST /api/accounts/{id}/second-factor/reset`, recorded as
 *second factor reset*). The Account is signed out and enrols a new app at its
-next sign-in. **Forgot password?** on the Sign in page e-mails a code for
-setting a new password; the next sign-in still needs the authenticator.
+next sign-in. **Forgot password?** on the Sign in page e-mails a code; the
+reset form takes that code, the new password and the current authenticator
+code (`POST /api/auth/password/reset` with `{email, code, password, totp}`).
+The e-mailed code opens an `aal1` recovery session, the authenticator code
+raises it to `aal2`, and only then is the password set; missing code: 400
+`totp_required`, wrong code: 403 `totp_invalid` (both recorded as a refused
+*password reset* and needing a new e-mailed code). An Account without an
+authenticator (just after **Reset authenticator**) resets with the e-mailed
+code alone. Every session of the Account then ends.
 
 Locally, any authenticator app works (scan the QR code from the browser), or
 generate the code from the key shown on the enrolment step:
@@ -201,8 +208,8 @@ uv run uvicorn app.main:app --reload --port 8000
 
 ### 3. Frontend setup
 
-Create `frontend/.env` from its example and set `VITE_SUPABASE_ANON_KEY` to the
-same `ANON_KEY` as above (the Supabase client refuses to start without it):
+Create `frontend/.env` from its example (it only sets `VITE_API_BASE`; the web
+client talks to the API alone, never to Supabase):
 
 ```bash
 cd frontend
@@ -519,7 +526,7 @@ wipe production data.
 │   │   ├── pages/               # Route pages
 │   │   ├── components/          # Reusable UI components
 │   │   ├── hooks/               # React hooks
-│   │   ├── lib/                 # API client & Supabase
+│   │   ├── lib/                 # API client, sign-in helpers
 │   │   └── context/             # Auth context
 │   └── public/
 ├── api/
