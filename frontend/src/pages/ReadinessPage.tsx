@@ -12,7 +12,8 @@ import { EndorsementCapNote } from '../components/EndorsementCapNote'
 import { ReportDownloads } from '../components/ReportDownloads'
 import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
 import { missingUploadPath } from '../lib/missingUpload'
-import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
+import { NotReviewedTag } from '../components/ReviewTags'
+import { VerificationBadge } from '../components/verificationBadge.ts'
 import { COVERAGE_LABELS, EXPIRY_STATUS_LABELS, type CoverageClass, type ReadinessEntry } from '../types'
 
 const COVERAGE_STYLE: Record<CoverageClass, string> = {
@@ -48,7 +49,7 @@ function EntryRow({ entry, seafarerId }: { entry: ReadinessEntry; seafarerId: nu
           ) : (
             <span className="font-medium text-ink">{entry.name}</span>
           )}
-          {entry.verified && <VerifiedShield />}
+          {entry.document_id !== null && <VerificationBadge verified={entry.verified} />}
           {entry.review_state === 'not_reviewed' && <NotReviewedTag />}
         </div>
         {entry.suggestion && <p className="text-sm text-ink-muted">{entry.suggestion}</p>}
