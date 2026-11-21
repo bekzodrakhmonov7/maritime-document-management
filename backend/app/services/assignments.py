@@ -73,9 +73,17 @@ async def list_for_seafarer(conn: asyncpg.Connection, scope: Scope, seafarer_id:
     return [_read(r, scope) for r in rows]
 
 
-async def list_for_vessel(conn: asyncpg.Connection, scope: Scope, vessel_id: int) -> list[dict]:
-    """A vessel's crew under way and upcoming, limited to the caller's Scope."""
+async def list_for_vessel(
+    conn: asyncpg.Connection, account: UserPayload, scope: Scope, vessel_id: int
+) -> list[dict]:
+    """A vessel's crew under way and upcoming, limited to the caller's Scope.
+    An officer asking about a vessel they aren't a Responsible Officer for is
+    refused as out of Scope (404, recorded), even when it has no crew."""
     await reference_data.get_row(conn, reference_data.VESSEL, vessel_id)
+    if account.role != "administrator" and vessel_id not in await responsible_officers.vessel_ids(
+        conn, account.sub
+    ):
+        raise OutOfScope("vessel", vessel_id, None)
     rows = await conn.fetch(
         f"""
         {_select()}

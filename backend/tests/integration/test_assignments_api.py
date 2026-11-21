@@ -32,7 +32,7 @@ async def world(crew, make_account):
     await crew.link(officer_a, alpha)
     await crew.link(officer_b, bravo)
     return {
-        "ids": {"officer_a": officer_a, "manager": manager},
+        "ids": {"officer_a": officer_a, "officer_b": officer_b, "manager": manager},
         "master": master,
         "cook": cook,
         "alpha": alpha,
@@ -470,9 +470,38 @@ async def test_the_vessel_crew_lists_under_way_and_upcoming(client, world, crew)
         ("Anna", "under_way"),
         ("Ivan", "upcoming"),
     ]
-    # Bravo's officer sees Alpha's page but not Alpha's crew.
+    res = await client.get(f"/api/vessels/{world['alpha']}/crew", headers=world["admin"])
+    assert [a["seafarer_first_name"] for a in res.json()] == ["Anna", "Ivan"]
+
+
+async def test_another_vessels_crew_is_404_and_recorded(client, world, owner_db):
+    await _plan(client, world["admin"], _body(world, start=-3, end=3))
     res = await client.get(f"/api/vessels/{world['alpha']}/crew", headers=world["officer_b"])
+    assert res.status_code == 404
+    assert res.json() == {"detail": "Not found"}
+    refused = await owner_db.fetch(
+        """
+        SELECT * FROM public.audit_log
+         WHERE action = 'access_refused' AND reason = 'out_of_scope'
+           AND target_type = 'vessel' AND target_id = $1 AND actor_id = $2
+        """,
+        str(world["alpha"]), world["ids"]["officer_b"],
+    )
+    assert len(refused) == 1
+    assert refused[0]["outcome"] == "refused"
+
+
+async def test_an_empty_vessel_in_scope_has_an_empty_crew(client, world, owner_db):
+    officer_b = world["ids"]["officer_b"]
+    before = await owner_db.fetchval(
+        "SELECT count(*) FROM public.audit_log WHERE actor_id = $1", officer_b
+    )
+    res = await client.get(f"/api/vessels/{world['bravo']}/crew", headers=world["officer_b"])
+    assert res.status_code == 200
     assert res.json() == []
+    assert await owner_db.fetchval(
+        "SELECT count(*) FROM public.audit_log WHERE actor_id = $1", officer_b
+    ) == before
 
 
 async def test_an_unknown_vessel_has_no_crew(client, world):
