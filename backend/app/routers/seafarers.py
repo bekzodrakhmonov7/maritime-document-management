@@ -5,6 +5,7 @@ There is no delete endpoint: a seafarer is set Inactive instead.
 """
 
 from datetime import date
+from typing import Annotated
 
 import asyncpg
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -16,6 +17,7 @@ from app.deps import get_db
 from app.models.assignment import AssignmentRead
 from app.models.coverage import SeafarerRecord
 from app.models.seafarer import SeafarerRead, SeafarerWrite, SetInactive
+from app.models.text import NO_NUL
 from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
 from app.services import assignments, coverage
 from app.services import seafarers as svc
@@ -36,7 +38,7 @@ def _born_by(body: SeafarerWrite, today: date) -> dict:
 
 @router.get("", response_model=list[SeafarerRead])
 async def list_seafarers(
-    search: str = Query("", max_length=200),
+    search: Annotated[str, Query(max_length=200), NO_NUL] = "",
     show_inactive: bool = False,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),

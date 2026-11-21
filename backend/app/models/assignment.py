@@ -5,6 +5,8 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
+from app.models.text import NO_NUL
+
 # Upcoming / under way / finished come from the dates; cancelled is stored.
 AssignmentStatus = Literal["upcoming", "under_way", "finished", "cancelled"]
 
@@ -32,7 +34,9 @@ class AssignmentCreate(AssignmentEdit):
 
 
 class CancelAssignment(BaseModel):
-    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    reason: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500), NO_NUL
+    ]
 
 
 class AssignmentRead(BaseModel):

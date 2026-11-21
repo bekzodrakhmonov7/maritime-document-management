@@ -6,8 +6,11 @@ from typing import Annotated
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
 from app.countries import ISO_3166_ALPHA2
+from app.models.text import NO_NUL
 
-Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Name = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200), NO_NUL
+]
 
 
 def _assigned_country_code(value: str) -> str:
