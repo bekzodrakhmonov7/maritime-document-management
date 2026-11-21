@@ -13,12 +13,13 @@ import { cn } from '../lib/cn'
 import { SELF_REVIEW_REASON, isOwnUpload } from '../lib/missingUpload'
 import { VersionDialog, type VersionDialogState } from '../components/DocumentDialogs'
 import { ReviewDialog, VerificationDialog } from '../components/ReviewDialogs'
-import { NotReviewedTag, VerifiedShield } from '../components/ReviewTags'
+import { NotReviewedTag } from '../components/ReviewTags'
+import { VerificationBadge } from '../components/verificationBadge.ts'
 import { EXPIRY_STATUS_LABELS, type Version } from '../types'
 
 type CheckDialog = { kind: 'review' | 'verify'; version: Version }
 
-/** One document: its Expiry Status, Verified shield and full history of
+/** One document: its Expiry Status, Verification badge and full history of
  * Versions, newest first, each with its Reviews and Verifications. Every file
  * is fetched through a signed, recorded link. */
 export function DocumentPage() {
@@ -53,7 +54,7 @@ export function DocumentPage() {
               <h2 className="text-xl font-medium text-ink">{document.document_type_name}</h2>
               <ExpiryStatusBadge status={document.expiry_status} />
               {document.current_version?.review_state === 'not_reviewed' && <NotReviewedTag />}
-              {document.verified && <VerifiedShield />}
+              <VerificationBadge verified={document.verified} />
               {document.current_version && (
                 <EndorsementCapNote
                   {...effectiveExpiryOf(document, document.current_version.expiry_date)}

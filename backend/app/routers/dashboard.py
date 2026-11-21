@@ -8,6 +8,8 @@ totals with no names, for managers and administrators. Plain reads: nothing
 is recorded except refused access.
 """
 
+from typing import Annotated
+
 import asyncpg
 from fastapi import APIRouter, Depends, Query
 
@@ -22,6 +24,7 @@ from app.domain import (
 )
 from app.models.auth import UserPayload
 from app.models.dashboard import DashboardRead, FleetTotalsRead
+from app.models.text import NO_NUL
 from app.routers.crew_access import CrewAccess, get_crew_access
 from app.services import dashboard as svc
 from app.services.settings import company_today
@@ -31,7 +34,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 @router.get("", response_model=DashboardRead)
 async def get_dashboard(
-    name: str = Query("", max_length=200),
+    name: Annotated[str, Query(max_length=200), NO_NUL] = "",
     position_id: list[int] = Query([]),
     vessel_id: list[int] = Query([]),
     # The "Ashore / Unassigned" vessel value.
