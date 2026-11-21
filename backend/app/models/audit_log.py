@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.audit import AuditAction, Outcome
+from app.models.text import Text
 
 MAX_PAGE_SIZE = 200
 
@@ -17,11 +18,11 @@ class AuditFilters(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
     actor_id: UUID | None = None
-    actor_email: str | None = None
+    actor_email: Text | None = None
     action: list[AuditAction] = []
     seafarer_id: int | None = None
-    target_type: str | None = None
-    target_id: str | None = None
+    target_type: Text | None = None
+    target_id: Text | None = None
     outcome: Outcome | None = None
 
     def given(self) -> dict[str, Any]:

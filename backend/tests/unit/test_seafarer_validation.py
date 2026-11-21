@@ -40,3 +40,12 @@ def test_the_parse_alone_leaves_the_upper_bound_to_the_company_date() -> None:
 
 def test_no_date_of_birth_is_allowed() -> None:
     assert _body(None).born_by(date(2026, 1, 1)).date_of_birth is None
+
+
+def test_a_nul_byte_in_a_name_is_refused_naming_the_field() -> None:
+    # PostgreSQL cannot store it; refused here, not as a 500 (F-02).
+    with pytest.raises(ValidationError) as exc_info:
+        SeafarerWrite(first_name="An\x00na", last_name="Petrova", position_id=1)
+    [error] = exc_info.value.errors()
+    assert error["loc"] == ("first_name",)
+    assert "must not contain a NUL character" in error["msg"]

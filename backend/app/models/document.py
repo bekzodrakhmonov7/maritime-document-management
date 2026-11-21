@@ -7,9 +7,12 @@ from uuid import UUID
 from pydantic import BaseModel, StringConstraints, field_validator, model_validator
 
 from app.domain import ExpiryStatus, ReviewState
+from app.models.text import NO_NUL
 from app.upload_safety import ReasonCode
 
-Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Text = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200), NO_NUL
+]
 
 
 class VersionDetails(BaseModel):
@@ -40,7 +43,9 @@ class VersionDetails(BaseModel):
 
 Decision = Literal["accept", "reject"]
 VerificationResult = Literal["confirmed", "not_confirmed"]
-Comment = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+Comment = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000), NO_NUL
+]
 
 
 class ReviewWrite(BaseModel):

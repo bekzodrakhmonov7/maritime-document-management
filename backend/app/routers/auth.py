@@ -49,6 +49,7 @@ from app.deps import SessionRefused, account_refused, get_account
 from app.deps import get_db
 from app import password_policy
 from app.models.auth import UserPayload
+from app.models.text import NO_NUL
 from app.pwned_passwords import PwnedPasswords, get_pwned_passwords
 from app.services import login_block, sign_in
 from app.supabase_auth import (
@@ -60,7 +61,9 @@ from app.supabase_auth import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-Email = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=320)]
+Email = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=320), NO_NUL
+]
 # A new password (SR-02). bcrypt reads at most 72 bytes; Supabase Auth
 # refuses longer passwords.
 Password = Annotated[
@@ -68,9 +71,10 @@ Password = Annotated[
     StringConstraints(
         min_length=password_policy.MIN_LENGTH, max_length=password_policy.MAX_LENGTH
     ),
+    NO_NUL,
 ]
 Code = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[0-9]{6}$")]
-ChallengeToken = Annotated[str, StringConstraints(min_length=1, max_length=200)]
+ChallengeToken = Annotated[str, StringConstraints(min_length=1, max_length=200), NO_NUL]
 
 CODE_SENT = "We've e-mailed you a 6-digit code."
 TOTP_ASKED = "Enter the 6-digit code from your authenticator app."
@@ -102,13 +106,13 @@ BLOCKED_MESSAGE = "Too many failed sign-in attempts. Wait 15 minutes, then try a
 
 class LoginRequest(BaseModel):
     email: Email
-    password: Annotated[str, StringConstraints(min_length=1, max_length=72)]
+    password: Annotated[str, StringConstraints(min_length=1, max_length=72), NO_NUL]
 
 
 class RegisterRequest(BaseModel):
     email: Email
     full_name: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200), NO_NUL
     ]
     password: Password
 
@@ -630,7 +634,7 @@ async def _refuse_if_blocked(db: asyncpg.Connection, request: Request, email: st
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    refresh_token: Annotated[str, StringConstraints(min_length=1, max_length=200), NO_NUL]
 
 
 @router.post("/refresh")

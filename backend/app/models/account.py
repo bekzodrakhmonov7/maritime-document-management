@@ -5,8 +5,11 @@ from uuid import UUID
 from pydantic import BaseModel, Field, StringConstraints
 
 from app.models.auth import AccountStatus, Role
+from app.models.text import NO_NUL
 
-Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+Reason = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000), NO_NUL
+]
 
 
 class AccountRead(BaseModel):

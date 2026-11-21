@@ -6,8 +6,11 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, StringConstraints, model_validator
 
 from app.models.reference import CountryCode
+from app.models.text import NO_NUL
 
-Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+Reason = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500), NO_NUL
+]
 
 
 class MatrixCell(BaseModel):
