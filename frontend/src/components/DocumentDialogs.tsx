@@ -9,7 +9,8 @@ import { DocumentDropzone } from './DocumentDropzone'
 import { ExpiryStatusBadge } from './ExpiryStatusBadge'
 import { EndorsementCapNote } from './EndorsementCapNote'
 import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
-import { NotReviewedTag, VerifiedShield } from './ReviewTags'
+import { NotReviewedTag } from './ReviewTags'
+import { VerificationBadge } from './verificationBadge.ts'
 import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
 import { FILE_SIZE_CEILING_MB } from '../lib/fileSize'
 
@@ -239,7 +240,7 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
 }
 
 /** A seafarer's documents with their Current Version, Expiry Status,
- * Not-reviewed tag and Verified shield. */
+ * Not-reviewed tag and Verification badge. */
 export function DocumentsTable({
   documents,
   onRenew,
@@ -285,7 +286,7 @@ export function DocumentsTable({
                 <div className="flex flex-wrap items-center gap-2">
                   <ExpiryStatusBadge status={d.expiry_status} />
                   {d.current_version?.review_state === 'not_reviewed' && <NotReviewedTag />}
-                  {d.verified && <VerifiedShield />}
+                  <VerificationBadge verified={d.verified} />
                 </div>
               </td>
               <td className="px-4 py-3 text-ink-muted">{d.version_count}</td>
