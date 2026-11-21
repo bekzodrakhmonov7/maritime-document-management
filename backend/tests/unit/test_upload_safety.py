@@ -211,6 +211,13 @@ def test_a_broken_pdf_is_corrupt(data):
     _rejected(validate(data, LIMITS), "corrupt", 422)
 
 
+@pytest.mark.parametrize("cut", [30, 120, 400])
+def test_a_truncated_pdf_qpdf_would_repair_is_damaged(cut):
+    # pikepdf still opens these (recovery mode); the repaired fragment must not be stored.
+    data = _pdf(2)
+    _rejected(validate(data[: len(data) - cut], LIMITS), "pdf_damaged", 422)
+
+
 def test_a_pdf_over_the_page_limit_is_refused():
     assert isinstance(validate(_pdf(3), LIMITS), SafeFile)
     _rejected(validate(_pdf(4), LIMITS), "too_many_pages", 422)
