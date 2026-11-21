@@ -277,6 +277,8 @@ class FakeStorage:
     def __init__(self) -> None:
         self.objects: dict[str, tuple[bytes, str]] = {}
         self.signed: list[tuple[str, int, str]] = []
+        # Set to True to act as if the Storage API can't be reached.
+        self.unreachable = False
 
     async def upload(self, path: str, content: bytes, content_type: str) -> None:
         assert path not in self.objects, "Storage paths are never reused"
@@ -286,7 +288,12 @@ class FakeStorage:
         self.objects.pop(path, None)
 
     async def signed_url(self, path: str, ttl_seconds: int, download_name: str) -> str:
-        assert path in self.objects
+        from app.storage import FileMissing, StorageUnavailable
+
+        if self.unreachable:
+            raise StorageUnavailable("storage is down")
+        if path not in self.objects:
+            raise FileMissing(path)
         self.signed.append((path, ttl_seconds, download_name))
         return f"https://storage.test/sign/{path}?token=t&download={download_name}"
 
