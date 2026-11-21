@@ -552,14 +552,14 @@ library.
 | Uvicorn | 0.49.0 | BSD-3-Clause |
 | asyncpg | 0.31.0 | Apache-2.0 |
 | pydantic-settings | 2.14.2 | MIT |
-| PyJWT | 2.13.0 | MIT |
+| PyJWT | 2.15.1 | MIT |
 | httpx | 0.28.1 | BSD-3-Clause |
 | python-multipart | 0.0.32 | Apache-2.0 |
 | Jinja2 | 3.1.6 | BSD-3-Clause |
 | supabase (Python) | 2.31.0 | MIT |
 | resend | 2.32.2 | MIT |
 | pikepdf | 10.18.1 | MPL-2.0 |
-| Pillow | 12.2.0 | MIT-CMU |
+| Pillow | 13.0.0 | MIT-CMU |
 | fpdf2 | 2.9.0 | LGPL-3.0-only |
 | ReportLab | 5.0.0 | BSD |
 | tzdata | 2026.6 | Apache-2.0 |
@@ -567,7 +567,7 @@ library.
 | pytest / pytest-cov / pytest-asyncio (dev) | 9.1.1 / 7.1.0 / 1.4.0 | MIT / MIT / Apache-2.0 |
 | **Frontend (npm)** | | |
 | React, React DOM | 19.2.7 | MIT |
-| React Router | 7.18.0 | MIT |
+| React Router | 7.18.6 | MIT |
 | TanStack Query / Table | 5.101.0 / 8.21.3 | MIT |
 | Tailwind CSS, @tailwindcss/vite | 4.3.1 | MIT |
 | Radix UI Slider | 1.4.1 | MIT |
@@ -575,7 +575,7 @@ library.
 | react-dropzone | 15.0.0 | MIT |
 | zustand | 5.0.14 | MIT |
 | clsx / tailwind-merge | 2.1.1 / 3.6.0 | MIT |
-| Vite (dev) | 8.0.16 | MIT |
+| Vite (dev) | 8.3.8 | MIT |
 | TypeScript (dev) | 6.0.3 | Apache-2.0 |
 | **Services and tools** | | |
 | Supabase CLI and local stack | 2.122.1 | Apache-2.0 (PostgreSQL: PostgreSQL Licence) |

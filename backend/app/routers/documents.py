@@ -252,6 +252,8 @@ async def issue_proof_url(
             return await reviews.issue_proof_url(
                 db, audit_context_for(request, access.user), access.scope, storage, verification_id
             )
+    except FileMissing:
+        raise _file_missing("The proof file for this Verification was not found in storage.")
     except StorageUnavailable:
         raise _storage_unavailable()
 
@@ -260,11 +262,8 @@ def _storage_unavailable() -> HTTPException:
     return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "File storage is unavailable; try again.")
 
 
-def _file_missing() -> HTTPException:
-    return HTTPException(
-        status.HTTP_404_NOT_FOUND,
-        {"code": "file_missing", "message": "The file for this Version was not found in storage."},
-    )
+def _file_missing(message: str = "The file for this Version was not found in storage.") -> HTTPException:
+    return HTTPException(status.HTTP_404_NOT_FOUND, {"code": "file_missing", "message": message})
 
 
 # --- Receiving a file ----------------------------------------------------------------------

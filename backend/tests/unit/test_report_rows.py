@@ -220,7 +220,7 @@ def test_expiry_not_stated_is_counted_and_titled_in_both_pdfs():
 # --- Every PDF entry states its Review and Verification (F-21) -------------------------------
 
 
-def test_every_pdf_entry_states_its_review_and_verification():
+def test_every_documented_pdf_entry_states_its_review_and_verification():
     from app.reports import to_pdf
 
     section = _section(
@@ -234,4 +234,5 @@ def test_every_pdf_entry_states_its_review_and_verification():
     assert "[Covers all] [Accepted] [Verified]" in text
     assert "[Covers all] [Rejected] [Not verified]" in text
     assert "[Covers all] [Not reviewed] [Not verified]" in text
-    assert "[Missing] [Not reviewed] [Not verified]" in text
+    # No document, nothing to review or verify: like the web readiness view.
+    assert re.search(r"\[Missing\](?!\s*\[)", text), text

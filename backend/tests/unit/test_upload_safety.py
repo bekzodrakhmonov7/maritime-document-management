@@ -4,6 +4,7 @@
 """
 
 import io
+import re
 
 import pikepdf
 import pytest
@@ -216,6 +217,32 @@ def test_a_truncated_pdf_qpdf_would_repair_is_damaged(cut):
     # pikepdf still opens these (recovery mode); the repaired fragment must not be stored.
     data = _pdf(2)
     _rejected(validate(data[: len(data) - cut], LIMITS), "pdf_damaged", 422)
+
+
+def test_a_pdf_with_a_wrong_stream_length_is_still_accepted():
+    # A common writer quirk: qpdf only warns and finds the real length; nothing is repaired.
+    def contents(pdf):
+        pdf.pages[0].Contents = pdf.make_stream(b"0 0 m 10 10 l S")
+
+    data = _pdf(build=contents, compress_streams=False, object_stream_mode=pikepdf.ObjectStreamMode.disable)
+    length = re.search(rb"/Length (\d+)", data)
+    data = data[: length.start(1)] + str(int(length.group(1)) + 3).encode() + data[length.end(1) :]
+    result = validate(data, LIMITS)
+    assert isinstance(result, SafeFile), result
+    assert len(pikepdf.open(io.BytesIO(result.content)).pages) == 1
+
+
+def test_a_pdf_whose_cross_reference_table_must_be_rebuilt_is_damaged():
+    data = _pdf(2)
+    data = data[: data.rindex(b"startxref")] + b"startxref\n12\n%%EOF\n"
+    _rejected(validate(data, LIMITS), "pdf_damaged", 422)
+
+
+def test_a_pdf_whose_page_content_cannot_be_decoded_is_damaged():
+    def broken_contents(pdf):
+        pdf.pages[0].Contents = pdf.make_stream(b"not deflate data", Filter=pikepdf.Name.FlateDecode)
+
+    _rejected(validate(_pdf(build=broken_contents), LIMITS), "pdf_damaged", 422)
 
 
 def test_a_pdf_over_the_page_limit_is_refused():

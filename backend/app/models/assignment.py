@@ -1,11 +1,11 @@
 """Assignments (FR-06, T3)."""
 
 from datetime import date, datetime
-from typing import Annotated, Literal, Self
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.models.text import NO_NUL
+from app.models.text import TrimmedText
 
 # Upcoming / under way / finished come from the dates; cancelled is stored.
 AssignmentStatus = Literal["upcoming", "under_way", "finished", "cancelled"]
@@ -34,9 +34,7 @@ class AssignmentCreate(AssignmentEdit):
 
 
 class CancelAssignment(BaseModel):
-    reason: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500), NO_NUL
-    ]
+    reason: TrimmedText(500)
 
 
 class AssignmentRead(BaseModel):
