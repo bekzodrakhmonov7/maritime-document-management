@@ -410,6 +410,7 @@ async def test_an_unknown_document_type_is_refused(client, world):
         (_pdf(script=True), "cert.pdf", 422, "pdf_active_content"),
         (_pdf(attachment=True), "cert.pdf", 422, "pdf_active_content"),
         (_pdf(encryption=pikepdf.Encryption(owner="o", user="")), "cert.pdf", 422, "pdf_encrypted"),
+        (_pdf(2)[:-120], "cert.pdf", 422, "pdf_damaged"),
     ],
 )
 async def test_a_failed_safety_check_is_refused_and_recorded(

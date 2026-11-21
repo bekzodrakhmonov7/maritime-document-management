@@ -15,7 +15,8 @@ All checks live here, so they are unit-testable without HTTP:
      quality 90), which drops EXIF/GPS and anything trailing;
    - PDFs: pikepdf with a page cap. JavaScript, Launch, SubmitForm,
      ImportData, GoToR and GoToE actions, embedded files, RichMedia, XFA
-     and encryption are refused (plain /URI links stay); a harmless
+     and encryption are refused (plain /URI links stay); a file qpdf had
+     to repair (any qpdf warning, e.g. truncated) is `pdf_damaged`; a harmless
      /OpenAction, /AA or /AcroForm is stripped and the file re-saved. The
      parsed object tree is walked, never the raw bytes.
 
@@ -53,6 +54,7 @@ ReasonCode = Literal[
     "corrupt",
     "pdf_active_content",
     "pdf_encrypted",
+    "pdf_damaged",
     "too_many_pages",
     "image_too_large",
 ]
@@ -240,6 +242,14 @@ def _clean_pdf(data: bytes, max_pages: int) -> SafeFile | Rejection:
             _strip_auto_actions(pdf)
             out = io.BytesIO()
             pdf.save(out)
+            # qpdf warns when it had to repair the file (truncated, bad xref,
+            # broken objects): storing its repair would not be the file sent.
+            if pdf.get_warnings():
+                return Rejection(
+                    "pdf_damaged",
+                    "The PDF file is damaged or incomplete (for example cut off "
+                    "while copying); please upload the original file again.",
+                )
     except pikepdf.PasswordError:
         return encrypted
     except (pikepdf.PdfError, ValueError, RecursionError):
