@@ -1,18 +1,16 @@
 """Documents, Versions, Reviews and Verifications (FR-09 to FR-13, FR-15; T1, T2)."""
 
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from app.domain import ExpiryStatus, ReviewState
-from app.models.text import NO_NUL
+from app.models.text import TrimmedText
 from app.upload_safety import ReasonCode
 
-Text = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200), NO_NUL
-]
+ShortText = TrimmedText(200)
 
 
 class VersionDetails(BaseModel):
@@ -20,8 +18,8 @@ class VersionDetails(BaseModel):
     details-only Version. The Document Type's rules (expires, maximum
     validity) are checked by the service against the type."""
 
-    document_number: Text
-    issuing_authority: Text
+    document_number: ShortText
+    issuing_authority: ShortText
     issue_date: date
     # None = no expiry date; required or refused by the Document Type.
     expiry_date: date | None = None
@@ -43,9 +41,7 @@ class VersionDetails(BaseModel):
 
 Decision = Literal["accept", "reject"]
 VerificationResult = Literal["confirmed", "not_confirmed"]
-Comment = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000), NO_NUL
-]
+Comment = TrimmedText(2000)
 
 
 class ReviewWrite(BaseModel):
@@ -68,9 +64,9 @@ class VerificationDetails(BaseModel):
     service checks that)."""
 
     checked_on: date
-    source: Text
+    source: ShortText
     result: VerificationResult
-    reference: Text
+    reference: ShortText
 
 
 class VerificationRead(VerificationDetails):

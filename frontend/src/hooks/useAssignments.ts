@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../lib/api'
+import { retryUnlessClientError } from '../lib/retry'
 import type {
   Assignment,
   AssignmentCreate,
@@ -17,12 +18,14 @@ export function useSeafarerAssignments(seafarerId: number) {
   })
 }
 
-/** A vessel's crew under way and upcoming, within the caller's Scope. */
+/** A vessel's crew under way and upcoming. 404 for a crewing officer when
+ * the vessel is outside their Scope; not retried, as each try is recorded. */
 export function useVesselCrew(vesselId: number) {
   return useQuery({
     queryKey: ['assignments', 'vessel', vesselId],
     queryFn: () => apiFetch<Assignment[]>(`/api/vessels/${vesselId}/crew`),
     enabled: Number.isInteger(vesselId),
+    retry: (failureCount, error: Error) => retryUnlessClientError(failureCount, error),
   })
 }
 

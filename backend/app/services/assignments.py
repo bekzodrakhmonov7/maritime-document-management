@@ -80,9 +80,7 @@ async def list_for_vessel(
     An officer asking about a vessel they aren't a Responsible Officer for is
     refused as out of Scope (404, recorded), even when it has no crew."""
     await reference_data.get_row(conn, reference_data.VESSEL, vessel_id)
-    if account.role != "administrator" and vessel_id not in await responsible_officers.vessel_ids(
-        conn, account.sub
-    ):
+    if not await _is_responsible(conn, account, vessel_id):
         raise OutOfScope("vessel", vessel_id, None)
     rows = await conn.fetch(
         f"""
@@ -218,13 +216,17 @@ async def cancel(
         return await _reread(conn, scope, assignment_id)
 
 
+async def _is_responsible(conn: asyncpg.Connection, account: UserPayload, *vessel_ids: int) -> bool:
+    """An Administrator, or a Responsible Officer for every one of the vessels."""
+    if account.role == "administrator":
+        return True
+    return set(vessel_ids) <= await responsible_officers.vessel_ids(conn, account.sub)
+
+
 async def _require_responsible(
     conn: asyncpg.Connection, account: UserPayload, *vessel_ids: int
 ) -> None:
-    if account.role == "administrator":
-        return
-    responsible_for = await responsible_officers.vessel_ids(conn, account.sub)
-    if not set(vessel_ids) <= responsible_for:
+    if not await _is_responsible(conn, account, *vessel_ids):
         raise NotResponsible("You aren't a Responsible Officer for that vessel.")
 
 

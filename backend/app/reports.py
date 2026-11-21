@@ -282,12 +282,14 @@ class _Pdf(FPDF):
             self.ln(2)
 
     def entry(self, entry: Mapping[str, Any]) -> None:
-        # Review and Verification always shown (F-21): no badge never means "fine".
-        badges = [
-            COVERAGE_LABELS[entry["coverage"]],
-            REVIEW_LABELS.get(entry["review_state"], "Not reviewed"),
-            "Verified" if entry["verified"] else "Not verified",
-        ]
+        # A documented entry always shows Review and Verification (F-21): no
+        # badge never means "fine". A missing one has neither, as on the web.
+        badges = [COVERAGE_LABELS[entry["coverage"]]]
+        if entry["review_state"] is not None:
+            badges += [
+                REVIEW_LABELS[entry["review_state"]],
+                "Verified" if entry["verified"] else "Not verified",
+            ]
         self.set_x(self.l_margin + 4)
         self.set_font("Helvetica", "B", 10)
         self.cell(self.get_string_width(_latin1(entry["name"])) + 2, 5, _latin1(entry["name"]))

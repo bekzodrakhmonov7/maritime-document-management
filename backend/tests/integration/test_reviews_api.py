@@ -349,6 +349,19 @@ async def test_a_signed_url_for_the_proof_file_is_issued_and_recorded(client, wo
     assert record["seafarer_id"] == world["anna"]
 
 
+async def test_a_proof_file_missing_from_storage_answers_404_file_missing(client, world, storage, owner_db):
+    doc = await _passport(client, world)
+    doc = await _verified(client, world["officer_a"], doc["versions"][0]["id"], proof=PDF)
+    verification_id = doc["versions"][0]["verifications"][0]["id"]
+    storage.objects.clear()
+    res = await client.post(f"/api/verifications/{verification_id}/proof-url", headers=world["officer_a"])
+    assert res.status_code == 404, res.text
+    assert res.json()["detail"]["code"] == "file_missing"
+    assert await _records(
+        owner_db, "file_url_issued", target_type="verification", target_id=str(verification_id)
+    ) == []
+
+
 async def test_a_verification_without_a_proof_file_has_no_url(client, world, storage):
     doc = await _passport(client, world)
     doc = await _verified(client, world["officer_a"], doc["versions"][0]["id"])

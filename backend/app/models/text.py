@@ -8,9 +8,9 @@ Put it after any `StringConstraints` (or `Query(...)`) in the `Annotated`, so
 their messages stay "String should have at most N characters".
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
-from pydantic import AfterValidator
+from pydantic import AfterValidator, StringConstraints
 
 
 def _refuse_nul(value: str) -> str:
@@ -23,3 +23,10 @@ NO_NUL = AfterValidator(_refuse_nul)
 
 # Any text with no further constraint.
 Text = Annotated[str, NO_NUL]
+
+
+def TrimmedText(max_length: int) -> Any:  # noqa: N802 - used as a type
+    """Text trimmed of surrounding spaces, 1 to `max_length` characters, no NUL."""
+    return Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=max_length), NO_NUL
+    ]

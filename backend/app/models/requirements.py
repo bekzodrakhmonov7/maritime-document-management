@@ -1,16 +1,14 @@
 """Requirements: the Position Requirement matrix and its exceptions (FR-08, T2)."""
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, StringConstraints, model_validator
+from pydantic import BaseModel, model_validator
 
 from app.models.reference import CountryCode
-from app.models.text import NO_NUL
+from app.models.text import TrimmedText
 
-Reason = Annotated[
-    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500), NO_NUL
-]
+Reason = TrimmedText(500)
 
 
 class MatrixCell(BaseModel):

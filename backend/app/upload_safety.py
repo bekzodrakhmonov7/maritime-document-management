@@ -222,8 +222,18 @@ _STRIPPED_FROM_ROOT = ("/OpenAction", "/AA", "/AcroForm")
 def _clean_pdf(data: bytes, max_pages: int) -> SafeFile | Rejection:
     encrypted = Rejection("pdf_encrypted", "Password-protected or encrypted PDFs are not accepted.")
     corrupt = Rejection("corrupt", "The PDF file is damaged or can't be read.")
+    damaged = Rejection(
+        "pdf_damaged",
+        "The PDF file is damaged or incomplete (for example cut off "
+        "while copying); please upload the original file again.",
+    )
     try:
         with pikepdf.open(io.BytesIO(data)) as pdf:
+            # qpdf warns while opening only when it had to recover the file
+            # (truncated, xref rebuilt): its repair would not be the file sent.
+            # Later warnings (e.g. a wrong stream /Length) are benign quirks.
+            if pdf.get_warnings():
+                return damaged
             if pdf.is_encrypted:
                 return encrypted
             pages = len(pdf.pages)
@@ -239,17 +249,12 @@ def _clean_pdf(data: bytes, max_pages: int) -> SafeFile | Rejection:
                     "The PDF contains active content (scripts, launch or form-submit "
                     "actions, links to other files, embedded files, rich media or XFA forms).",
                 )
+            # qpdf --check: errors (not warnings) mean broken structure or streams.
+            if any(p.startswith("ERROR") for p in pdf.check_pdf_syntax()):
+                return damaged
             _strip_auto_actions(pdf)
             out = io.BytesIO()
             pdf.save(out)
-            # qpdf warns when it had to repair the file (truncated, bad xref,
-            # broken objects): storing its repair would not be the file sent.
-            if pdf.get_warnings():
-                return Rejection(
-                    "pdf_damaged",
-                    "The PDF file is damaged or incomplete (for example cut off "
-                    "while copying); please upload the original file again.",
-                )
     except pikepdf.PasswordError:
         return encrypted
     except (pikepdf.PdfError, ValueError, RecursionError):
