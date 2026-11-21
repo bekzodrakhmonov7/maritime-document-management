@@ -8,6 +8,7 @@ through `get_storage`, so tests can put an in-memory stand-in in its place
 
 from typing import Protocol
 
+from storage3.exceptions import StorageApiError
 from supabase import acreate_client
 
 from app.config import settings
@@ -16,7 +17,17 @@ BUCKET = "crew-documents"
 
 
 class StorageUnavailable(Exception):
-    pass
+    """Storage couldn't be reached or failed; trying again may help."""
+
+
+class FileMissing(Exception):
+    """Storage answered, but holds no object at this path; trying again won't help."""
+
+
+def _is_not_found(exc: Exception) -> bool:
+    return isinstance(exc, StorageApiError) and (
+        str(exc.status) == "404" or exc.code in ("not_found", "NoSuchKey")
+    )
 
 
 class FileStorage(Protocol):
@@ -54,12 +65,15 @@ class SupabaseStorage:
     async def signed_url(self, path: str, ttl_seconds: int, download_name: str) -> str:
         """A URL valid for `ttl_seconds`. Storage serves the object with the
         content type it was stored with and, through `download`, a
-        Content-Disposition carrying `download_name`."""
+        Content-Disposition carrying `download_name`. No object at `path`
+        raises FileMissing; any other failure StorageUnavailable."""
         try:
             result = await (await self._bucket()).create_signed_url(
                 path, ttl_seconds, {"download": download_name}
             )
         except Exception as exc:
+            if _is_not_found(exc):
+                raise FileMissing(path) from exc
             raise StorageUnavailable(str(exc)) from exc
         return result["signedURL"]
 
