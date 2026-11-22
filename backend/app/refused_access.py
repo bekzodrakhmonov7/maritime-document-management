@@ -11,6 +11,8 @@ because the refused request's transaction rolls back.
 """
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exception_handlers import http_exception_handler
@@ -19,8 +21,9 @@ from starlette.responses import Response
 
 from app import audit
 from app.audit import AuditAction, audit_context_for, request_audit_context
-from app.deps import SessionRefused
+from app.deps import SessionRefused, account_refused
 from app.models.auth import UserPayload
+from app.services import errors
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,27 @@ class OutOfScope(HTTPException):
         self.target_type = target_type
         self.target_id = target_id
         self.seafarer_id = seafarer_id
+
+
+@contextmanager
+def errors_as_http() -> Iterator[None]:
+    """Turn the services' refusals into HTTP answers. Out of Scope looks like a
+    missing record (404) but is recorded, as is a missing responsibility
+    (403) and a review of one's own Version (403)."""
+    try:
+        yield
+    except errors.NotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc) or "Not found")
+    except errors.OutOfScope as exc:
+        raise OutOfScope(exc.target_type, exc.target_id, seafarer_id=exc.seafarer_id)
+    except errors.NotResponsible as exc:
+        raise account_refused("not_responsible", str(exc))
+    except errors.OwnVersion as exc:
+        raise account_refused("own_version", str(exc))
+    except errors.Conflict as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    except errors.Invalid as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
 
 
 def install(app: FastAPI) -> None:

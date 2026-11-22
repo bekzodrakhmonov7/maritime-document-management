@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../lib/api'
+import { apiFetch, apiSend } from '../lib/api'
 import type {
   DocumentType,
   DocumentTypeWrite,
@@ -29,13 +29,13 @@ function request<W>(collection: Collection, action: ReferenceAction<W>) {
   const base = PATHS[collection]
   switch (action.kind) {
     case 'create':
-      return apiFetch(base, { method: 'POST', body: JSON.stringify(action.body) })
+      return apiSend('POST', base, action.body)
     case 'edit':
-      return apiFetch(`${base}/${action.id}`, { method: 'PUT', body: JSON.stringify(action.body) })
+      return apiSend('PUT', `${base}/${action.id}`, action.body)
     case 'delete':
-      return apiFetch(`${base}/${action.id}`, { method: 'DELETE' })
+      return apiSend('DELETE', `${base}/${action.id}`)
     default:
-      return apiFetch(`${base}/${action.id}/${action.kind}`, { method: 'POST' })
+      return apiSend('POST', `${base}/${action.id}/${action.kind}`)
   }
 }
 

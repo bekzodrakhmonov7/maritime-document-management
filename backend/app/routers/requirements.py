@@ -4,13 +4,11 @@ All staff read the matrix and the exceptions and evaluate the required set
 for a (Position, Vessel or none) pair; administrators change them.
 """
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
-from app.audit import audit_context_for
+from app.audit import AuditContext, acting_as
 from app.deps import get_db, require_role
 from app.models.auth import UserPayload
 from app.models.requirements import (
@@ -21,24 +19,12 @@ from app.models.requirements import (
     RequirementExceptionRead,
     RequirementExceptionWrite,
 )
-from app.services import errors
+from app.refused_access import errors_as_http
 from app.services import requirements as svc
 from app.routers.params import Id
 
-admin_only = require_role("administrator")
+admin_ctx = acting_as("administrator")
 all_staff = require_role("administrator", "crewing_officer", "manager")
-
-
-@contextmanager
-def _errors_as_http() -> Iterator[None]:
-    try:
-        yield
-    except errors.NotFound as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc) or "Not found")
-    except errors.Conflict as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
-    except errors.Invalid as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
 
 
 # --- The matrix and the preview ----------------------------------------------------
@@ -58,7 +44,7 @@ async def evaluate(
     db: asyncpg.Connection = Depends(get_db),
     _: UserPayload = Depends(all_staff),
 ):
-    with _errors_as_http():
+    with errors_as_http():
         return await svc.evaluate(db, position, vessel)
 
 
@@ -66,12 +52,11 @@ async def evaluate(
 async def set_requirement(
     position_id: Id,
     document_type_id: Id,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    with _errors_as_http():
-        await svc.set_requirement(db, audit_context_for(request, admin), position_id, document_type_id)
+    with errors_as_http():
+        await svc.set_requirement(db, ctx, position_id, document_type_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -79,24 +64,22 @@ async def set_requirement(
 async def clear_requirement(
     position_id: Id,
     document_type_id: Id,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    await svc.clear_requirement(db, audit_context_for(request, admin), position_id, document_type_id)
+    await svc.clear_requirement(db, ctx, position_id, document_type_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @matrix.post("/add-to-all-positions", response_model=AddedToAllPositions)
 async def add_to_all_positions(
     body: AddToAllPositions,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    with _errors_as_http():
+    with errors_as_http():
         added = await svc.add_to_all_positions(
-            db, audit_context_for(request, admin), body.document_type_id
+            db, ctx, body.document_type_id
         )
     return {"added": added}
 
@@ -116,35 +99,32 @@ async def list_exceptions(
 @exceptions.post("", response_model=RequirementExceptionRead, status_code=status.HTTP_201_CREATED)
 async def create_exception(
     body: RequirementExceptionWrite,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    with _errors_as_http():
-        return await svc.create_exception(db, audit_context_for(request, admin), body.model_dump())
+    with errors_as_http():
+        return await svc.create_exception(db, ctx, body.model_dump())
 
 
 @exceptions.put("/{exception_id}", response_model=RequirementExceptionRead)
 async def edit_exception(
     exception_id: Id,
     body: RequirementExceptionWrite,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    with _errors_as_http():
+    with errors_as_http():
         return await svc.edit_exception(
-            db, audit_context_for(request, admin), exception_id, body.model_dump()
+            db, ctx, exception_id, body.model_dump()
         )
 
 
 @exceptions.delete("/{exception_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_exception(
     exception_id: Id,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    with _errors_as_http():
-        await svc.delete_exception(db, audit_context_for(request, admin), exception_id)
+    with errors_as_http():
+        await svc.delete_exception(db, ctx, exception_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

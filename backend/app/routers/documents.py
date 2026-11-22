@@ -31,7 +31,7 @@ from pydantic import BaseModel, ValidationError
 from starlette.datastructures import FormData, UploadFile
 from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
 
-from app.audit import audit_context_for
+
 from app.deps import get_db
 from app.models.document import (
     DocumentRead,
@@ -42,7 +42,8 @@ from app.models.document import (
     VerificationDetails,
     VersionDetails,
 )
-from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
+from app.refused_access import errors_as_http
+from app.routers.crew_access import CrewAccess, get_crew_access
 from app.services import documents as svc
 from app.services import reviews
 from app.storage import FileMissing, FileStorage, StorageUnavailable, get_storage
@@ -98,13 +99,12 @@ async def upload_version(
     """Upload a file with its details (multipart: `file`, `document_number`,
     `issuing_authority`, `issue_date`, `expiry_date`). Creates the seafarer's
     Document of this type on its first upload; otherwise adds a Version."""
-    ctx = audit_context_for(request, access.user)
     with errors_as_http():
         await svc.check_can_add(db, access.scope, seafarer_id, document_type_id)
 
     async def refuse(rejection: Rejection, size: int | None, filename: str | None) -> NoReturn:
         await svc.record_upload_rejected(
-            db, ctx, seafarer_id, document_type_id, rejection, size, filename
+            db, access.ctx, seafarer_id, document_type_id, rejection, size, filename
         )
         _raise_refusal(rejection)
 
@@ -120,7 +120,7 @@ async def upload_version(
     async with _deleted_on_failure(storage, stored):
         with errors_as_http():
             return await svc.add_version(
-                db, ctx, access.scope, access.user.sub, seafarer_id, document_type_id,
+                db, access.ctx, access.scope, access.user.sub, seafarer_id, document_type_id,
                 received.fields, stored,
             )
 
@@ -144,14 +144,13 @@ async def get_document(
 async def add_details_version(
     document_id: Id,
     body: VersionDetails,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
     """A details-only Version: corrected details, the Current Version's file."""
     with errors_as_http():
         return await svc.add_details_version(
-            db, audit_context_for(request, access.user), access.scope, access.user.sub,
+            db, access.ctx, access.scope, access.user.sub,
             document_id, body.model_dump(),
         )
 
@@ -159,7 +158,6 @@ async def add_details_version(
 @router.post("/versions/{version_id}/file-url", response_model=FileUrl)
 async def issue_file_url(
     version_id: Id,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
     storage: FileStorage = Depends(get_storage),
@@ -168,7 +166,7 @@ async def issue_file_url(
     try:
         with errors_as_http():
             return await svc.issue_file_url(
-                db, audit_context_for(request, access.user), access.scope, storage, version_id
+                db, access.ctx, access.scope, storage, version_id
             )
     except FileMissing:
         raise _file_missing()
@@ -184,14 +182,13 @@ async def issue_file_url(
 async def review_version(
     version_id: Id,
     body: ReviewWrite,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
     """Accept or reject a Version with a comment. Never by its uploader (403)."""
     with errors_as_http():
         return await reviews.review(
-            db, audit_context_for(request, access.user), access.scope, access.user.sub,
+            db, access.ctx, access.scope, access.user.sub,
             version_id, body.decision, body.comment,
         )
 
@@ -212,12 +209,11 @@ async def record_verification(
     """Record a Verification (form fields `checked_on`, `source`, `result`,
     `reference`) with an optional proof `file`, which passes the same Safety
     Checks as a document file."""
-    ctx = audit_context_for(request, access.user)
     with errors_as_http():
         version = await reviews.check_can_verify(db, access.scope, version_id)
 
     async def refuse(rejection: Rejection, size: int | None, filename: str | None) -> NoReturn:
-        await reviews.record_proof_rejected(db, ctx, version, rejection, size, filename)
+        await reviews.record_proof_rejected(db, access.ctx, version, rejection, size, filename)
         _raise_refusal(rejection)
 
     async def check(details: dict) -> None:
@@ -234,14 +230,13 @@ async def record_verification(
     async with _deleted_on_failure(storage, stored):
         with errors_as_http():
             return await reviews.add_verification(
-                db, ctx, access.scope, access.user.sub, version_id, received.fields, stored
+                db, access.ctx, access.scope, access.user.sub, version_id, received.fields, stored
             )
 
 
 @router.post("/verifications/{verification_id}/proof-url", response_model=FileUrl)
 async def issue_proof_url(
     verification_id: Id,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
     storage: FileStorage = Depends(get_storage),
@@ -250,7 +245,7 @@ async def issue_proof_url(
     try:
         with errors_as_http():
             return await reviews.issue_proof_url(
-                db, audit_context_for(request, access.user), access.scope, storage, verification_id
+                db, access.ctx, access.scope, storage, verification_id
             )
     except FileMissing:
         raise _file_missing("The proof file for this Verification was not found in storage.")

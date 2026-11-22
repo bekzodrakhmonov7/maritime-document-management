@@ -8,17 +8,18 @@ from datetime import date
 from typing import Annotated
 
 import asyncpg
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
-from app.audit import audit_context_for
+
 from app.deps import get_db
 from app.models.assignment import AssignmentRead
 from app.models.coverage import SeafarerRecord
 from app.models.seafarer import SeafarerRead, SeafarerWrite, SetInactive
 from app.models.text import NO_NUL
-from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
+from app.refused_access import errors_as_http
+from app.routers.crew_access import CrewAccess, get_crew_access
 from app.services import assignments, coverage
 from app.services import seafarers as svc
 from app.routers.params import Id
@@ -64,13 +65,12 @@ async def get_seafarer(
 @router.post("", response_model=SeafarerRead, status_code=status.HTTP_201_CREATED)
 async def create_seafarer(
     body: SeafarerWrite,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
     with errors_as_http():
         return await svc.create(
-            db, audit_context_for(request, access.user), _born_by(body, access.scope.today)
+            db, access.ctx, _born_by(body, access.scope.today)
         )
 
 
@@ -78,13 +78,12 @@ async def create_seafarer(
 async def edit_seafarer(
     seafarer_id: Id,
     body: SeafarerWrite,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
     with errors_as_http():
         return await svc.edit(
-            db, audit_context_for(request, access.user), access.scope, seafarer_id,
+            db, access.ctx, access.scope, seafarer_id,
             _born_by(body, access.scope.today),
         )
 
@@ -93,26 +92,24 @@ async def edit_seafarer(
 async def set_seafarer_inactive(
     seafarer_id: Id,
     body: SetInactive,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
     with errors_as_http():
         return await svc.set_inactive(
-            db, audit_context_for(request, access.user), access.scope, seafarer_id, body.reason
+            db, access.ctx, access.scope, seafarer_id, body.reason
         )
 
 
 @router.post("/{seafarer_id}/reactivate", response_model=SeafarerRead)
 async def reactivate_seafarer(
     seafarer_id: Id,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
     with errors_as_http():
         return await svc.reactivate(
-            db, audit_context_for(request, access.user), access.scope, seafarer_id
+            db, access.ctx, access.scope, seafarer_id
         )
 
 

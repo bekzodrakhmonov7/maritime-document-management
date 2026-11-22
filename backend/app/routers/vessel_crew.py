@@ -10,18 +10,19 @@
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
-from app.audit import audit_context_for
+from app.audit import AuditContext, acting_as
 from app.deps import get_db, require_role
 from app.models.assignment import AssignmentRead
 from app.models.auth import UserPayload
 from app.models.responsible_officer import AddResponsibleOfficer, ResponsibleOfficerRead
-from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
+from app.refused_access import errors_as_http
+from app.routers.crew_access import CrewAccess, get_crew_access
 from app.services import assignments, responsible_officers as svc
 from app.routers.params import Id
 
-admin_only = require_role("administrator")
+admin_ctx = acting_as("administrator")
 fleet_readers = require_role("administrator", "crewing_officer")
 
 router = APIRouter(prefix="/vessels/{vessel_id}", tags=["vessels"])
@@ -55,22 +56,20 @@ async def list_responsible_officers(
 async def add_responsible_officer(
     vessel_id: Id,
     body: AddResponsibleOfficer,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
     with errors_as_http():
-        return await svc.add(db, audit_context_for(request, admin), vessel_id, body.account_id)
+        return await svc.add(db, ctx, vessel_id, body.account_id)
 
 
 @router.delete("/responsible-officers/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_responsible_officer(
     vessel_id: Id,
     account_id: UUID,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
     with errors_as_http():
-        await svc.remove(db, audit_context_for(request, admin), vessel_id, account_id)
+        await svc.remove(db, ctx, vessel_id, account_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

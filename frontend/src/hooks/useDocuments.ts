@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../lib/api'
+import { apiFetch, apiSend, invalidate } from '../lib/api'
 import type {
   DocumentDetail,
   DocumentSummary,
@@ -39,10 +39,7 @@ export type VersionAction =
 
 function request(action: VersionAction) {
   if (action.kind === 'details') {
-    return apiFetch<DocumentDetail>(`/api/documents/${action.documentId}/versions`, {
-      method: 'POST',
-      body: JSON.stringify(action.details),
-    })
+    return apiSend<DocumentDetail>('POST', `/api/documents/${action.documentId}/versions`, action.details)
   }
   const form = new FormData()
   Object.entries(action.details).forEach(([key, value]) => {
@@ -63,12 +60,13 @@ function useDocumentChange<T>(mutationFn: (args: T) => Promise<DocumentDetail>) 
     mutationFn,
     onSuccess: (document) => {
       queryClient.setQueryData(['documents', document.id], document)
-      return Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['documents', 'seafarer', document.seafarer_id] }),
-        queryClient.invalidateQueries({ queryKey: ['seafarers', document.seafarer_id] }),
-        queryClient.invalidateQueries({ queryKey: ['readiness'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-      ])
+      return invalidate(
+        queryClient,
+        ['documents', 'seafarer', document.seafarer_id],
+        ['seafarers', document.seafarer_id],
+        ['readiness'],
+        ['dashboard'],
+      )
     },
   })
 }
@@ -82,10 +80,7 @@ export function useAddVersion() {
 export function useReviewVersion() {
   return useDocumentChange(
     ({ versionId, decision, comment }: { versionId: number; decision: ReviewDecision; comment: string }) =>
-      apiFetch<DocumentDetail>(`/api/versions/${versionId}/reviews`, {
-        method: 'POST',
-        body: JSON.stringify({ decision, comment }),
-      }),
+      apiSend<DocumentDetail>('POST', `/api/versions/${versionId}/reviews`, { decision, comment }),
   )
 }
 
@@ -107,7 +102,7 @@ export function useRecordVerification() {
 function useOpenSignedFile(path: (id: number) => string) {
   return useMutation({
     mutationFn: async (id: number) => {
-      const file = await apiFetch<FileUrl>(path(id), { method: 'POST' })
+      const file = await apiSend<FileUrl>('POST', path(id))
       window.location.assign(file.url)
       return file
     },

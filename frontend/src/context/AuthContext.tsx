@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { apiFetch, onAccountSwitchedOff, onSessionRefused, refreshSession } from '../lib/api'
+import { apiFetch, apiSend, onAccountSwitchedOff, onSessionRefused, refreshSession } from '../lib/api'
 import {
   forgetLegacySessions,
   onSessionChange,
@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Auth. Best effort: signing out must work even when the API can't be
     // reached.
     try {
-      await apiFetch('/api/auth/logout', { method: 'POST' })
+      await apiSend('POST', '/api/auth/logout')
     } catch {
       // ignored
     }
@@ -172,8 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Every sign-in step goes through the API's sign-in proxy (ADR 0005,
   // ADR 0007): it records failed attempts (FR-22) and lets only sessions that
   // passed both the password and the authenticator code into the API.
-  const post = <T,>(path: string, body: unknown) =>
-    apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) })
+  const post = <T,>(path: string, body: unknown) => apiSend<T>('POST', path, body)
 
   const signIn = (email: string, password: string) =>
     post<SignInStep>('/api/auth/login', { email, password })

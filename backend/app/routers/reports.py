@@ -6,12 +6,13 @@ outside, recorded); managers get 403. Every generated report is audited.
 """
 
 import asyncpg
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Response
 
-from app.audit import audit_context_for
+
 from app.deps import get_db
 from app.reports import ReportFormat
-from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
+from app.refused_access import errors_as_http
+from app.routers.crew_access import CrewAccess, get_crew_access
 from app.services import reports as svc
 from app.services.reports import RenderedReport
 from app.routers.params import Id
@@ -33,7 +34,6 @@ def _download(report: RenderedReport) -> Response:
 @router.get("/assignments/{assignment_id}/report")
 async def assignment_report(
     assignment_id: Id,
-    request: Request,
     format: ReportFormat = Query(...),
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
@@ -41,7 +41,7 @@ async def assignment_report(
     """The readiness view of one upcoming or under-way Assignment, frozen."""
     with errors_as_http():
         report = await svc.assignment_report(
-            db, audit_context_for(request, access.user), access.user, access.scope,
+            db, access.ctx, access.user, access.scope,
             assignment_id, format,
         )
     return _download(report)
@@ -50,7 +50,6 @@ async def assignment_report(
 @router.get("/vessels/{vessel_id}/report")
 async def vessel_report(
     vessel_id: Id,
-    request: Request,
     format: ReportFormat = Query(...),
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
@@ -59,7 +58,7 @@ async def vessel_report(
     Planning Horizon, with the vessel's counter totals."""
     with errors_as_http():
         report = await svc.vessel_report(
-            db, audit_context_for(request, access.user), access.user, access.scope,
+            db, access.ctx, access.user, access.scope,
             vessel_id, format,
         )
     return _download(report)

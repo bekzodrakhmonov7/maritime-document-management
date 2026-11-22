@@ -11,8 +11,9 @@ import { EndorsementCapNote } from './EndorsementCapNote'
 import { effectiveExpiryOf, hasCapNote } from '../lib/effectiveExpiry'
 import { NotReviewedTag } from './ReviewTags'
 import { VerificationBadge } from './verificationBadge.ts'
-import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
+import { Field, FIELD_CLASS, FormDialog } from './FormDialog'
 import { FILE_SIZE_CEILING_MB } from '../lib/fileSize'
+import { Table } from './Table'
 
 /** Which Version dialog is open: a first upload (pick the type), a new file
  * for an existing document (renewal), or corrected details only. */
@@ -145,10 +146,7 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
       error={action.error}
     >
       {state.kind === 'new' && (
-        <div>
-          <label htmlFor="version-type" className={LABEL_CLASS}>
-            Document type
-          </label>
+        <Field id="version-type" label="Document type">
           <select
             id="version-type"
             className={FIELD_CLASS}
@@ -162,7 +160,7 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
               </option>
             ))}
           </select>
-        </div>
+        </Field>
       )}
       {state.kind === 'details' && (
         <p className="text-sm text-ink-muted">
@@ -170,34 +168,22 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label htmlFor="version-number" className={LABEL_CLASS}>
-            Document number
-          </label>
+        <Field id="version-number" label="Document number">
           <input id="version-number" className={FIELD_CLASS} value={details.document_number} onChange={set('document_number')} />
-        </div>
-        <div>
-          <label htmlFor="version-authority" className={LABEL_CLASS}>
-            Issuing authority
-          </label>
+        </Field>
+        <Field id="version-authority" label="Issuing authority">
           <input
             id="version-authority"
             className={FIELD_CLASS}
             value={details.issuing_authority}
             onChange={set('issuing_authority')}
           />
-        </div>
-        <div>
-          <label htmlFor="version-issued" className={LABEL_CLASS}>
-            Issue date
-          </label>
+        </Field>
+        <Field id="version-issued" label="Issue date">
           <input id="version-issued" type="date" className={FIELD_CLASS} value={details.issue_date} onChange={set('issue_date')} />
-        </div>
+        </Field>
         {type?.expires !== false && (
-          <div>
-            <label htmlFor="version-expiry" className={LABEL_CLASS}>
-              Expiry date
-            </label>
+          <Field id="version-expiry" label="Expiry date">
             <input
               id="version-expiry"
               type="date"
@@ -206,7 +192,7 @@ export function VersionDialog({ state, onClose }: { state: VersionDialogState; o
               onChange={set('expiry_date')}
               disabled={notStated}
             />
-          </div>
+          </Field>
         )}
       </div>
       {type?.expires && (
@@ -249,65 +235,54 @@ export function DocumentsTable({
   onRenew?: (document: DocumentSummary) => void
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-line bg-canvas">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-line bg-surface text-xs text-ink-faint">
-          <tr>
-            <th scope="col" className="px-4 py-3">Document</th>
-            <th scope="col" className="px-4 py-3">Number</th>
-            <th scope="col" className="px-4 py-3">Expires</th>
-            <th scope="col" className="px-4 py-3">Status</th>
-            <th scope="col" className="px-4 py-3">Versions</th>
-            {onRenew && <th scope="col" className="px-4 py-3 text-right">Actions</th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {documents?.length === 0 && (
-            <tr>
-              <td colSpan={onRenew ? 6 : 5} className="px-4 py-6 text-center text-ink-faint">
-                No documents yet.
-              </td>
-            </tr>
-          )}
-          {documents?.map((d) => (
-            <tr key={d.id}>
-              <td className="px-4 py-3">
-                <Link to={`/documents/${d.id}`} className="inline-flex items-center gap-2 text-ink hover:underline">
-                  <FileText className="h-4 w-4 text-ink-faint" aria-hidden="true" />
-                  {d.document_type_name}
-                </Link>
-                {d.document_type_retired && <span className="ml-2 text-xs text-ink-faint">(retired type)</span>}
-              </td>
-              <td className="px-4 py-3 text-ink-muted">{d.current_version?.document_number ?? '—'}</td>
-              <td className="px-4 py-3 text-ink-muted">
-                <ExpiryCell document={d} />
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <ExpiryStatusBadge status={d.expiry_status} />
-                  {d.current_version?.review_state === 'not_reviewed' && <NotReviewedTag />}
-                  <VerificationBadge verified={d.verified} />
-                </div>
-              </td>
-              <td className="px-4 py-3 text-ink-muted">{d.version_count}</td>
-              {onRenew && (
-                <td className="px-4 py-3 text-right">
-                  {!d.document_type_retired && (
-                    <button
-                      type="button"
-                      onClick={() => onRenew(d)}
-                      className="h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active"
-                    >
-                      New version
-                    </button>
-                  )}
-                </td>
+    <Table
+      head={[
+        'Document',
+        'Number',
+        'Expires',
+        'Status',
+        'Versions',
+        ...(onRenew ? [{ label: 'Actions', className: 'text-right' }] : []),
+      ]}
+      empty={documents?.length === 0 ? 'No documents yet.' : null}
+    >
+      {documents?.map((d) => (
+        <tr key={d.id}>
+          <td className="px-4 py-3">
+            <Link to={`/documents/${d.id}`} className="inline-flex items-center gap-2 text-ink hover:underline">
+              <FileText className="h-4 w-4 text-ink-faint" aria-hidden="true" />
+              {d.document_type_name}
+            </Link>
+            {d.document_type_retired && <span className="ml-2 text-xs text-ink-faint">(retired type)</span>}
+          </td>
+          <td className="px-4 py-3 text-ink-muted">{d.current_version?.document_number ?? '—'}</td>
+          <td className="px-4 py-3 text-ink-muted">
+            <ExpiryCell document={d} />
+          </td>
+          <td className="px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <ExpiryStatusBadge status={d.expiry_status} />
+              {d.current_version?.review_state === 'not_reviewed' && <NotReviewedTag />}
+              <VerificationBadge verified={d.verified} />
+            </div>
+          </td>
+          <td className="px-4 py-3 text-ink-muted">{d.version_count}</td>
+          {onRenew && (
+            <td className="px-4 py-3 text-right">
+              {!d.document_type_retired && (
+                <button
+                  type="button"
+                  onClick={() => onRenew(d)}
+                  className="h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active"
+                >
+                  New version
+                </button>
               )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+            </td>
+          )}
+        </tr>
+      ))}
+    </Table>
   )
 }
 

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../lib/api'
+import { apiFetch, apiSend } from '../lib/api'
 import type { Settings, SettingsWrite } from '../types'
 
 export function useSettings() {
@@ -9,8 +9,7 @@ export function useSettings() {
 export function useSaveSettings() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (body: SettingsWrite) =>
-      apiFetch<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
+    mutationFn: (body: SettingsWrite) => apiSend<Settings>('PUT', '/api/settings', body),
     onSuccess: (saved) => queryClient.setQueryData(['settings'], saved),
   })
 }

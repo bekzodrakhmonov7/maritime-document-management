@@ -5,8 +5,9 @@ import { useVessels } from '../hooks/useReferenceData'
 import { cn } from '../lib/cn'
 import { BADGE_TONE } from '../lib/badgeTone'
 import { ErrorNote } from '../components/ErrorNote'
-import { FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
+import { Field, FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
 import { ROLE_LABELS, type Account, type AccountStatus, type UserRole } from '../types'
+import { Table } from '../components/Table'
 
 type Filter = AccountStatus | 'all'
 type FormKind = AccountAction['kind']
@@ -95,82 +96,58 @@ export function AccountsPage() {
 
       {error && <ErrorNote message={error.message} />}
 
-      <div className="overflow-x-auto rounded-md border border-line bg-canvas">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
-            <tr>
-              <th scope="col" className="px-4 py-3">Name</th>
-              <th scope="col" className="px-4 py-3">E-mail</th>
-              <th scope="col" className="px-4 py-3">Status</th>
-              <th scope="col" className="px-4 py-3">Role</th>
-              <th scope="col" className="px-4 py-3">Last reason</th>
-              <th scope="col" className="px-4 py-3 text-right">Actions</th>
+      <Table
+        head={['Name', 'E-mail', 'Status', 'Role', 'Last reason', { label: 'Actions', className: 'text-right' }]}
+        loading={isLoading}
+        empty={accounts?.length === 0 ? 'No accounts here.' : null}
+      >
+        {accounts?.map((account) => {
+          const isSelf = account.id === user?.id
+          return (
+            <tr key={account.id}>
+              <td className="px-4 py-3 text-ink">{account.full_name}</td>
+              <td className="px-4 py-3 text-ink-muted">{account.email}</td>
+              <td className="px-4 py-3">
+                <span
+                  className={cn(
+                    'rounded-full px-2.5 py-1 text-xs font-medium capitalize',
+                    STATUS_STYLE[account.status],
+                  )}
+                >
+                  {account.status}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-ink-muted">
+                {account.role ? ROLE_LABELS[account.role] : '—'}
+              </td>
+              <td className="max-w-xs truncate px-4 py-3 text-ink-faint" title={account.status_reason ?? ''}>
+                {account.status_reason ?? '—'}
+              </td>
+              <td className="px-4 py-3 text-right">
+                {isSelf ? (
+                  <span className="text-xs text-ink-faint">You</span>
+                ) : (
+                  <div className="flex justify-end gap-2">
+                    {ACTIONS[account.status].map(({ kind, label }) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        onClick={() => setForm({ account, kind })}
+                        className={cn(
+                          'h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium hover:bg-surface-active focus:outline-none focus:ring-2 focus:ring-accent/40',
+                          kind === 'deactivate' ? 'text-danger' : 'text-ink',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {accounts?.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
-                  No accounts here.
-                </td>
-              </tr>
-            )}
-            {accounts?.map((account) => {
-              const isSelf = account.id === user?.id
-              return (
-                <tr key={account.id}>
-                  <td className="px-4 py-3 text-ink">{account.full_name}</td>
-                  <td className="px-4 py-3 text-ink-muted">{account.email}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={cn(
-                        'rounded-full px-2.5 py-1 text-xs font-medium capitalize',
-                        STATUS_STYLE[account.status],
-                      )}
-                    >
-                      {account.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-ink-muted">
-                    {account.role ? ROLE_LABELS[account.role] : '—'}
-                  </td>
-                  <td className="max-w-xs truncate px-4 py-3 text-ink-faint" title={account.status_reason ?? ''}>
-                    {account.status_reason ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {isSelf ? (
-                      <span className="text-xs text-ink-faint">You</span>
-                    ) : (
-                      <div className="flex justify-end gap-2">
-                        {ACTIONS[account.status].map(({ kind, label }) => (
-                          <button
-                            key={kind}
-                            type="button"
-                            onClick={() => setForm({ account, kind })}
-                            className={cn(
-                              'h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium hover:bg-surface-active focus:outline-none focus:ring-2 focus:ring-accent/40',
-                              kind === 'deactivate' ? 'text-danger' : 'text-ink',
-                            )}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+          )
+        })}
+      </Table>
 
       {form && (
         <AccountForm
@@ -240,10 +217,7 @@ function AccountForm({
       error={action.error}
     >
       {needsRole && (
-        <div>
-          <label htmlFor="account-role" className={LABEL_CLASS}>
-            Role
-          </label>
+        <Field id="account-role" label="Role">
           <select
             id="account-role"
             required
@@ -265,7 +239,7 @@ function AccountForm({
               Changing a crewing officer's role removes their vessel links.
             </p>
           )}
-        </div>
+        </Field>
       )}
 
       {pickVessels && (
@@ -311,10 +285,7 @@ function AccountForm({
         </p>
       )}
 
-      <div>
-        <label htmlFor="account-reason" className={LABEL_CLASS}>
-          Reason
-        </label>
+      <Field id="account-reason" label="Reason">
         <textarea
           id="account-reason"
           required
@@ -325,7 +296,7 @@ function AccountForm({
           className={FIELD_CLASS}
           placeholder="Recorded in the Audit Log"
         />
-      </div>
+      </Field>
     </FormDialog>
   )
 }

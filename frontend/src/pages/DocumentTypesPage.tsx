@@ -4,9 +4,10 @@ import { useDocumentTypeAction, useDocumentTypes } from '../hooks/useReferenceDa
 import type { DocumentType, DocumentTypeWrite } from '../types'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
-import { FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
+import { Field, FIELD_CLASS, FormDialog } from '../components/FormDialog'
 import { RetirableActions, RetireDialog, type RetireKind } from '../components/RetireDialog'
 import { StateBadge } from '../components/StateBadge'
+import { Table } from '../components/Table'
 
 type Dialog =
   | { kind: 'create' }
@@ -37,60 +38,43 @@ export function DocumentTypesPage() {
 
       {error && <ErrorNote message={error.message} />}
 
-      <div className="overflow-x-auto rounded-md border border-line bg-canvas">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
-            <tr>
-              <th scope="col" className="px-4 py-3">Name</th>
-              <th scope="col" className="px-4 py-3">Expires</th>
-              <th scope="col" className="px-4 py-3">Max validity</th>
-              <th scope="col" className="px-4 py-3">Renewable at sea</th>
-              <th scope="col" className="px-4 py-3">Endorsement of</th>
-              <th scope="col" className="px-4 py-3">Status</th>
-              <th scope="col" className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {isLoading && (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-ink-faint">
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {types?.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-ink-faint">
-                  No Document Types yet.
-                </td>
-              </tr>
-            )}
-            {types?.map((t) => (
-              <tr key={t.id}>
-                <td className="px-4 py-3 text-ink">{t.name}</td>
-                <td className="px-4 py-3 text-ink-muted">{t.expires ? 'Yes' : 'No'}</td>
-                <td className="px-4 py-3 text-ink-muted">
-                  {t.max_validity_months ? `${t.max_validity_months} months` : '—'}
-                </td>
-                <td className="px-4 py-3 text-ink-muted">{t.renewable_at_sea ? 'Yes' : 'No'}</td>
-                <td className="px-4 py-3 text-ink-muted">
-                  {t.depends_on_id ? nameOf.get(t.depends_on_id) : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  <StateBadge on={!t.retired} label={t.retired ? 'Retired' : 'In use'} />
-                </td>
-                <td className="px-4 py-3">
-                  <RetirableActions
-                    retired={t.retired}
-                    onEdit={() => setDialog({ kind: 'edit', docType: t })}
-                    onRetire={(kind) => setDialog({ kind, docType: t })}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        head={[
+          'Name',
+          'Expires',
+          'Max validity',
+          'Renewable at sea',
+          'Endorsement of',
+          'Status',
+          { label: 'Actions', className: 'text-right' },
+        ]}
+        loading={isLoading}
+        empty={types?.length === 0 ? 'No Document Types yet.' : null}
+      >
+        {types?.map((t) => (
+          <tr key={t.id}>
+            <td className="px-4 py-3 text-ink">{t.name}</td>
+            <td className="px-4 py-3 text-ink-muted">{t.expires ? 'Yes' : 'No'}</td>
+            <td className="px-4 py-3 text-ink-muted">
+              {t.max_validity_months ? `${t.max_validity_months} months` : '—'}
+            </td>
+            <td className="px-4 py-3 text-ink-muted">{t.renewable_at_sea ? 'Yes' : 'No'}</td>
+            <td className="px-4 py-3 text-ink-muted">
+              {t.depends_on_id ? nameOf.get(t.depends_on_id) : '—'}
+            </td>
+            <td className="px-4 py-3">
+              <StateBadge on={!t.retired} label={t.retired ? 'Retired' : 'In use'} />
+            </td>
+            <td className="px-4 py-3">
+              <RetirableActions
+                retired={t.retired}
+                onEdit={() => setDialog({ kind: 'edit', docType: t })}
+                onRetire={(kind) => setDialog({ kind, docType: t })}
+              />
+            </td>
+          </tr>
+        ))}
+      </Table>
 
       {(dialog?.kind === 'create' || dialog?.kind === 'edit') && (
         <DocumentTypeForm
@@ -168,10 +152,7 @@ function DocumentTypeForm({
       canSubmit={canSubmit}
       error={action.error}
     >
-      <div>
-        <label htmlFor="doctype-name" className={LABEL_CLASS}>
-          Name
-        </label>
+      <Field id="doctype-name" label="Name">
         <input
           id="doctype-name"
           required
@@ -181,7 +162,7 @@ function DocumentTypeForm({
           className={FIELD_CLASS}
           placeholder="e.g. Passport"
         />
-      </div>
+      </Field>
 
       <label className="flex items-start gap-2 text-sm text-ink">
         <input
@@ -202,10 +183,7 @@ function DocumentTypeForm({
       </label>
 
       {expires && (
-        <div>
-          <label htmlFor="doctype-max" className={LABEL_CLASS}>
-            Maximum validity in months (optional)
-          </label>
+        <Field id="doctype-max" label="Maximum validity in months (optional)">
           <input
             id="doctype-max"
             type="number"
@@ -220,7 +198,7 @@ function DocumentTypeForm({
           <p className="mt-1 text-xs text-ink-faint">
             An upload whose expiry date is later than its issue date plus this is refused.
           </p>
-        </div>
+        </Field>
       )}
 
       <label className="flex items-start gap-2 text-sm text-ink">
@@ -238,10 +216,7 @@ function DocumentTypeForm({
         </span>
       </label>
 
-      <div>
-        <label htmlFor="doctype-depends" className={LABEL_CLASS}>
-          Depends on (makes it an Endorsement)
-        </label>
+      <Field id="doctype-depends" label="Depends on (makes it an Endorsement)">
         <select
           id="doctype-depends"
           value={dependsOn}
@@ -262,7 +237,7 @@ function DocumentTypeForm({
             ? `Endorsements depend on this type (${endorsements.map((t) => t.name).join(', ')}), so it can't be one itself.`
             : 'Only an expiring type that is not itself an Endorsement can be picked.'}
         </p>
-      </div>
+      </Field>
     </FormDialog>
   )
 }

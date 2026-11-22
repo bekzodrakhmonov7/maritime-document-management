@@ -4,7 +4,7 @@ import { FLAG_OPTIONS, flagLabel } from '../lib/flags'
 import type { Vessel } from '../types'
 import { ActionButton } from './ActionButton'
 import { ConfirmDialog } from './ConfirmDialog'
-import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
+import { Field, FIELD_CLASS, FormDialog } from './FormDialog'
 
 /** Which vessel dialog is open: add, edit, or switch active on/off. */
 export type VesselDialogState =
@@ -70,10 +70,7 @@ function VesselForm({ vessel, onClose }: { vessel: Vessel | null; onClose: () =>
       canSubmit={canSubmit}
       error={action.error}
     >
-      <div>
-        <label htmlFor="vessel-name" className={LABEL_CLASS}>
-          Name
-        </label>
+      <Field id="vessel-name" label="Name">
         <input
           id="vessel-name"
           required
@@ -82,11 +79,8 @@ function VesselForm({ vessel, onClose }: { vessel: Vessel | null; onClose: () =>
           onChange={(e) => setName(e.target.value)}
           className={FIELD_CLASS}
         />
-      </div>
-      <div>
-        <label htmlFor="vessel-imo" className={LABEL_CLASS}>
-          IMO number
-        </label>
+      </Field>
+      <Field id="vessel-imo" label="IMO number">
         <input
           id="vessel-imo"
           required
@@ -98,11 +92,8 @@ function VesselForm({ vessel, onClose }: { vessel: Vessel | null; onClose: () =>
           className={FIELD_CLASS}
           placeholder="7 digits"
         />
-      </div>
-      <div>
-        <label htmlFor="vessel-flag" className={LABEL_CLASS}>
-          Flag
-        </label>
+      </Field>
+      <Field id="vessel-flag" label="Flag">
         <select
           id="vessel-flag"
           required
@@ -124,7 +115,7 @@ function VesselForm({ vessel, onClose }: { vessel: Vessel | null; onClose: () =>
             Only the current flag is kept: {flagLabel(vessel.flag)} is replaced.
           </p>
         )}
-      </div>
+      </Field>
     </FormDialog>
   )
 }

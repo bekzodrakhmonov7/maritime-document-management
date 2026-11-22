@@ -27,6 +27,7 @@ import {
   type TotalsColumn,
   type UserRole,
 } from '../types'
+import { Table } from '../components/Table'
 
 const QUEUES: DashboardQueue[] = [
   'missing',
@@ -429,39 +430,24 @@ function FleetTotalsView() {
             </select>
           </div>
 
-          <div className="overflow-x-auto rounded-md border border-line bg-canvas">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-line bg-surface text-xs text-ink-faint">
-                <tr>
-                  <th scope="col" className="px-4 py-3">{BREAKDOWN_LABELS[data.breakdown]}</th>
-                  {TOTALS_COLUMNS.map((c) => (
-                    <th key={c.key} scope="col" className="px-4 py-3 text-right">
-                      {c.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {data.rows.length === 0 && (
-                  <tr>
-                    <td colSpan={TOTALS_COLUMNS.length + 1} className="px-4 py-6 text-center text-ink-faint">
-                      Nothing to count yet.
-                    </td>
-                  </tr>
-                )}
-                {data.rows.map((row) => (
-                  <tr key={row.id ?? 'none'}>
-                    <th scope="row" className="px-4 py-3 font-medium text-ink">{row.name}</th>
-                    {TOTALS_COLUMNS.map((c) => (
-                      <td key={c.key} className="px-4 py-3 text-right text-ink-muted">
-                        {row.counts[c.key]}
-                      </td>
-                    ))}
-                  </tr>
+          <Table
+            head={[
+              BREAKDOWN_LABELS[data.breakdown],
+              ...TOTALS_COLUMNS.map((c) => ({ label: c.label, className: 'text-right' })),
+            ]}
+            empty={data.rows.length === 0 ? 'Nothing to count yet.' : null}
+          >
+            {data.rows.map((row) => (
+              <tr key={row.id ?? 'none'}>
+                <th scope="row" className="px-4 py-3 font-medium text-ink">{row.name}</th>
+                {TOTALS_COLUMNS.map((c) => (
+                  <td key={c.key} className="px-4 py-3 text-right text-ink-muted">
+                    {row.counts[c.key]}
+                  </td>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </tr>
+            ))}
+          </Table>
         </>
       )}
     </div>

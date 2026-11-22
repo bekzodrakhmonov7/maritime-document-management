@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../lib/api'
+import { apiFetch, apiSend } from '../lib/api'
 import type {
   MatrixCell,
   RequirementEvaluation,
@@ -46,26 +46,15 @@ function request(action: RequirementAction) {
   switch (action.kind) {
     case 'set':
     case 'clear':
-      return apiFetch(`/api/requirements/${action.positionId}/${action.documentTypeId}`, {
-        method: action.kind === 'set' ? 'PUT' : 'DELETE',
-      })
+      return apiSend(action.kind === 'set' ? 'PUT' : 'DELETE', `/api/requirements/${action.positionId}/${action.documentTypeId}`)
     case 'add-to-all':
-      return apiFetch('/api/requirements/add-to-all-positions', {
-        method: 'POST',
-        body: JSON.stringify({ document_type_id: action.documentTypeId }),
-      })
+      return apiSend('POST', '/api/requirements/add-to-all-positions', { document_type_id: action.documentTypeId })
     case 'create-exception':
-      return apiFetch('/api/requirement-exceptions', {
-        method: 'POST',
-        body: JSON.stringify(action.body),
-      })
+      return apiSend('POST', '/api/requirement-exceptions', action.body)
     case 'edit-exception':
-      return apiFetch(`/api/requirement-exceptions/${action.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(action.body),
-      })
+      return apiSend('PUT', `/api/requirement-exceptions/${action.id}`, action.body)
     case 'delete-exception':
-      return apiFetch(`/api/requirement-exceptions/${action.id}`, { method: 'DELETE' })
+      return apiSend('DELETE', `/api/requirement-exceptions/${action.id}`)
   }
 }
 

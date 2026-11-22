@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-react'
 import { EMPTY_AUDIT_FILTERS, useAuditLog, useExportAuditLog } from '../hooks/useAuditLog'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
-import { FIELD_CLASS, LABEL_CLASS } from '../components/FormDialog'
+import { Field, FIELD_CLASS, LABEL_CLASS } from '../components/FormDialog'
 import { cn } from '../lib/cn'
 import {
   AUDIT_ACTION_LABELS,
@@ -11,9 +11,9 @@ import {
   type AuditFilters,
   type AuditRecord,
 } from '../types'
+import { Table } from '../components/Table'
 
 const PAGE_SIZE = 50
-const COLUMNS = 6
 const ACTIONS = Object.entries(AUDIT_ACTION_LABELS) as [AuditAction, string][]
 
 function actionLabel(action: string): string {
@@ -107,8 +107,7 @@ export function AuditLogPage() {
         aria-label="Audit Log filters"
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label htmlFor="audit-from" className={LABEL_CLASS}>From</label>
+          <Field id="audit-from" label="From">
             <input
               id="audit-from"
               type="date"
@@ -116,9 +115,8 @@ export function AuditLogPage() {
               onChange={(e) => set('date_from', e.target.value)}
               className={FIELD_CLASS}
             />
-          </div>
-          <div>
-            <label htmlFor="audit-to" className={LABEL_CLASS}>To</label>
+          </Field>
+          <Field id="audit-to" label="To">
             <input
               id="audit-to"
               type="date"
@@ -127,9 +125,8 @@ export function AuditLogPage() {
               onChange={(e) => set('date_to', e.target.value)}
               className={FIELD_CLASS}
             />
-          </div>
-          <div>
-            <label htmlFor="audit-actor" className={LABEL_CLASS}>Actor e-mail</label>
+          </Field>
+          <Field id="audit-actor" label="Actor e-mail">
             <input
               id="audit-actor"
               type="search"
@@ -139,9 +136,8 @@ export function AuditLogPage() {
               placeholder="Part of the e-mail"
               className={FIELD_CLASS}
             />
-          </div>
-          <div>
-            <label htmlFor="audit-outcome" className={LABEL_CLASS}>Outcome</label>
+          </Field>
+          <Field id="audit-outcome" label="Outcome">
             <select
               id="audit-outcome"
               value={draft.outcome}
@@ -152,9 +148,8 @@ export function AuditLogPage() {
               <option value="succeeded">Succeeded</option>
               <option value="refused">Refused</option>
             </select>
-          </div>
-          <div>
-            <label htmlFor="audit-seafarer" className={LABEL_CLASS}>Seafarer id</label>
+          </Field>
+          <Field id="audit-seafarer" label="Seafarer id">
             <input
               id="audit-seafarer"
               type="number"
@@ -163,9 +158,8 @@ export function AuditLogPage() {
               onChange={(e) => set('seafarer_id', e.target.value)}
               className={FIELD_CLASS}
             />
-          </div>
-          <div>
-            <label htmlFor="audit-target-type" className={LABEL_CLASS}>Target type</label>
+          </Field>
+          <Field id="audit-target-type" label="Target type">
             <input
               id="audit-target-type"
               value={draft.target_type}
@@ -174,9 +168,8 @@ export function AuditLogPage() {
               placeholder="e.g. vessel"
               className={FIELD_CLASS}
             />
-          </div>
-          <div>
-            <label htmlFor="audit-target-id" className={LABEL_CLASS}>Target id</label>
+          </Field>
+          <Field id="audit-target-id" label="Target id">
             <input
               id="audit-target-id"
               value={draft.target_id}
@@ -184,7 +177,7 @@ export function AuditLogPage() {
               onChange={(e) => set('target_id', e.target.value)}
               className={FIELD_CLASS}
             />
-          </div>
+          </Field>
         </div>
 
         <fieldset>
@@ -225,76 +218,48 @@ export function AuditLogPage() {
         </p>
       )}
 
-      <div
-        className={cn(
-          'overflow-x-auto rounded-md border border-line bg-canvas',
-          isFetching && 'opacity-70',
-        )}
+      <Table
+        className={isFetching ? 'opacity-70' : undefined}
+        head={['When', 'Actor', 'Action', 'Outcome', 'Target', 'Details']}
+        loading={isLoading}
+        empty={data?.items.length === 0 ? 'No Audit Records match these filters.' : null}
       >
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
-            <tr>
-              <th scope="col" className="px-4 py-3">When</th>
-              <th scope="col" className="px-4 py-3">Actor</th>
-              <th scope="col" className="px-4 py-3">Action</th>
-              <th scope="col" className="px-4 py-3">Outcome</th>
-              <th scope="col" className="px-4 py-3">Target</th>
-              <th scope="col" className="px-4 py-3">Details</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {isLoading && (
-              <tr>
-                <td colSpan={COLUMNS} className="px-4 py-6 text-center text-ink-faint">
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {data?.items.length === 0 && (
-              <tr>
-                <td colSpan={COLUMNS} className="px-4 py-6 text-center text-ink-faint">
-                  No Audit Records match these filters.
-                </td>
-              </tr>
-            )}
-            {data?.items.map((record) => (
-              <tr key={record.id} className="align-top">
-                <td className="whitespace-nowrap px-4 py-3 text-ink-muted">
-                  {formatTime(record.occurred_at)}
-                </td>
-                <td className="px-4 py-3 text-ink-muted">
-                  <div>{actor(record)}</div>
-                  {record.actor_role && record.actor_role !== 'system' && (
-                    <div className="text-xs text-ink-faint">{record.actor_role}</div>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-ink">{actionLabel(record.action)}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={cn(
-                      'text-xs font-medium',
-                      record.outcome === 'refused' ? 'text-danger' : 'text-ink-muted',
-                    )}
-                  >
-                    {record.outcome === 'refused' ? 'Refused' : 'Succeeded'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-ink-muted">
-                  <div>{target(record)}</div>
-                  {record.seafarer_id !== null && (
-                    <div className="text-xs text-ink-faint">Seafarer {record.seafarer_id}</div>
-                  )}
-                </td>
-                <td className="max-w-md px-4 py-3 text-xs text-ink-muted">
-                  {record.reason && <div>Reason: {record.reason}</div>}
-                  {changes(record) && <div className="break-all font-mono">{changes(record)}</div>}
-                  {record.ip && <div className="text-ink-faint">IP {record.ip}</div>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        {data?.items.map((record) => (
+          <tr key={record.id} className="align-top">
+            <td className="whitespace-nowrap px-4 py-3 text-ink-muted">
+              {formatTime(record.occurred_at)}
+            </td>
+            <td className="px-4 py-3 text-ink-muted">
+              <div>{actor(record)}</div>
+              {record.actor_role && record.actor_role !== 'system' && (
+                <div className="text-xs text-ink-faint">{record.actor_role}</div>
+              )}
+            </td>
+            <td className="px-4 py-3 text-ink">{actionLabel(record.action)}</td>
+            <td className="px-4 py-3">
+              <span
+                className={cn(
+                  'text-xs font-medium',
+                  record.outcome === 'refused' ? 'text-danger' : 'text-ink-muted',
+                )}
+              >
+                {record.outcome === 'refused' ? 'Refused' : 'Succeeded'}
+              </span>
+            </td>
+            <td className="px-4 py-3 text-ink-muted">
+              <div>{target(record)}</div>
+              {record.seafarer_id !== null && (
+                <div className="text-xs text-ink-faint">Seafarer {record.seafarer_id}</div>
+              )}
+            </td>
+            <td className="max-w-md px-4 py-3 text-xs text-ink-muted">
+              {record.reason && <div>Reason: {record.reason}</div>}
+              {changes(record) && <div className="break-all font-mono">{changes(record)}</div>}
+              {record.ip && <div className="text-ink-faint">IP {record.ip}</div>}
+            </td>
+          </tr>
+        ))}
+      </Table>
 
       {data && data.total > 0 && (
         <nav className="flex items-center justify-between text-sm text-ink-muted" aria-label="Pages">

@@ -8,20 +8,19 @@ from typing import Annotated
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 
-from app.audit import AuditAction, Outcome, audit_context_for
-from app.deps import get_db, require_role
+from app.audit import AuditContext, acting_as, AuditAction, Outcome
+from app.deps import get_db
 from app.models.audit_log import MAX_PAGE_SIZE, AuditFilters, AuditPage
-from app.models.auth import UserPayload
 from app.models.text import NO_NUL
 from app.routers.params import MAX_ID
 from app.services import audit_log as svc
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
-administrator = require_role("administrator")
+admin_ctx = acting_as("administrator")
 
 
 def audit_filters(
@@ -55,24 +54,22 @@ def audit_filters(
 
 @router.get("", response_model=AuditPage)
 async def search_audit_log(
-    request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=MAX_PAGE_SIZE),
     filters: AuditFilters = Depends(audit_filters),
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(administrator),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    return await svc.search(db, audit_context_for(request, admin), filters, page, page_size)
+    return await svc.search(db, ctx, filters, page, page_size)
 
 
 @router.get("/export.csv")
 async def export_audit_log(
-    request: Request,
     filters: AuditFilters = Depends(audit_filters),
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(administrator),
+    ctx: AuditContext = Depends(admin_ctx),
 ) -> Response:
-    result = await svc.export(db, audit_context_for(request, admin), filters)
+    result = await svc.export(db, ctx, filters)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return Response(
         content=result.csv,

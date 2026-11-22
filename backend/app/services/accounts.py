@@ -18,16 +18,16 @@ import asyncpg
 from app import audit
 from app.audit import AuditAction, AuditContext
 from app.services import responsible_officers
-from app.services.errors import Invalid
+from app.services.errors import Conflict, Invalid, NotFound
 
 ACCOUNT_COLUMNS = "id, email, full_name, status, role, status_reason, status_changed_at, created_at"
 
 
-class AccountNotFound(Exception):
+class AccountNotFound(NotFound):
     pass
 
 
-class AccountConflict(Exception):
+class AccountConflict(Conflict):
     """The change isn't allowed in the account's current state."""
 
 
@@ -141,7 +141,7 @@ async def reset_second_factor(
         f"SELECT {ACCOUNT_COLUMNS} FROM public.users WHERE id = $1", account_id
     )
     if row is None:
-        raise AccountNotFound()
+        raise AccountNotFound("Account not found")
     await remove_factors(account_id)
     async with conn.transaction():
         await conn.execute("DELETE FROM public.verified_session WHERE user_id = $1", account_id)
@@ -160,7 +160,7 @@ async def _lock(conn: asyncpg.Connection, ctx: AuditContext, account_id: UUID) -
         f"SELECT {ACCOUNT_COLUMNS} FROM public.users WHERE id = $1 FOR UPDATE", account_id
     )
     if row is None:
-        raise AccountNotFound()
+        raise AccountNotFound("Account not found")
     return row
 
 

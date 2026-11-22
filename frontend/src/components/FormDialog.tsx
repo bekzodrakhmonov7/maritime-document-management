@@ -91,3 +91,25 @@ export const FIELD_CLASS =
   'w-full rounded-md border border-line-strong bg-canvas px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none'
 
 export const LABEL_CLASS = 'mb-1 block text-xs text-ink-muted'
+
+/** A labelled form control: the label points at the control with `id`. */
+export function Field({
+  id,
+  label,
+  className,
+  children,
+}: {
+  id: string
+  label: ReactNode
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <div className={className}>
+      <label htmlFor={id} className={LABEL_CLASS}>
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}

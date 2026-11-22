@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../lib/api'
+import { apiFetch, apiSend, invalidate } from '../lib/api'
 import { retryUnlessClientError } from '../lib/retry'
 import type {
   Assignment,
@@ -46,20 +46,11 @@ export type AssignmentAction =
 function request(action: AssignmentAction) {
   switch (action.kind) {
     case 'create':
-      return apiFetch<Assignment>('/api/assignments', {
-        method: 'POST',
-        body: JSON.stringify(action.body),
-      })
+      return apiSend<Assignment>('POST', '/api/assignments', action.body)
     case 'edit':
-      return apiFetch<Assignment>(`/api/assignments/${action.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(action.body),
-      })
+      return apiSend<Assignment>('PUT', `/api/assignments/${action.id}`, action.body)
     case 'cancel':
-      return apiFetch<Assignment>(`/api/assignments/${action.id}/cancel`, {
-        method: 'POST',
-        body: JSON.stringify({ reason: action.reason }),
-      })
+      return apiSend<Assignment>('POST', `/api/assignments/${action.id}/cancel`, { reason: action.reason })
   }
 }
 
@@ -70,12 +61,7 @@ export function useAssignmentAction() {
   return useMutation({
     mutationFn: request,
     onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['assignments'] }),
-        queryClient.invalidateQueries({ queryKey: ['seafarers'] }),
-        queryClient.invalidateQueries({ queryKey: ['readiness'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-      ]),
+      invalidate(queryClient, ['assignments'], ['seafarers'], ['readiness'], ['dashboard']),
   })
 }
 
@@ -95,15 +81,9 @@ export function useResponsibleOfficerAction(vesselId: number) {
   return useMutation({
     mutationFn: ({ kind, accountId }: { kind: 'add' | 'remove'; accountId: string }) =>
       kind === 'add'
-        ? apiFetch(officersPath(vesselId), {
-            method: 'POST',
-            body: JSON.stringify({ account_id: accountId }),
-          })
-        : apiFetch(`${officersPath(vesselId)}/${accountId}`, { method: 'DELETE' }),
+        ? apiSend('POST', officersPath(vesselId), { account_id: accountId })
+        : apiSend('DELETE', `${officersPath(vesselId)}/${accountId}`),
     onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['responsible-officers', vesselId] }),
-        queryClient.invalidateQueries({ queryKey: ['vessels'] }),
-      ]),
+      invalidate(queryClient, ['responsible-officers', vesselId], ['vessels']),
   })
 }

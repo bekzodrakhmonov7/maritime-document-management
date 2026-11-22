@@ -7,7 +7,8 @@ import { cn } from '../lib/cn'
 import { BADGE_TONE } from '../lib/badgeTone'
 import { ASSIGNMENT_STATE_LABELS, type Assignment, type AssignmentState, type Seafarer } from '../types'
 import { ActionButton } from './ActionButton'
-import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
+import { Field, FIELD_CLASS, FormDialog } from './FormDialog'
+import { Table } from './Table'
 
 /** Which Assignment dialog is open: plan, edit or cancel. */
 export type AssignmentDialogState =
@@ -67,80 +68,69 @@ export function AssignmentsTable({
   empty: string
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-line bg-canvas">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-line bg-surface text-xs text-ink-faint">
-          <tr>
-            <th scope="col" className="px-4 py-3">{show === 'vessel' ? 'Vessel' : 'Seafarer'}</th>
-            <th scope="col" className="px-4 py-3">Position</th>
-            <th scope="col" className="px-4 py-3">From</th>
-            <th scope="col" className="px-4 py-3">To</th>
-            <th scope="col" className="px-4 py-3">State</th>
-            <th scope="col" className="px-4 py-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {assignments?.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
-                {empty}
-              </td>
-            </tr>
-          )}
-          {assignments?.map((a) => (
-            <tr key={a.id}>
-              <td className="px-4 py-3">
-                {show === 'vessel' ? (
-                  <Link to={`/vessels/${a.vessel_id}`} className="text-ink hover:underline">
-                    {a.vessel_name}
-                  </Link>
-                ) : (
-                  <Link to={`/seafarers/${a.seafarer_id}`} className="text-ink hover:underline">
-                    {a.seafarer_first_name} {a.seafarer_last_name}
-                  </Link>
+    <Table
+      head={[
+        show === 'vessel' ? 'Vessel' : 'Seafarer',
+        'Position',
+        'From',
+        'To',
+        'State',
+        { label: 'Actions', className: 'text-right' },
+      ]}
+      empty={assignments?.length === 0 ? empty : null}
+    >
+      {assignments?.map((a) => (
+        <tr key={a.id}>
+          <td className="px-4 py-3">
+            {show === 'vessel' ? (
+              <Link to={`/vessels/${a.vessel_id}`} className="text-ink hover:underline">
+                {a.vessel_name}
+              </Link>
+            ) : (
+              <Link to={`/seafarers/${a.seafarer_id}`} className="text-ink hover:underline">
+                {a.seafarer_first_name} {a.seafarer_last_name}
+              </Link>
+            )}
+          </td>
+          <td className="px-4 py-3 text-ink-muted">
+            {a.position_name}
+            {a.position_differs && (
+              <span
+                className="ml-2 text-xs text-warning"
+                title="Differs from the held Position"
+              >
+                (not the held Position)
+              </span>
+            )}
+          </td>
+          <td className="px-4 py-3 text-ink-muted">{a.start_date}</td>
+          <td className="px-4 py-3 text-ink-muted">{a.end_date}</td>
+          <td className="px-4 py-3">
+            <span title={a.cancel_reason ?? undefined}>
+              <AssignmentStateBadge state={a.state} />
+            </span>
+          </td>
+          <td className="px-4 py-3">
+            {isChangeable(a) && (
+              <div className="flex items-center justify-end gap-2">
+                <Link
+                  to={`/assignments/${a.id}/readiness`}
+                  className="inline-flex items-center gap-1.5 h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active focus:outline-none focus:ring-2 focus:ring-accent/40"
+                >
+                  Readiness
+                </Link>
+                {onEdit && <ActionButton onClick={() => onEdit(a)}>Edit</ActionButton>}
+                {onCancel && (
+                  <ActionButton tone="danger" onClick={() => onCancel(a)}>
+                    Cancel
+                  </ActionButton>
                 )}
-              </td>
-              <td className="px-4 py-3 text-ink-muted">
-                {a.position_name}
-                {a.position_differs && (
-                  <span
-                    className="ml-2 text-xs text-warning"
-                    title="Differs from the held Position"
-                  >
-                    (not the held Position)
-                  </span>
-                )}
-              </td>
-              <td className="px-4 py-3 text-ink-muted">{a.start_date}</td>
-              <td className="px-4 py-3 text-ink-muted">{a.end_date}</td>
-              <td className="px-4 py-3">
-                <span title={a.cancel_reason ?? undefined}>
-                  <AssignmentStateBadge state={a.state} />
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                {isChangeable(a) && (
-                  <div className="flex items-center justify-end gap-2">
-                    <Link
-                      to={`/assignments/${a.id}/readiness`}
-                      className="inline-flex items-center gap-1.5 h-8 shrink-0 whitespace-nowrap rounded-md border border-line-strong bg-canvas px-3 text-sm font-medium text-ink hover:bg-surface-active focus:outline-none focus:ring-2 focus:ring-accent/40"
-                    >
-                      Readiness
-                    </Link>
-                    {onEdit && <ActionButton onClick={() => onEdit(a)}>Edit</ActionButton>}
-                    {onCancel && (
-                      <ActionButton tone="danger" onClick={() => onCancel(a)}>
-                        Cancel
-                      </ActionButton>
-                    )}
-                  </div>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+              </div>
+            )}
+          </td>
+        </tr>
+      ))}
+    </Table>
   )
 }
 
@@ -194,10 +184,7 @@ function AssignmentForm({
       canSubmit={canSubmit}
       error={action.error}
     >
-      <div>
-        <label htmlFor="assignment-vessel" className={LABEL_CLASS}>
-          Vessel
-        </label>
+      <Field id="assignment-vessel" label="Vessel">
         <select
           id="assignment-vessel"
           required
@@ -214,11 +201,8 @@ function AssignmentForm({
             </option>
           ))}
         </select>
-      </div>
-      <div>
-        <label htmlFor="assignment-position" className={LABEL_CLASS}>
-          Position
-        </label>
+      </Field>
+      <Field id="assignment-position" label="Position">
         <select
           id="assignment-position"
           required
@@ -238,12 +222,9 @@ function AssignmentForm({
             doesn't change by itself: edit the seafarer to record a promotion.
           </p>
         )}
-      </div>
+      </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="assignment-start" className={LABEL_CLASS}>
-            From
-          </label>
+        <Field id="assignment-start" label="From">
           <input
             id="assignment-start"
             type="date"
@@ -252,11 +233,8 @@ function AssignmentForm({
             onChange={(e) => setStartDate(e.target.value)}
             className={FIELD_CLASS}
           />
-        </div>
-        <div>
-          <label htmlFor="assignment-end" className={LABEL_CLASS}>
-            To (included)
-          </label>
+        </Field>
+        <Field id="assignment-end" label="To (included)">
           <input
             id="assignment-end"
             type="date"
@@ -266,7 +244,7 @@ function AssignmentForm({
             onChange={(e) => setEndDate(e.target.value)}
             className={FIELD_CLASS}
           />
-        </div>
+        </Field>
       </div>
       {!datesInOrder && (
         <p className="text-xs text-danger">The end date can't be before the start date.</p>
@@ -296,10 +274,7 @@ function CancelAssignment({ assignment, onClose }: { assignment: Assignment; onC
       <p className="text-sm text-ink-muted">
         Cancelling is permanent. The Assignment is kept, marked cancelled, with the reason.
       </p>
-      <div>
-        <label htmlFor="assignment-cancel-reason" className={LABEL_CLASS}>
-          Reason
-        </label>
+      <Field id="assignment-cancel-reason" label="Reason">
         <textarea
           id="assignment-cancel-reason"
           required
@@ -310,7 +285,7 @@ function CancelAssignment({ assignment, onClose }: { assignment: Assignment; onC
           className={FIELD_CLASS}
           placeholder="Recorded in the Audit Log"
         />
-      </div>
+      </Field>
     </FormDialog>
   )
 }

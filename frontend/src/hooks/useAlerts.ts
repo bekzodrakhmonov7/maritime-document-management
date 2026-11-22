@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../lib/api'
+import { apiFetch, apiSend } from '../lib/api'
 import type { Alert, DailyCheckResult } from '../types'
 
 const KEY = ['alerts'] as const
@@ -22,7 +22,7 @@ export function useAlertCount(enabled: boolean) {
 export function useRunDailyCheck() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => apiFetch<DailyCheckResult>('/api/admin/daily-check/run', { method: 'POST' }),
+    mutationFn: () => apiSend<DailyCheckResult>('POST', '/api/admin/daily-check/run'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
   })
 }

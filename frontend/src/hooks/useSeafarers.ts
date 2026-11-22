@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../lib/api'
+import { apiFetch, apiSend, invalidate } from '../lib/api'
 import type { Seafarer, SeafarerRecord, SeafarerWrite } from '../types'
 
 const BASE = '/api/seafarers'
@@ -41,19 +41,13 @@ export type SeafarerAction =
 function request(action: SeafarerAction) {
   switch (action.kind) {
     case 'create':
-      return apiFetch<Seafarer>(BASE, { method: 'POST', body: JSON.stringify(action.body) })
+      return apiSend<Seafarer>('POST', BASE, action.body)
     case 'edit':
-      return apiFetch<Seafarer>(`${BASE}/${action.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(action.body),
-      })
+      return apiSend<Seafarer>('PUT', `${BASE}/${action.id}`, action.body)
     case 'set-inactive':
-      return apiFetch<Seafarer>(`${BASE}/${action.id}/set-inactive`, {
-        method: 'POST',
-        body: JSON.stringify({ reason: action.reason }),
-      })
+      return apiSend<Seafarer>('POST', `${BASE}/${action.id}/set-inactive`, { reason: action.reason })
     case 'reactivate':
-      return apiFetch<Seafarer>(`${BASE}/${action.id}/reactivate`, { method: 'POST' })
+      return apiSend<Seafarer>('POST', `${BASE}/${action.id}/reactivate`)
   }
 }
 
@@ -63,11 +57,7 @@ export function useSeafarerAction() {
     mutationFn: request,
     // A changed held Position changes the readiness view's Position notice.
     onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['seafarers'] }),
-        queryClient.invalidateQueries({ queryKey: ['readiness'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-      ]),
+      invalidate(queryClient, ['seafarers'], ['readiness'], ['dashboard']),
   })
 }
 

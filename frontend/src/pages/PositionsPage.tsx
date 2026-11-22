@@ -4,9 +4,10 @@ import { usePositionAction, usePositions } from '../hooks/useReferenceData'
 import type { Position } from '../types'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
-import { FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
+import { Field, FIELD_CLASS, FormDialog } from '../components/FormDialog'
 import { RetirableActions, RetireDialog, type RetireKind } from '../components/RetireDialog'
 import { StateBadge } from '../components/StateBadge'
+import { Table } from '../components/Table'
 
 type Dialog =
   | { kind: 'create' }
@@ -35,48 +36,27 @@ export function PositionsPage() {
 
       {error && <ErrorNote message={error.message} />}
 
-      <div className="overflow-x-auto rounded-md border border-line bg-canvas">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
-            <tr>
-              <th scope="col" className="px-4 py-3">Name</th>
-              <th scope="col" className="px-4 py-3">Status</th>
-              <th scope="col" className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {isLoading && (
-              <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-ink-faint">
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {positions?.length === 0 && (
-              <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-ink-faint">
-                  No Positions yet.
-                </td>
-              </tr>
-            )}
-            {positions?.map((position) => (
-              <tr key={position.id}>
-                <td className="px-4 py-3 text-ink">{position.name}</td>
-                <td className="px-4 py-3">
-                  <StateBadge on={!position.retired} label={position.retired ? 'Retired' : 'In use'} />
-                </td>
-                <td className="px-4 py-3">
-                  <RetirableActions
-                    retired={position.retired}
-                    onEdit={() => setDialog({ kind: 'edit', position })}
-                    onRetire={(kind) => setDialog({ kind, position })}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        head={['Name', 'Status', { label: 'Actions', className: 'text-right' }]}
+        loading={isLoading}
+        empty={positions?.length === 0 ? 'No Positions yet.' : null}
+      >
+        {positions?.map((position) => (
+          <tr key={position.id}>
+            <td className="px-4 py-3 text-ink">{position.name}</td>
+            <td className="px-4 py-3">
+              <StateBadge on={!position.retired} label={position.retired ? 'Retired' : 'In use'} />
+            </td>
+            <td className="px-4 py-3">
+              <RetirableActions
+                retired={position.retired}
+                onEdit={() => setDialog({ kind: 'edit', position })}
+                onRetire={(kind) => setDialog({ kind, position })}
+              />
+            </td>
+          </tr>
+        ))}
+      </Table>
 
       {(dialog?.kind === 'create' || dialog?.kind === 'edit') && (
         <PositionForm
@@ -118,10 +98,7 @@ function PositionForm({ position, onClose }: { position: Position | null; onClos
       canSubmit={!!body.name}
       error={action.error}
     >
-      <div>
-        <label htmlFor="position-name" className={LABEL_CLASS}>
-          Name
-        </label>
+      <Field id="position-name" label="Name">
         <input
           id="position-name"
           required
@@ -131,7 +108,7 @@ function PositionForm({ position, onClose }: { position: Position | null; onClos
           className={FIELD_CLASS}
           placeholder="e.g. Chief Engineer"
         />
-      </div>
+      </Field>
     </FormDialog>
   )
 }

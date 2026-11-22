@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch } from '../lib/api'
+import { apiFetch, apiSend, invalidate } from '../lib/api'
 import type { Account, AccountStatus, UserRole } from '../types'
 
 const KEY = ['accounts'] as const
@@ -36,17 +36,10 @@ export function useAccountAction() {
   return useMutation({
     mutationFn: ({ id, action }: { id: string; action: AccountAction }) => {
       const { kind, ...body } = action
-      return apiFetch<Account>(`/api/accounts/${id}/${kind}`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      })
+      return apiSend<Account>('POST', `/api/accounts/${id}/${kind}`, body)
     },
     onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: KEY }),
-        // Approval and role changes add or drop Responsible Officer links.
-        queryClient.invalidateQueries({ queryKey: ['responsible-officers'] }),
-        queryClient.invalidateQueries({ queryKey: ['vessels'] }),
-      ]),
+      // Approval and role changes add or drop Responsible Officer links.
+      invalidate(queryClient, KEY, ['responsible-officers'], ['vessels']),
   })
 }

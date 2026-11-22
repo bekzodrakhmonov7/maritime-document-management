@@ -6,7 +6,7 @@ import { ApiError } from '../lib/api'
 import type { LastAuditCleanup, LastCleanup, Settings } from '../types'
 import { ActionButton } from '../components/ActionButton'
 import { ErrorNote } from '../components/ErrorNote'
-import { FIELD_CLASS, LABEL_CLASS } from '../components/FormDialog'
+import { Field, FIELD_CLASS, LABEL_CLASS } from '../components/FormDialog'
 import { FILE_SIZE_CEILING_MB } from '../lib/fileSize'
 
 const MAX_ALERT_STEPS = 6
@@ -234,10 +234,7 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
 
       <div className="grid gap-4 sm:grid-cols-3">
         {NUMBER_FIELDS.map((field) => (
-          <div key={field.key}>
-            <label htmlFor={field.key} className={LABEL_CLASS}>
-              {field.label} ({field.unit})
-            </label>
+          <Field key={field.key} id={field.key} label={`${field.label} (${field.unit})`}>
             <input
               id={field.key}
               type="number"
@@ -252,15 +249,12 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
             <p className="mt-1 text-xs text-ink-faint">
               {field.min}–{field.max} {field.unit}. {field.hint}
             </p>
-          </div>
+          </Field>
         ))}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="time_zone" className={LABEL_CLASS}>
-            Company time zone
-          </label>
+        <Field id="time_zone" label="Company time zone">
           <select
             id="time_zone"
             value={timeZone}
@@ -276,11 +270,8 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
           <p className="mt-1 text-xs text-ink-faint">
             Decides “today” for statuses and alerts, and how times are shown.
           </p>
-        </div>
-        <div>
-          <label htmlFor="daily_check_time" className={LABEL_CLASS}>
-            Daily check time
-          </label>
+        </Field>
+        <Field id="daily_check_time" label="Daily check time">
           <select
             id="daily_check_time"
             value={checkTime}
@@ -294,7 +285,7 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
             ))}
           </select>
           <p className="mt-1 text-xs text-ink-faint">In the company time zone, every 15 minutes.</p>
-        </div>
+        </Field>
       </div>
 
       <fieldset>
@@ -305,10 +296,7 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
         </p>
         <div className="grid gap-4 sm:grid-cols-3">
           {RETENTION_FIELDS.map((field) => (
-            <div key={field.key}>
-              <label htmlFor={field.key} className={LABEL_CLASS}>
-                {field.label} (years)
-              </label>
+            <Field key={field.key} id={field.key} label={`${field.label} (years)`}>
               <input
                 id={field.key}
                 type="number"
@@ -323,7 +311,7 @@ function SettingsForm({ settings, save, reloading, onReload }: SettingsFormProps
               <p className="mt-1 text-xs text-ink-faint">
                 1–{MAX_RETENTION_YEARS} years. {field.hint}
               </p>
-            </div>
+            </Field>
           ))}
         </div>
       </fieldset>

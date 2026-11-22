@@ -1,3 +1,4 @@
+import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import { resolveApiBase } from './apiBase'
 import { readSession, secondsUntilRefresh, sessionFromTokens, writeSession } from './session'
 
@@ -161,4 +162,14 @@ export async function apiDownload(path: string, fallbackName: string): Promise<H
   link.click()
   URL.revokeObjectURL(url)
   return res.headers
+}
+
+/** A JSON request: `body` (if given) is sent as JSON. */
+export function apiSend<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+  return apiFetch<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })
+}
+
+/** Refresh every query under each of the given keys. */
+export function invalidate(queryClient: QueryClient, ...keys: QueryKey[]) {
+  return Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })))
 }

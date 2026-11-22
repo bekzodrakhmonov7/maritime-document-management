@@ -3,7 +3,7 @@ import { useRecordVerification, useReviewVersion } from '../hooks/useDocuments'
 import { useSettings } from '../hooks/useSettings'
 import type { ReviewDecision, VerificationDetails, VerificationResult, Version } from '../types'
 import { DocumentDropzone } from './DocumentDropzone'
-import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
+import { Field, FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
 import { FILE_SIZE_CEILING_MB } from '../lib/fileSize'
 
 /** Accept or reject one Version, with a required comment. A later Review
@@ -43,10 +43,7 @@ export function ReviewDialog({ version, onClose }: { version: Version; onClose: 
           The previous version that isn't rejected becomes current again; with none, the document counts as missing.
         </p>
       )}
-      <div>
-        <label htmlFor="review-comment" className={LABEL_CLASS}>
-          Comment
-        </label>
+      <Field id="review-comment" label="Comment">
         <textarea
           id="review-comment"
           rows={3}
@@ -54,7 +51,7 @@ export function ReviewDialog({ version, onClose }: { version: Version; onClose: 
           value={comment}
           onChange={(e) => setComment(e.target.value)}
         />
-      </div>
+      </Field>
     </FormDialog>
   )
 }
@@ -105,10 +102,7 @@ export function VerificationDialog({ version, onClose }: { version: Version; onC
       error={record.error}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label htmlFor="verification-date" className={LABEL_CLASS}>
-            Date
-          </label>
+        <Field id="verification-date" label="Date">
           <input
             id="verification-date"
             type="date"
@@ -117,11 +111,8 @@ export function VerificationDialog({ version, onClose }: { version: Version; onC
             value={details.checked_on}
             onChange={(e) => set('checked_on')(e.target.value)}
           />
-        </div>
-        <div>
-          <label htmlFor="verification-result" className={LABEL_CLASS}>
-            Result
-          </label>
+        </Field>
+        <Field id="verification-result" label="Result">
           <select
             id="verification-result"
             className={FIELD_CLASS}
@@ -131,11 +122,8 @@ export function VerificationDialog({ version, onClose }: { version: Version; onC
             <option value="confirmed">Confirmed</option>
             <option value="not_confirmed">Not confirmed</option>
           </select>
-        </div>
-        <div>
-          <label htmlFor="verification-source" className={LABEL_CLASS}>
-            Source
-          </label>
+        </Field>
+        <Field id="verification-source" label="Source">
           <input
             id="verification-source"
             className={FIELD_CLASS}
@@ -143,18 +131,15 @@ export function VerificationDialog({ version, onClose }: { version: Version; onC
             value={details.source}
             onChange={(e) => set('source')(e.target.value)}
           />
-        </div>
-        <div>
-          <label htmlFor="verification-reference" className={LABEL_CLASS}>
-            Reference
-          </label>
+        </Field>
+        <Field id="verification-reference" label="Reference">
           <input
             id="verification-reference"
             className={FIELD_CLASS}
             value={details.reference}
             onChange={(e) => set('reference')(e.target.value)}
           />
-        </div>
+        </Field>
       </div>
       <DocumentDropzone
         file={proof}

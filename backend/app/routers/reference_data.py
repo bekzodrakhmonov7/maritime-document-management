@@ -6,13 +6,10 @@
   administrators create, edit, retire, unretire and delete while unused.
 """
 
-from collections.abc import Iterator
-from contextlib import contextmanager
-
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
-from app.audit import audit_context_for
+from app.audit import AuditContext, acting_as
 from app.deps import get_db, require_role
 from app.models.auth import UserPayload
 from app.models.reference import (
@@ -23,32 +20,86 @@ from app.models.reference import (
     VesselRead,
     VesselWrite,
 )
-from app.services import errors
+from app.refused_access import errors_as_http
+from app.routers.params import Id
 from app.services import reference_data as svc
 from app.services import responsible_officers
 from app.services.reference_data import DOCUMENT_TYPE, POSITION, VESSEL, Table
-from app.routers.params import Id
 
-admin_only = require_role("administrator")
+admin_ctx = acting_as("administrator")
 fleet_readers = require_role("administrator", "crewing_officer")
 all_staff = require_role("administrator", "crewing_officer", "manager")
 
+# (path, flag value, audit verb) for the flag each table switches.
+ACTIVE_FLAG = (("deactivate", False, "deactivated"), ("reactivate", True, "reactivated"))
+RETIRED_FLAG = (("retire", True, "retired"), ("unretire", False, "unretired"))
 
-@contextmanager
-def _errors_as_http(table: Table) -> Iterator[None]:
-    try:
-        yield
-    except errors.NotFound:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"No such {table.label}.")
-    except errors.Conflict as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
-    except errors.Invalid as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+
+def _router(
+    table: Table,
+    prefix: str,
+    write_model: type,
+    read_model: type,
+    flag_routes: tuple[tuple[str, bool, str], ...],
+    deletable: bool,
+) -> APIRouter:
+    """Create, edit, switch the flag and (if `deletable`) delete, for administrators."""
+    router = APIRouter(prefix=prefix, tags=[table.name])
+
+    @router.post("", response_model=read_model, status_code=status.HTTP_201_CREATED)
+    async def create(
+        body: write_model,  # type: ignore[valid-type]
+        db: asyncpg.Connection = Depends(get_db),
+        ctx: AuditContext = Depends(admin_ctx),
+    ):
+        with errors_as_http():
+            return await svc.create(db, ctx, table, body.model_dump())
+
+    @router.put("/{row_id}", response_model=read_model)
+    async def edit(
+        row_id: Id,
+        body: write_model,  # type: ignore[valid-type]
+        db: asyncpg.Connection = Depends(get_db),
+        ctx: AuditContext = Depends(admin_ctx),
+    ):
+        with errors_as_http():
+            return await svc.edit(db, ctx, table, row_id, body.model_dump())
+
+    for path, value, verb in flag_routes:
+        _flag_route(router, table, read_model, path, value, verb)
+
+    if deletable:
+
+        @router.delete("/{row_id}", status_code=status.HTTP_204_NO_CONTENT)
+        async def delete(
+            row_id: Id,
+            db: asyncpg.Connection = Depends(get_db),
+            ctx: AuditContext = Depends(admin_ctx),
+        ):
+            with errors_as_http():
+                await svc.delete(db, ctx, table, row_id)
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    return router
+
+
+def _flag_route(
+    router: APIRouter, table: Table, read_model: type, path: str, value: bool, verb: str
+) -> None:
+    # Its own function, so each route keeps its own `value` and `verb`.
+    @router.post(f"/{{row_id}}/{path}", response_model=read_model, name=f"{path}_{table.name}")
+    async def switch(
+        row_id: Id,
+        db: asyncpg.Connection = Depends(get_db),
+        ctx: AuditContext = Depends(admin_ctx),
+    ):
+        with errors_as_http():
+            return await svc.set_flag(db, ctx, table, row_id, value, verb)
 
 
 # --- Vessels ------------------------------------------------------------------
 
-vessels = APIRouter(prefix="/vessels", tags=["vessels"])
+vessels = _router(VESSEL, "/vessels", VesselWrite, VesselRead, ACTIVE_FLAG, deletable=False)
 
 
 @vessels.get("", response_model=list[VesselRead])
@@ -70,133 +121,21 @@ async def get_vessel(
     db: asyncpg.Connection = Depends(get_db),
     _: UserPayload = Depends(fleet_readers),
 ):
-    with _errors_as_http(VESSEL):
+    with errors_as_http():
         return await svc.get_row(db, VESSEL, vessel_id)
-
-
-@vessels.post("", response_model=VesselRead, status_code=status.HTTP_201_CREATED)
-async def create_vessel(
-    body: VesselWrite,
-    request: Request,
-    db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
-):
-    with _errors_as_http(VESSEL):
-        return await svc.create(db, audit_context_for(request, admin), VESSEL, body.model_dump())
-
-
-@vessels.put("/{vessel_id}", response_model=VesselRead)
-async def edit_vessel(
-    vessel_id: Id,
-    body: VesselWrite,
-    request: Request,
-    db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
-):
-    with _errors_as_http(VESSEL):
-        return await svc.edit(
-            db, audit_context_for(request, admin), VESSEL, vessel_id, body.model_dump()
-        )
-
-
-@vessels.post("/{vessel_id}/deactivate", response_model=VesselRead)
-async def deactivate_vessel(
-    vessel_id: Id,
-    request: Request,
-    db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
-):
-    with _errors_as_http(VESSEL):
-        return await svc.set_flag(
-            db, audit_context_for(request, admin), VESSEL, vessel_id, False, "deactivated"
-        )
-
-
-@vessels.post("/{vessel_id}/reactivate", response_model=VesselRead)
-async def reactivate_vessel(
-    vessel_id: Id,
-    request: Request,
-    db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
-):
-    with _errors_as_http(VESSEL):
-        return await svc.set_flag(
-            db, audit_context_for(request, admin), VESSEL, vessel_id, True, "reactivated"
-        )
 
 
 # --- Positions and Document Types ------------------------------------------------
 
 
-def _retirable_router(
-    table: Table, prefix: str, write_model: type, read_model: type
-) -> APIRouter:
-    """List for all staff; create, edit, retire, unretire, delete for administrators."""
-    router = APIRouter(prefix=prefix, tags=[table.name])
+def _retirable_router(table: Table, prefix: str, write_model: type, read_model: type) -> APIRouter:
+    router = _router(table, prefix, write_model, read_model, RETIRED_FLAG, deletable=True)
 
     @router.get("", response_model=list[read_model])
     async def list_all(
         db: asyncpg.Connection = Depends(get_db), _: UserPayload = Depends(all_staff)
     ):
         return await svc.list_rows(db, table)
-
-    @router.post("", response_model=read_model, status_code=status.HTTP_201_CREATED)
-    async def create(
-        body: write_model,  # type: ignore[valid-type]
-        request: Request,
-        db: asyncpg.Connection = Depends(get_db),
-        admin: UserPayload = Depends(admin_only),
-    ):
-        with _errors_as_http(table):
-            return await svc.create(db, audit_context_for(request, admin), table, body.model_dump())
-
-    @router.put("/{row_id}", response_model=read_model)
-    async def edit(
-        row_id: Id,
-        body: write_model,  # type: ignore[valid-type]
-        request: Request,
-        db: asyncpg.Connection = Depends(get_db),
-        admin: UserPayload = Depends(admin_only),
-    ):
-        with _errors_as_http(table):
-            return await svc.edit(
-                db, audit_context_for(request, admin), table, row_id, body.model_dump()
-            )
-
-    @router.post("/{row_id}/retire", response_model=read_model)
-    async def retire(
-        row_id: Id,
-        request: Request,
-        db: asyncpg.Connection = Depends(get_db),
-        admin: UserPayload = Depends(admin_only),
-    ):
-        with _errors_as_http(table):
-            return await svc.set_flag(
-                db, audit_context_for(request, admin), table, row_id, True, "retired"
-            )
-
-    @router.post("/{row_id}/unretire", response_model=read_model)
-    async def unretire(
-        row_id: Id,
-        request: Request,
-        db: asyncpg.Connection = Depends(get_db),
-        admin: UserPayload = Depends(admin_only),
-    ):
-        with _errors_as_http(table):
-            return await svc.set_flag(
-                db, audit_context_for(request, admin), table, row_id, False, "unretired"
-            )
-
-    @router.delete("/{row_id}", status_code=status.HTTP_204_NO_CONTENT)
-    async def delete(
-        row_id: Id,
-        request: Request,
-        db: asyncpg.Connection = Depends(get_db),
-        admin: UserPayload = Depends(admin_only),
-    ):
-        with _errors_as_http(table):
-            await svc.delete(db, audit_context_for(request, admin), table, row_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router
 

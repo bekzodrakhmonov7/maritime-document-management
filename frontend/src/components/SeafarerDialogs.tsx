@@ -5,7 +5,7 @@ import { FLAG_OPTIONS } from '../lib/flags'
 import type { Seafarer } from '../types'
 import { ActionButton } from './ActionButton'
 import { ConfirmDialog } from './ConfirmDialog'
-import { FIELD_CLASS, FormDialog, LABEL_CLASS } from './FormDialog'
+import { Field, FIELD_CLASS, FormDialog } from './FormDialog'
 import { StateBadge } from './StateBadge'
 
 /** Which seafarer dialog is open: add, edit, set Inactive or reactivate. */
@@ -97,10 +97,7 @@ function SeafarerForm({ seafarer, onClose }: { seafarer: Seafarer | null; onClos
       error={action.error}
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="seafarer-first-name" className={LABEL_CLASS}>
-            First name
-          </label>
+        <Field id="seafarer-first-name" label="First name">
           <input
             id="seafarer-first-name"
             required
@@ -109,11 +106,8 @@ function SeafarerForm({ seafarer, onClose }: { seafarer: Seafarer | null; onClos
             onChange={(e) => setFirstName(e.target.value)}
             className={FIELD_CLASS}
           />
-        </div>
-        <div>
-          <label htmlFor="seafarer-last-name" className={LABEL_CLASS}>
-            Last name
-          </label>
+        </Field>
+        <Field id="seafarer-last-name" label="Last name">
           <input
             id="seafarer-last-name"
             required
@@ -122,13 +116,10 @@ function SeafarerForm({ seafarer, onClose }: { seafarer: Seafarer | null; onClos
             onChange={(e) => setLastName(e.target.value)}
             className={FIELD_CLASS}
           />
-        </div>
+        </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="seafarer-dob" className={LABEL_CLASS}>
-            Date of birth
-          </label>
+        <Field id="seafarer-dob" label="Date of birth">
           <input
             id="seafarer-dob"
             type="date"
@@ -136,11 +127,8 @@ function SeafarerForm({ seafarer, onClose }: { seafarer: Seafarer | null; onClos
             onChange={(e) => setDateOfBirth(e.target.value)}
             className={FIELD_CLASS}
           />
-        </div>
-        <div>
-          <label htmlFor="seafarer-nationality" className={LABEL_CLASS}>
-            Nationality
-          </label>
+        </Field>
+        <Field id="seafarer-nationality" label="Nationality">
           <select
             id="seafarer-nationality"
             value={nationality}
@@ -154,12 +142,9 @@ function SeafarerForm({ seafarer, onClose }: { seafarer: Seafarer | null; onClos
               </option>
             ))}
           </select>
-        </div>
+        </Field>
       </div>
-      <div>
-        <label htmlFor="seafarer-position" className={LABEL_CLASS}>
-          Position
-        </label>
+      <Field id="seafarer-position" label="Position">
         <select
           id="seafarer-position"
           required
@@ -181,7 +166,7 @@ function SeafarerForm({ seafarer, onClose }: { seafarer: Seafarer | null; onClos
             The held Position changes from {seafarer.position_name}. The change is recorded.
           </p>
         )}
-      </div>
+      </Field>
     </FormDialog>
   )
 }
@@ -207,10 +192,7 @@ function SetInactive({ seafarer, onClose }: { seafarer: Seafarer; onClose: () =>
       <p className="text-sm text-ink-muted">
         The record is kept but drops out of the working lists. It can be reactivated later.
       </p>
-      <div>
-        <label htmlFor="seafarer-inactive-reason" className={LABEL_CLASS}>
-          Reason
-        </label>
+      <Field id="seafarer-inactive-reason" label="Reason">
         <textarea
           id="seafarer-inactive-reason"
           required
@@ -221,7 +203,7 @@ function SetInactive({ seafarer, onClose }: { seafarer: Seafarer; onClose: () =>
           className={FIELD_CLASS}
           placeholder="Recorded in the Audit Log"
         />
-      </div>
+      </Field>
     </FormDialog>
   )
 }

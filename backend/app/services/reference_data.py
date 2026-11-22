@@ -87,7 +87,7 @@ async def list_rows(conn: asyncpg.Connection, table: Table) -> list[dict]:
 async def get_row(conn: asyncpg.Connection, table: Table, row_id: int) -> dict:
     row = await conn.fetchrow(f"SELECT {table.columns} FROM public.{table.name} WHERE id = $1", row_id)
     if row is None:
-        raise NotFound()
+        raise NotFound(f"No such {table.label}.")
     return dict(row)
 
 
@@ -211,5 +211,5 @@ async def _lock(conn: asyncpg.Connection, table: Table, row_id: int) -> asyncpg.
         f"SELECT {table.columns} FROM public.{table.name} WHERE id = $1 FOR UPDATE", row_id
     )
     if row is None:
-        raise NotFound()
+        raise NotFound(f"No such {table.label}.")
     return row

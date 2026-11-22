@@ -6,9 +6,9 @@ for (403 otherwise, recorded). There is no delete: an Assignment is cancelled.
 """
 
 import asyncpg
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, status
 
-from app.audit import audit_context_for
+
 from app.deps import get_db
 from app.models.assignment import (
     AssignmentCreate,
@@ -17,7 +17,8 @@ from app.models.assignment import (
     CancelAssignment,
 )
 from app.models.coverage import ReadinessRead
-from app.routers.crew_access import CrewAccess, errors_as_http, get_crew_access
+from app.refused_access import errors_as_http
+from app.routers.crew_access import CrewAccess, get_crew_access
 from app.services import assignments as svc
 from app.services import coverage
 from app.routers.params import Id
@@ -50,13 +51,12 @@ async def get_readiness(
 @router.post("", response_model=AssignmentRead, status_code=status.HTTP_201_CREATED)
 async def plan_assignment(
     body: AssignmentCreate,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
     with errors_as_http():
         return await svc.create(
-            db, audit_context_for(request, access.user), access.scope, access.user,
+            db, access.ctx, access.scope, access.user,
             body.model_dump(),
         )
 
@@ -65,13 +65,12 @@ async def plan_assignment(
 async def edit_assignment(
     assignment_id: Id,
     body: AssignmentEdit,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
     with errors_as_http():
         return await svc.edit(
-            db, audit_context_for(request, access.user), access.scope, access.user,
+            db, access.ctx, access.scope, access.user,
             assignment_id, body.model_dump(),
         )
 
@@ -80,12 +79,11 @@ async def edit_assignment(
 async def cancel_assignment(
     assignment_id: Id,
     body: CancelAssignment,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
     access: CrewAccess = Depends(get_crew_access),
 ):
     with errors_as_http():
         return await svc.cancel(
-            db, audit_context_for(request, access.user), access.scope, access.user,
+            db, access.ctx, access.scope, access.user,
             assignment_id, body.reason,
         )

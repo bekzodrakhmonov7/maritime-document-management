@@ -18,7 +18,8 @@ import { FLAG_OPTIONS, flagLabel } from '../lib/flags'
 import { ActionButton } from '../components/ActionButton'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ErrorNote } from '../components/ErrorNote'
-import { FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
+import { Field, FIELD_CLASS, FormDialog, LABEL_CLASS } from '../components/FormDialog'
+import { Table } from '../components/Table'
 
 type Tab = 'matrix' | 'exceptions' | 'preview'
 
@@ -27,9 +28,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'exceptions', label: 'Exceptions' },
   { id: 'preview', label: 'Preview' },
 ]
-
-const TABLE_CLASS = 'overflow-x-auto rounded-md border border-line bg-canvas'
-const HEAD_CLASS = 'border-b border-line bg-surface text-xs text-ink-faint'
 
 /** Which documents each Position needs, and the local exceptions (administrators only). */
 export function RequirementsPage() {
@@ -104,9 +102,9 @@ function MatrixTab() {
       {activePositions.length === 0 || activeTypes.length === 0 ? (
         <p className="text-sm text-ink-faint">Add Positions and Document Types first.</p>
       ) : (
-        <div className={TABLE_CLASS}>
+        <div className="overflow-x-auto rounded-md border border-line bg-canvas">
           <table className="w-full text-left text-sm">
-            <thead className={HEAD_CLASS}>
+            <thead className="border-b border-line bg-surface text-xs text-ink-faint">
               <tr>
                 <th scope="col" className="px-4 py-3">
                   Document Type
@@ -208,59 +206,35 @@ function ExceptionsTab() {
         </ActionButton>
       </div>
       {error && <ErrorNote message={error.message} />}
-      <div className={TABLE_CLASS}>
-        <table className="w-full text-left text-sm">
-          <thead className={HEAD_CLASS}>
-            <tr>
-              <th scope="col" className="px-4 py-3">Where</th>
-              <th scope="col" className="px-4 py-3">Position</th>
-              <th scope="col" className="px-4 py-3">Document Type</th>
-              <th scope="col" className="px-4 py-3">Effect</th>
-              <th scope="col" className="px-4 py-3">Reason</th>
-              <th scope="col" className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {exceptions?.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-ink-faint">
-                  No exceptions: the matrix applies everywhere.
-                </td>
-              </tr>
-            )}
-            {exceptions?.map((e) => (
-              <tr key={e.id}>
-                <td className="px-4 py-3 text-ink">{scopeLabel(e)}</td>
-                <td className="px-4 py-3 text-ink-muted">{e.position_name ?? 'All positions'}</td>
-                <td className="px-4 py-3 text-ink">{e.document_type_name}</td>
-                <td className="px-4 py-3">
-                  <EffectBadge effect={e.effect} />
-                </td>
-                <td className="px-4 py-3 text-ink-muted">{e.reason}</td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    <ActionButton onClick={() => setDialog({ kind: 'edit', exception: e })}>
-                      <Pencil className="h-3.5 w-3.5" />
-                      Edit
-                    </ActionButton>
-                    <ActionButton tone="danger" onClick={() => setDialog({ kind: 'delete', exception: e })}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </ActionButton>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        head={['Where', 'Position', 'Document Type', 'Effect', 'Reason', { label: 'Actions', className: 'text-right' }]}
+        loading={isLoading}
+        empty={exceptions?.length === 0 ? 'No exceptions: the matrix applies everywhere.' : null}
+      >
+        {exceptions?.map((e) => (
+          <tr key={e.id}>
+            <td className="px-4 py-3 text-ink">{scopeLabel(e)}</td>
+            <td className="px-4 py-3 text-ink-muted">{e.position_name ?? 'All positions'}</td>
+            <td className="px-4 py-3 text-ink">{e.document_type_name}</td>
+            <td className="px-4 py-3">
+              <EffectBadge effect={e.effect} />
+            </td>
+            <td className="px-4 py-3 text-ink-muted">{e.reason}</td>
+            <td className="px-4 py-3">
+              <div className="flex justify-end gap-2">
+                <ActionButton onClick={() => setDialog({ kind: 'edit', exception: e })}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit
+                </ActionButton>
+                <ActionButton tone="danger" onClick={() => setDialog({ kind: 'delete', exception: e })}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </ActionButton>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </Table>
 
       {(dialog?.kind === 'create' || dialog?.kind === 'edit') && (
         <ExceptionForm
@@ -350,10 +324,7 @@ function ExceptionForm({
       </fieldset>
 
       {scope === 'flag' ? (
-        <div>
-          <label htmlFor="exception-flag" className={LABEL_CLASS}>
-            Flag
-          </label>
+        <Field id="exception-flag" label="Flag">
           <select
             id="exception-flag"
             value={flag}
@@ -367,12 +338,9 @@ function ExceptionForm({
               </option>
             ))}
           </select>
-        </div>
+        </Field>
       ) : (
-        <div>
-          <label htmlFor="exception-vessel" className={LABEL_CLASS}>
-            Vessel
-          </label>
+        <Field id="exception-vessel" label="Vessel">
           <select
             id="exception-vessel"
             value={vesselId}
@@ -386,13 +354,10 @@ function ExceptionForm({
               </option>
             ))}
           </select>
-        </div>
+        </Field>
       )}
 
-      <div>
-        <label htmlFor="exception-position" className={LABEL_CLASS}>
-          Position
-        </label>
+      <Field id="exception-position" label="Position">
         <select
           id="exception-position"
           value={positionId}
@@ -406,12 +371,9 @@ function ExceptionForm({
             </option>
           ))}
         </select>
-      </div>
+      </Field>
 
-      <div>
-        <label htmlFor="exception-type" className={LABEL_CLASS}>
-          Document Type
-        </label>
+      <Field id="exception-type" label="Document Type">
         <select
           id="exception-type"
           value={typeId}
@@ -425,7 +387,7 @@ function ExceptionForm({
             </option>
           ))}
         </select>
-      </div>
+      </Field>
 
       <fieldset>
         <legend className={LABEL_CLASS}>Effect</legend>
@@ -445,10 +407,7 @@ function ExceptionForm({
         </div>
       </fieldset>
 
-      <div>
-        <label htmlFor="exception-reason" className={LABEL_CLASS}>
-          Reason
-        </label>
+      <Field id="exception-reason" label="Reason">
         <textarea
           id="exception-reason"
           required
@@ -459,7 +418,7 @@ function ExceptionForm({
           className={FIELD_CLASS}
           placeholder="e.g. Flag state requires it"
         />
-      </div>
+      </Field>
     </FormDialog>
   )
 }
@@ -497,10 +456,7 @@ function PreviewTab() {
   return (
     <div className="max-w-3xl space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="preview-position" className={LABEL_CLASS}>
-            Position
-          </label>
+        <Field id="preview-position" label="Position">
           <select
             id="preview-position"
             value={positionId}
@@ -515,11 +471,8 @@ function PreviewTab() {
               </option>
             ))}
           </select>
-        </div>
-        <div>
-          <label htmlFor="preview-vessel" className={LABEL_CLASS}>
-            Vessel
-          </label>
+        </Field>
+        <Field id="preview-vessel" label="Vessel">
           <select
             id="preview-vessel"
             value={vesselId}
@@ -533,7 +486,7 @@ function PreviewTab() {
               </option>
             ))}
           </select>
-        </div>
+        </Field>
       </div>
 
       {evaluation.error && <ErrorNote message={evaluation.error.message} />}

@@ -15,7 +15,7 @@ from uuid import UUID
 import asyncpg
 from fastapi import Depends, Request
 
-from app.deps import get_current_user
+from app.deps import require_role
 from app.models.auth import UserPayload
 
 
@@ -122,10 +122,14 @@ def client_ip(request: Request) -> str | None:
         return None
 
 
-async def get_audit_context(
-    request: Request, user: UserPayload = Depends(get_current_user)
-) -> AuditContext:
-    return audit_context_for(request, user)
+def acting_as(*roles: str):
+    """A dependency: the Audit Context of a caller with one of `roles` (403 otherwise)."""
+    role_check = require_role(*roles)
+
+    async def context(request: Request, user: UserPayload = Depends(role_check)) -> AuditContext:
+        return audit_context_for(request, user)
+
+    return context
 
 
 def changed_fields(

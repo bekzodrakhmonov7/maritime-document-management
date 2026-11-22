@@ -1,13 +1,11 @@
 """Administrator-only account management (FR-02, SR-03)."""
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.audit import audit_context_for
+from app.audit import AuditContext, acting_as
 from app.deps import get_db, require_role
 from app.models.account import (
     AccountRead,
@@ -20,26 +18,13 @@ from app.models.account import (
 )
 from app.models.auth import AccountStatus, UserPayload
 from app.services import accounts
-from app.services.accounts import AccountConflict, AccountNotFound
-from app.services.errors import Invalid
+from app.refused_access import errors_as_http
 from app.supabase_auth import AuthUnavailable, SignInRefused, SupabaseAuth, get_supabase_auth
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 admin_only = require_role("administrator")
-
-
-@contextmanager
-def _account_errors_as_http() -> Iterator[None]:
-    """Turn the service's refusals into 404 (unknown account) or 409."""
-    try:
-        yield
-    except AccountNotFound:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
-    except AccountConflict as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
-    except Invalid as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+admin_ctx = acting_as("administrator")
 
 
 @router.get("", response_model=list[AccountRead])
@@ -63,13 +48,12 @@ async def pending_count(
 async def approve(
     account_id: UUID,
     body: ApproveAccount,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    with _account_errors_as_http():
+    with errors_as_http():
         return await accounts.approve(
-            db, audit_context_for(request, admin), account_id, body.role, body.reason,
+            db, ctx, account_id, body.role, body.reason,
             body.vessel_ids,
         )
 
@@ -78,13 +62,12 @@ async def approve(
 async def change_role(
     account_id: UUID,
     body: ChangeRole,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    with _account_errors_as_http():
+    with errors_as_http():
         return await accounts.change_role(
-            db, audit_context_for(request, admin), account_id, body.role, body.reason
+            db, ctx, account_id, body.role, body.reason
         )
 
 
@@ -92,13 +75,12 @@ async def change_role(
 async def deactivate(
     account_id: UUID,
     body: Deactivate,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    with _account_errors_as_http():
+    with errors_as_http():
         return await accounts.deactivate(
-            db, audit_context_for(request, admin), account_id, body.reason
+            db, ctx, account_id, body.reason
         )
 
 
@@ -106,13 +88,12 @@ async def deactivate(
 async def reactivate(
     account_id: UUID,
     body: Reactivate,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
 ):
-    with _account_errors_as_http():
+    with errors_as_http():
         return await accounts.reactivate(
-            db, audit_context_for(request, admin), account_id, body.reason, body.role
+            db, ctx, account_id, body.reason, body.role
         )
 
 
@@ -120,9 +101,8 @@ async def reactivate(
 async def reset_second_factor(
     account_id: UUID,
     body: SecondFactorReset,
-    request: Request,
     db: asyncpg.Connection = Depends(get_db),
-    admin: UserPayload = Depends(admin_only),
+    ctx: AuditContext = Depends(admin_ctx),
     supabase_auth: SupabaseAuth = Depends(get_supabase_auth),
 ):
     """A lost authenticator: the Account enrols a new one at its next sign-in."""
@@ -136,7 +116,5 @@ async def reset_second_factor(
                 {"code": "auth_unavailable", "message": "Supabase Auth is unavailable. Try again later."},
             )
 
-    with _account_errors_as_http():
-        return await accounts.reset_second_factor(
-            db, audit_context_for(request, admin), account_id, body.reason, remove_factors
-        )
+    with errors_as_http():
+        return await accounts.reset_second_factor(db, ctx, account_id, body.reason, remove_factors)

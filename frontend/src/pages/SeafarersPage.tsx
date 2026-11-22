@@ -11,8 +11,7 @@ import {
   SeafarerStatusBadge,
   type SeafarerDialogState,
 } from '../components/SeafarerDialogs'
-
-const COLUMNS = 5
+import { Table } from '../components/Table'
 
 /** The seafarers in the caller's Scope (FR-04). */
 export function SeafarersPage() {
@@ -65,57 +64,40 @@ export function SeafarersPage() {
 
       {error && <ErrorNote message={error.message} />}
 
-      <div className="overflow-x-auto rounded-md border border-line bg-canvas">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line bg-surface text-xs text-ink-faint">
-            <tr>
-              <th scope="col" className="px-4 py-3">Name</th>
-              <th scope="col" className="px-4 py-3">Position</th>
-              <th scope="col" className="px-4 py-3">Nationality</th>
-              <th scope="col" className="px-4 py-3">Current vessel</th>
-              <th scope="col" className="px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {isLoading && (
-              <tr>
-                <td colSpan={COLUMNS} className="px-4 py-6 text-center text-ink-faint">
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {seafarers?.length === 0 && (
-              <tr>
-                <td colSpan={COLUMNS} className="px-4 py-6 text-center text-ink-faint">
-                  {search.trim() ? 'No seafarer matches that name.' : 'No seafarers yet.'}
-                </td>
-              </tr>
-            )}
-            {seafarers?.map((seafarer) => (
-              <tr key={seafarer.id}>
-                <td className="px-4 py-3">
-                  <Link
-                    to={`/seafarers/${seafarer.id}`}
-                    className="font-medium text-ink underline-offset-2 hover:underline"
-                  >
-                    {fullName(seafarer)}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-ink-muted">{seafarer.position_name}</td>
-                <td className="px-4 py-3 text-ink-muted">
-                  {seafarer.nationality ? flagLabel(seafarer.nationality) : '—'}
-                </td>
-                <td className="px-4 py-3 text-ink-muted">
-                  {seafarer.current_vessel_name ?? 'Ashore'}
-                </td>
-                <td className="px-4 py-3">
-                  <SeafarerStatusBadge seafarer={seafarer} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table
+        head={['Name', 'Position', 'Nationality', 'Current vessel', 'Status']}
+        loading={isLoading}
+        empty={
+          seafarers?.length === 0
+            ? search.trim()
+              ? 'No seafarer matches that name.'
+              : 'No seafarers yet.'
+            : null
+        }
+      >
+        {seafarers?.map((seafarer) => (
+          <tr key={seafarer.id}>
+            <td className="px-4 py-3">
+              <Link
+                to={`/seafarers/${seafarer.id}`}
+                className="font-medium text-ink underline-offset-2 hover:underline"
+              >
+                {fullName(seafarer)}
+              </Link>
+            </td>
+            <td className="px-4 py-3 text-ink-muted">{seafarer.position_name}</td>
+            <td className="px-4 py-3 text-ink-muted">
+              {seafarer.nationality ? flagLabel(seafarer.nationality) : '—'}
+            </td>
+            <td className="px-4 py-3 text-ink-muted">
+              {seafarer.current_vessel_name ?? 'Ashore'}
+            </td>
+            <td className="px-4 py-3">
+              <SeafarerStatusBadge seafarer={seafarer} />
+            </td>
+          </tr>
+        ))}
+      </Table>
 
       {dialog && <SeafarerDialog state={dialog} onClose={() => setDialog(null)} />}
     </div>
