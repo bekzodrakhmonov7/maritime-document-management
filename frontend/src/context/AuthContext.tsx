@@ -143,7 +143,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(null)
         setStatus(null)
       } else if (s.user.id !== userId) {
-        void fetchAccount()
+        // A new sign-in: wait for /api/me before routing on status, or
+        // ProtectedRoute briefly shows "can't be loaded" (status still null).
+        setLoading(true)
+        void fetchAccount().finally(() => setLoading(false))
       }
       userId = s?.user.id ?? null
     })
