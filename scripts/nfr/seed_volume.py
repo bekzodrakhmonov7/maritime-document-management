@@ -114,9 +114,13 @@ async def next_id(conn, table: str) -> Ids:
 
 
 async def seed(args) -> dict:
-    host = urlsplit(OWNER_URL).hostname
-    if host not in ("127.0.0.1", "localhost", "::1"):
-        sys.exit(f"Refusing to seed a non-local database ({host}).")
+    target = urlsplit(OWNER_URL)
+    if target.hostname not in ("127.0.0.1", "localhost", "::1"):
+        # A hosted project only when named explicitly, and never another one
+        # (the user name of a Supabase pooler URL is postgres.<project-ref>).
+        if not args.hosted_ref or target.username != f"postgres.{args.hosted_ref}":
+            sys.exit(f"Refusing to seed a non-local database ({target.hostname}); "
+                     "pass --hosted-ref <project-ref> matching the URL to allow it.")
     rnd = random.Random(args.random_seed)
     now = datetime.now(timezone.utc)
     today = now.date()  # Settings time zone is UTC after a reset.
@@ -175,7 +179,8 @@ async def seed(args) -> dict:
                     columns=["id", "name", "imo_number", "flag"])
             crowded = next(v for v in vessels if v["name"] == "MV Northern Star")
             pacific = next(v for v in vessels if v["name"] == "MV Pacific Trader")
-            for v in (crowded, vessels[1], pacific):
+            baltic = next(v for v in vessels if v["name"] == "MV Baltic Dawn")
+            for v in (crowded, baltic, pacific):
                 await conn.execute(
                     "INSERT INTO public.responsible_officer (user_id, vessel_id) VALUES ($1, $2)",
                     OFFICER, v["id"])
@@ -445,6 +450,7 @@ def main() -> None:
     p.add_argument("--assignments", type=int, required=True)
     p.add_argument("--random-seed", type=int, default=20261120)
     p.add_argument("--out", type=Path)
+    p.add_argument("--hosted-ref", help="allow this hosted Supabase project (seeding staging for review)")
     args = p.parse_args()
     info = asyncio.run(seed(args))
     text = json.dumps(info, indent=2)
