@@ -531,7 +531,7 @@ async def test_register_ends_in_enrolling_an_authenticator(client, owner_db, fak
 
 
 async def test_register_answers_an_existing_account_the_same_but_no_code_lets_it_in(
-    client, fake_auth, officer
+    client, owner_db, fake_auth, officer
 ):
     email, _ = officer
     new = await client.post(
@@ -554,6 +554,8 @@ async def test_register_answers_an_existing_account_the_same_but_no_code_lets_it
     assert res.status_code == 403
     assert res.json()["detail"]["code"] == "otp_invalid"
     assert fake_auth.called("verify_code") == []
+    # One record for the failed step, not also *Access refused* (FR-22).
+    assert await _actions_of(owner_db, res) == ["login_failed"]
 
 
 @pytest.mark.parametrize(
@@ -657,6 +659,8 @@ async def test_a_wrong_authenticator_code_is_recorded_against_the_account(
     assert rec["actor_role"] == "crewing_officer"
     assert rec["target_type"] == "account"
     assert rec["reason"] == "totp_invalid"
+    # One record for the failed step, not also *Access refused* (FR-22).
+    assert await _actions_of(owner_db, res) == ["login_failed"]
     # The challenge is still open for the right code.
     assert (await _verify(client, email, challenge)).status_code == 200
 
@@ -1026,6 +1030,8 @@ async def test_a_reset_with_a_wrong_authenticator_code_changes_nothing(
     assert [scope for _, scope in fake_auth.signed_out] == ["local"]
     [rec] = await _records(owner_db, "password_reset", email)
     assert (rec["outcome"], rec["reason"]) == ("refused", "totp_invalid")
+    # One record for the refused reset, not also *Access refused* (FR-22).
+    assert await _actions_of(owner_db, res) == ["password_reset"]
     # The old password still works for step 1.
     assert (await client.post(
         "/api/auth/login", json={"email": email, "password": PASSWORD}
@@ -1349,6 +1355,15 @@ async def _refusals_for(owner_db, res) -> list[dict]:
         res.headers["x-request-id"],
     )
     return [dict(r) for r in rows]
+
+
+async def _actions_of(owner_db, res) -> list[str]:
+    """Every audit record one request wrote, oldest first."""
+    rows = await owner_db.fetch(
+        "SELECT action FROM public.audit_log WHERE request_id = $1 ORDER BY id",
+        res.headers["x-request-id"],
+    )
+    return [r["action"] for r in rows]
 
 
 def _session_id(session: dict) -> str:

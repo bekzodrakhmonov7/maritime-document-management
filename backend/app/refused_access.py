@@ -67,7 +67,10 @@ def install(app: FastAPI) -> None:
 
 
 async def _handle_http_exception(request: Request, exc: StarletteHTTPException) -> Response:
-    if isinstance(exc, (OutOfScope, SessionRefused)) or exc.status_code == status.HTTP_403_FORBIDDEN:
+    # A failed sign-in or reset step has its own record already (FR-22).
+    if not getattr(exc, "already_recorded", False) and (
+        isinstance(exc, (OutOfScope, SessionRefused)) or exc.status_code == status.HTTP_403_FORBIDDEN
+    ):
         try:
             await _record_refusal(request, exc)
         except Exception:

@@ -217,10 +217,10 @@ def test_expiry_not_stated_is_counted_and_titled_in_both_pdfs():
         assert "[Expiry not stated - check manually]" in text
 
 
-# --- Every PDF entry states its Review and Verification (F-21) -------------------------------
+# --- Every PDF entry states its expiry, Review and Verification (F-21, FR-21) ----------------
 
 
-def test_every_documented_pdf_entry_states_its_review_and_verification():
+def test_every_documented_pdf_entry_states_its_expiry_review_and_verification():
     from app.reports import to_pdf
 
     section = _section(
@@ -229,6 +229,9 @@ def test_every_documented_pdf_entry_states_its_review_and_verification():
         _doc("Medical", 3, date(2030, 1, 1), review="rejected"),
         _doc("Visa", 4, date(2030, 1, 1), review="not_reviewed"),
         _doc("CoC", 2, missing=True),
+        # Runs out during the assignment, not renewable at sea: a suggestion
+        # without a date, so the date must still be printed on its own.
+        _doc("Survival Craft", 5, date(2027, 4, 1)),
     )
     text = _pdf_text(to_pdf(_report(section)))
     assert "[Covers all] [Accepted] [Verified]" in text
@@ -236,3 +239,7 @@ def test_every_documented_pdf_entry_states_its_review_and_verification():
     assert "[Covers all] [Not reviewed] [Not verified]" in text
     # No document, nothing to review or verify: like the web readiness view.
     assert re.search(r"\[Missing\](?!\s*\[)", text), text
+    # The expiry date of every documented entry, with or without a suggestion.
+    assert text.count("Valid through 2030-01-01") == 3
+    assert "Renew before joining, not renewable at sea" in text
+    assert "Valid through 2027-04-01" in text

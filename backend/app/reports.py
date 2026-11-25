@@ -192,7 +192,11 @@ def _latin1(text: str) -> str:
 
 
 def _expiry_note(entry: Mapping[str, Any]) -> str | None:
-    """The expiry as the readiness view shows it, with the Endorsement cap."""
+    """The expiry as the readiness view shows it, with the Endorsement cap.
+
+    Shown with or without a suggestion: some suggestions carry no date
+    ("Renew before joining, not renewable at sea"), and FR-19/FR-21 show the
+    expiry date separately for every document."""
     if entry["certificate_missing"]:
         return "Certificate missing: counts as expired"
     if entry["capped_by"] and entry["effective_expiry"]:
@@ -201,7 +205,7 @@ def _expiry_note(entry: Mapping[str, Any]) -> str | None:
             f"Valid until {_date(entry['effective_expiry'])} "
             f"(capped by {entry['capped_by']}; own expiry {own})"
         )
-    if entry["expiry_date"] and not entry["suggestion"]:
+    if entry["expiry_date"]:
         return f"Valid through {_date(entry['expiry_date'])}"
     return None
 

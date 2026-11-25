@@ -58,8 +58,8 @@ function EntryRow({ entry, seafarerId }: { entry: ReadinessEntry; seafarerId: nu
             <EndorsementCapNote {...cap} />
           </p>
         ) : (
-          entry.expiry_date &&
-          !entry.suggestion && <p className="text-sm text-ink-faint">Valid through {entry.expiry_date}</p>
+          // Always, next to the suggestion: not every suggestion names the date (FR-19).
+          entry.expiry_date && <p className="text-sm text-ink-faint">Valid through {entry.expiry_date}</p>
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2">

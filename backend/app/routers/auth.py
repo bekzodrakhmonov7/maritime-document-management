@@ -353,7 +353,7 @@ async def verify(
     if challenge.user_id is None:
         await sign_in.count_wrong_code(db, challenge)
         await _record_failure(db, request, body.email, "otp_invalid")
-        raise HTTPException(
+        raise _Recorded(
             status.HTTP_403_FORBIDDEN, {"code": "otp_invalid", "message": "Token is invalid"}
         )
 
@@ -376,7 +376,7 @@ async def _verify_emailed_code(
     except SignInRefused as exc:
         await sign_in.count_wrong_code(db, challenge)
         await _record_failure(db, request, body.email, exc.code)
-        raise HTTPException(exc.status_code, {"code": exc.code, "message": exc.message})
+        raise _Recorded(exc.status_code, {"code": exc.code, "message": exc.message})
     except AuthUnavailable:
         await _record_failure(db, request, body.email, AuthUnavailable.code)
         raise _unavailable()
@@ -387,7 +387,7 @@ async def _verify_emailed_code(
         await _sign_out_quietly(supabase_auth, session, ip)
         await sign_in.count_wrong_code(db, challenge)
         await _record_failure(db, request, body.email, "otp_invalid")
-        raise HTTPException(
+        raise _Recorded(
             status.HTTP_403_FORBIDDEN, {"code": "otp_invalid", "message": "Token is invalid"}
         )
 
@@ -421,7 +421,7 @@ async def _verify_totp(
                 # Five wrong codes: the aal1 session is of no further use.
                 await _sign_out_quietly(supabase_auth, {"access_token": access_token}, ip)
             await _record_failure(db, request, body.email, TOTP_INVALID)
-            raise HTTPException(
+            raise _Recorded(
                 status.HTTP_403_FORBIDDEN,
                 {"code": TOTP_INVALID, "message": "That code is wrong. Check the app and try again."},
             )
@@ -430,7 +430,7 @@ async def _verify_totp(
             # The aal1 session or the factor is gone: start again.
             await sign_in.use_up(db, challenge)
             raise _challenge_expired()
-        raise HTTPException(exc.status_code, {"code": exc.code, "message": exc.message})
+        raise _Recorded(exc.status_code, {"code": exc.code, "message": exc.message})
     except AuthUnavailable:
         await _record_failure(db, request, body.email, AuthUnavailable.code)
         raise _unavailable()
@@ -621,8 +621,16 @@ def _verified_totp(factors: list[dict[str, Any]]) -> dict[str, Any] | None:
     )
 
 
+class _Recorded(HTTPException):
+    """A refusal already recorded as *Login failed* or *Password reset*. The
+    403 handler adds no *Access refused* for it: one audit record per failed
+    step (FR-22)."""
+
+    already_recorded = True
+
+
 def _refusal(exc: SignInRefused, message: str | None = None) -> HTTPException:
-    return HTTPException(exc.status_code, {"code": exc.code, "message": message or exc.message})
+    return _Recorded(exc.status_code, {"code": exc.code, "message": message or exc.message})
 
 
 def _challenge_expired() -> HTTPException:
