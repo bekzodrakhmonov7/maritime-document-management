@@ -18,7 +18,7 @@ The system only advises. It never approves or blocks an assignment: crewing staf
 | **Crewing Officer** | Your **Scope**: the seafarers with an upcoming or under-way assignment on a vessel you are a Responsible Officer for, plus the **Unassigned Pool** (seafarers with no upcoming or under-way assignment). | Add and edit seafarers, upload documents, review and verify versions, plan assignments on your own vessels, view readiness, see alerts, download Status Reports for your vessels. |
 | **Manager** | The **Dashboard** only, as fleet totals (counts, no names). | Read the fleet totals and break them down by vessel, position or document type. |
 
-The left-hand menu shows only the pages your role can open: **Dashboard**, **Seafarers**, **Alerts**, **Vessels**, and, for administrators, an **Admin** group with **Accounts**, **Document Types**, **Positions**, **Requirements**, **Settings** and **Audit Log**. On a small screen, open the menu with the menu button in the top bar. **Sign Out** is in the top right corner.
+The left-hand menu shows only the pages your role can open: **Dashboard**, **Seafarers**, **Alerts**, **Vessels**, and, for administrators, an **Admin** group with **Accounts**, **Document Types**, **Positions**, **Requirements**, **Settings** and **Audit Log**. On a small screen, open the menu with the menu button in the top bar. **Sign out** is in the top right corner.
 
 ---
 
@@ -182,7 +182,8 @@ Click a document's name to see its whole **History**: every version, newest firs
 
 | Label | Meaning |
 |---|---|
-| **Verified** (shield) | The issuing authority confirmed the current version. A renewal is not verified until it is checked again. |
+| **Verified** | The issuing authority confirmed the current version. A renewal is not verified until it is checked again. |
+| **Not verified** | No confirmed verification of the current version (yet). |
 | **Confirmed** / **Not confirmed** | The result of each verification recorded on a version. |
 
 "Reviewed" (a colleague checked it) and "Verified" (the issuing authority confirmed it) are different things.
@@ -242,7 +243,7 @@ On the seafarer record, click **Plan Assignment**. Choose **Vessel**, **Position
 
 ### Readiness
 
-Click **Readiness** next to an upcoming or under-way assignment (on the seafarer record, the vessel page or the **Starting soon** tab). The page lists each required document for that vessel and position, with its coverage label and a suggestion (for example "Renew before joining (runs out <date>)" or "Can be renewed at sea, by <date>"). Documents are grouped:
+Click **Readiness** next to an upcoming or under-way assignment (on the seafarer record, the vessel page or the **Starting soon** tab). The page lists each required document for that vessel and position, with its coverage label, its expiry date ("Valid through <date>") and a suggestion (for example "Renew before joining (runs out <date>)" or "Can be renewed at sea, by <date>"). Documents are grouped:
 
 | Group | Meaning |
 |---|---|
