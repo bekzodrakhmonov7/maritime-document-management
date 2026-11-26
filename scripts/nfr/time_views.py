@@ -46,7 +46,7 @@ def env_value(key: str) -> str:
 def token(account_id: str, email: str) -> str:
     now = datetime.now(timezone.utc)
     payload = {"sub": account_id, "session_id": account_id, "email": email,
-               "role": "authenticated", "aud": "authenticated",
+               "role": "authenticated", "aud": "authenticated", "aal": "aal2",
                "iat": now, "exp": now + timedelta(hours=2)}
     return jwt.encode(payload, env_value("SUPABASE_JWT_SECRET"), algorithm="HS256")
 

@@ -3,6 +3,7 @@
 // Usage: node scenarios.mjs <chromium|firefox|msedge>
 import path from 'node:path'
 import { chromium, firefox } from '@playwright/test'
+import fs from 'node:fs'
 import { signIn, APP, EV4, EV5, save } from './lib.mjs'
 
 const which = process.argv[2]
@@ -179,6 +180,9 @@ async function readiness(page, target) {
   return { open: c.n, finish: c.n, url: page.url() }
 }
 
+// Targets picked from the live data by scripts/verification/scenario_targets.py (the seed changed).
+const LIVE = path.join(EV4, '..', 'U', 'targets.json')
+if (fs.existsSync(LIVE)) { const t = JSON.parse(fs.readFileSync(LIVE, 'utf8')); Object.assign(TARGETS, t); if (t.B) Object.assign(B_UPLOAD, t.B) }
 const target = TARGETS[which]
 try {
   log(`${which} ${result.version}: sign in A`)

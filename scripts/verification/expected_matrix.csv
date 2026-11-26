@@ -1,0 +1,72 @@
+method,path,A,O,M,P,X,basis
+GET,/api/accounts,allow,deny,deny,deny,deny,FR-02 T7 UC-03
+GET,/api/accounts/pending-count,allow,deny,deny,deny,deny,FR-02 T7 UC-03
+POST,/api/accounts/{account_id}/approve,allow,deny,deny,deny,deny,FR-02 SR-04
+POST,/api/accounts/{account_id}/deactivate,allow,deny,deny,deny,deny,FR-02
+POST,/api/accounts/{account_id}/reactivate,allow,deny,deny,deny,deny,FR-02
+POST,/api/accounts/{account_id}/role,allow,deny,deny,deny,deny,FR-02 SR-04
+POST,/api/accounts/{account_id}/second-factor/reset,allow,deny,deny,deny,deny,T7 (administration) SR-03
+POST,/api/admin/daily-check/run,allow,deny,deny,deny,deny,UC-15 (Scheduler or Administrator)
+GET,/api/alerts,allow,allow,deny,deny,deny,FR-16 (officers in scope and administrators); UC-14 lists Manager - ambiguous
+GET,/api/alerts/count,allow,allow,deny,deny,deny,FR-16; UC-14 ambiguous
+POST,/api/assignments,allow,allow,deny,deny,deny,FR-06 UC-08 T7
+PUT,/api/assignments/{assignment_id},allow,allow,deny,deny,deny,FR-06 UC-08
+GET,/api/assignments/{assignment_id},allow,allow,deny,deny,deny,FR-06 UC-08 SR-07 (manager summary only)
+POST,/api/assignments/{assignment_id}/cancel,allow,allow,deny,deny,deny,FR-06
+GET,/api/assignments/{assignment_id}/readiness,allow,allow,deny,deny,deny,FR-19 UC-13 (officer and administrator only)
+GET,/api/assignments/{assignment_id}/report,allow,allow,allow,deny,deny,FR-21 T7 (manager sees reports) UC-14
+GET,/api/audit,allow,deny,deny,deny,deny,FR-23 UC-16
+GET,/api/audit/export.csv,allow,deny,deny,deny,deny,FR-23
+GET,/api/dashboard,allow,allow,unspec,deny,deny,FR-20 (manager gets fleet totals only; the named list is not for managers)
+GET,/api/dashboard/totals,allow,unspec,allow,deny,deny,FR-20 (fleet totals for managers)
+POST,/api/document-types,allow,deny,deny,deny,deny,FR-07
+GET,/api/document-types,allow,allow,unspec,deny,deny,T7 / plan rule (officers read reference data)
+PUT,/api/document-types/{row_id},allow,deny,deny,deny,deny,FR-07
+DELETE,/api/document-types/{row_id},allow,deny,deny,deny,deny,FR-07
+POST,/api/document-types/{row_id}/retire,allow,deny,deny,deny,deny,FR-07
+POST,/api/document-types/{row_id}/unretire,allow,deny,deny,deny,deny,FR-07
+GET,/api/documents/{document_id},allow,allow,deny,deny,deny,FR-13 UC-12 SR-07 (no document numbers for managers)
+POST,/api/documents/{document_id}/versions,allow,allow,deny,deny,deny,FR-10 UC-09
+GET,/api/me,allow,allow,allow,allow,allow,own account data (plan B-FR02)
+GET,/api/me/vessels,allow,allow,unspec,unspec,unspec,own account data
+POST,/api/positions,allow,deny,deny,deny,deny,T7 (administrator maintains rules and reference data)
+GET,/api/positions,allow,allow,unspec,deny,deny,officers read reference data
+PUT,/api/positions/{row_id},allow,deny,deny,deny,deny,T7
+DELETE,/api/positions/{row_id},allow,deny,deny,deny,deny,T7
+POST,/api/positions/{row_id}/retire,allow,deny,deny,deny,deny,T7
+POST,/api/positions/{row_id}/unretire,allow,deny,deny,deny,deny,T7
+POST,/api/requirement-exceptions,allow,deny,deny,deny,deny,FR-08
+GET,/api/requirement-exceptions,allow,allow,unspec,deny,deny,officers read reference data
+PUT,/api/requirement-exceptions/{exception_id},allow,deny,deny,deny,deny,FR-08
+DELETE,/api/requirement-exceptions/{exception_id},allow,deny,deny,deny,deny,FR-08
+GET,/api/requirements,allow,allow,unspec,deny,deny,officers read reference data
+POST,/api/requirements/add-to-all-positions,allow,deny,deny,deny,deny,FR-08
+GET,/api/requirements/evaluate,allow,allow,unspec,deny,deny,FR-08 FR-17 (read)
+DELETE,/api/requirements/{position_id}/{document_type_id},allow,deny,deny,deny,deny,FR-08
+PUT,/api/requirements/{position_id}/{document_type_id},allow,deny,deny,deny,deny,FR-08
+POST,/api/seafarers,allow,allow,deny,deny,deny,FR-04 UC-07
+GET,/api/seafarers,allow,allow,deny,deny,deny,FR-03 FR-04 FR-20 (manager totals only)
+PUT,/api/seafarers/{seafarer_id},allow,allow,deny,deny,deny,FR-04
+GET,/api/seafarers/{seafarer_id},allow,allow,deny,deny,deny,FR-04 SR-07
+GET,/api/seafarers/{seafarer_id}/assignments,allow,allow,deny,deny,deny,FR-06
+POST,/api/seafarers/{seafarer_id}/documents,allow,allow,deny,deny,deny,FR-09 UC-09
+GET,/api/seafarers/{seafarer_id}/documents,allow,allow,deny,deny,deny,FR-13 SR-07
+POST,/api/seafarers/{seafarer_id}/reactivate,allow,allow,deny,deny,deny,FR-04 FR-24 (authorised users)
+POST,/api/seafarers/{seafarer_id}/set-inactive,allow,allow,deny,deny,deny,FR-04 FR-24 (authorised users)
+PUT,/api/settings,allow,deny,deny,deny,deny,FR-25
+GET,/api/settings,allow,unspec,unspec,deny,deny,FR-25 (only change is restricted)
+POST,/api/verifications/{verification_id}/proof-url,allow,allow,deny,deny,deny,SR-07 SR-09
+POST,/api/versions/{version_id}/file-url,allow,allow,deny,deny,deny,SR-07 SR-09
+POST,/api/versions/{version_id}/reviews,allow,allow,deny,deny,deny,FR-11 UC-10
+POST,/api/versions/{version_id}/verifications,allow,allow,deny,deny,deny,FR-12 UC-11
+POST,/api/vessels,allow,deny,deny,deny,deny,FR-05
+GET,/api/vessels,allow,allow,unspec,deny,deny,FR-05 (officers view)
+PUT,/api/vessels/{vessel_id},allow,deny,deny,deny,deny,FR-05
+GET,/api/vessels/{vessel_id},allow,allow,unspec,deny,deny,FR-05
+GET,/api/vessels/{vessel_id}/crew,allow,allow,deny,deny,deny,FR-03 (names; manager totals only)
+POST,/api/vessels/{vessel_id}/deactivate,allow,deny,deny,deny,deny,FR-05 T7
+POST,/api/vessels/{vessel_id}/reactivate,allow,deny,deny,deny,deny,FR-05 T7
+GET,/api/vessels/{vessel_id}/report,allow,allow,allow,deny,deny,FR-21 T7 (manager sees reports for all vessels) UC-14
+POST,/api/vessels/{vessel_id}/responsible-officers,allow,deny,deny,deny,deny,T7 UC-04
+GET,/api/vessels/{vessel_id}/responsible-officers,allow,unspec,deny,deny,deny,T7 UC-04
+DELETE,/api/vessels/{vessel_id}/responsible-officers/{account_id},allow,deny,deny,deny,deny,T7 UC-04

@@ -45,6 +45,37 @@
       "env": {
         "CORS_ORIGINS": "http://localhost:5176,http://127.0.0.1:5176,http://localhost:5173,http://127.0.0.1:5173"
       }
+    },
+    {
+      "name": "api-verify",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "python",
+        "scripts/verification/run_api.py",
+        "--port",
+        "8000"
+      ],
+      "port": 8000,
+      "env": {
+        "CRON_SECRET": "",
+        "CORS_ORIGINS": "http://localhost:5173,http://127.0.0.1:5173"
+      }
+    },
+    {
+      "name": "web-verify",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
+      "port": 5173
     }
   ]
 }

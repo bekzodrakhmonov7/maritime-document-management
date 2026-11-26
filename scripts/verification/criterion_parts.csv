@@ -1,0 +1,164 @@
+part_id,requirement,criterion_part,blackbox_checks
+FR-01.a,FR-01,"E-mail, full name and password create a pending account with no role (criterion: 201)",B-FR01;C4
+FR-01.b,FR-01,"Also when a role value is added to the request: pending, no role",B-FR01;C4
+FR-01.c,FR-01,"The pending account receives 403 on every business endpoint",B-FR01;C5
+FR-02.a,FR-02,"Approval by an administrator sets exactly one role (200)",B-FR02
+FR-02.b,FR-02,"The same call by other roles returns 403",B-FR02;C4;C5
+FR-02.c,FR-02,"A deactivated account receives 403 on every endpoint",B-FR02;C5
+FR-03.a,FR-03,"Each officer's seafarer list equals the expected list of the test data set",B-FR03;C6
+FR-03.b,FR-03,"The administrator sees all seafarers",B-FR03
+FR-04.a,FR-04,"An officer in scope creates and edits all five fields (201/200)",B-FR04
+FR-04.b,FR-04,"An administrator creates and edits all five fields (201/200)",B-FR04
+FR-04.c,FR-04,"The current vessel follows the current assignment",B-FR04
+FR-04.d,FR-04,"DELETE returns 405",B-FR04
+FR-05.a,FR-05,"An administrator creates and edits name, IMO number and flag State (201/200)",B-FR05
+FR-05.b,FR-05,"A crewing officer can read vessels",B-FR05;C5
+FR-05.c,FR-05,"A crewing officer receives 403 on create or edit",B-FR05;C5
+FR-06.a,FR-06,"An assignment with a start date and an end date is stored (201)",B-FR06
+FR-06.b,FR-06,"A missing end date returns 422",B-FR06
+FR-06.c,FR-06,"Edit and cancel return 200",B-FR06
+FR-06.d,FR-06,"A cancelled assignment leaves the readiness checks",B-FR06
+FR-07.a,FR-07,"Every attribute, including maximum validity and dependency, is stored by an administrator (201)",B-FR07
+FR-07.b,FR-07,"Other roles receive 403",B-FR07;C5
+FR-08.a,FR-08,"A rule limited to a vessel applies only there",B-FR08
+FR-08.b,FR-08,"A rule limited to a flag State applies only there",B-FR08
+FR-08.c,FR-08,"A general rule applies to every seafarer in the position",B-FR08
+FR-09.a,FR-09,"A valid upload creates version 1 in awaiting review (201)",B-FR09
+FR-09.b,FR-09,"A missing required expiry date returns 422 and creates nothing",B-FR09
+FR-09.c,FR-09,"With 'Expiry not stated on the document' ticked, the version is saved without a date (201)",B-FR09
+FR-10.a,FR-10,"Each change (file or key detail) creates the next version in awaiting review",B-FR10
+FR-10.b,FR-10,"A details-only change keeps the stored file (no new object)",B-FR10
+FR-10.c,FR-10,"Earlier versions stay readable",B-FR10
+FR-10.d,FR-10,"A comment creates no version",B-FR10
+FR-11.a,FR-11,"Review by the uploader returns 403",B-FR11;C8
+FR-11.b,FR-11,"A later decision supersedes the earlier one and both are kept",B-FR11
+FR-11.c,FR-11,"PUT or PATCH on a decision returns 405",B-FR11;C8
+FR-12.a,FR-12,"'Verified' appears only with a confirmed record on the current version",B-FR12
+FR-12.b,FR-12,"Otherwise, and after a new version, 'not verified'",B-FR12
+FR-13.a,FR-13,"A document with three versions shows three entries with uploader, time, details, review decisions and verification records",B-FR13
+FR-14.a,FR-14,"The effective expiry date is the earlier of the two dates, in both date orders",B-FR14
+FR-14.b,FR-14,"FR-15 and FR-18 use the effective expiry date",B-FR14;B-FR18
+FR-14.c,FR-14,"Alerts (FR-16) follow the own expiry date of each document",
+FR-14.d,FR-14,"If one of the two dates is not stated: 'expiry not stated' unless the known date already gives expiring soon / expired / expires before the start / during",B-FR14
+FR-14.e,FR-14,"An endorsement whose certificate is not recorded is 'expired' and 'expires before the start'",B-FR14
+FR-15.a,FR-15,"Effective expiry before the current date: expired",B-FR15
+FR-15.b,FR-15,"Remaining validity from 0 days up to the largest threshold: expiring soon",B-FR15
+FR-15.c,FR-15,"More: unexpired",B-FR15
+FR-15.d,FR-15,"No date on a type that does not expire: no expiry date",B-FR15
+FR-15.e,FR-15,"No date on a type that expires: expiry not stated",B-FR15
+FR-15.f,FR-15,"Versions awaiting review included",B-FR15
+FR-16.a,FR-16,"A threshold (90, 60, 30 days) reached, or expiry, creates one alert per document, expiry date and threshold",B-FR16;D7
+FR-16.b,FR-16,"Several thresholds passed at once create one alert, for the nearest one",B-FR16;D7
+FR-16.c,FR-16,"A new version with the same expiry date creates none",B-FR16
+FR-16.d,FR-16,"Officers in scope and administrators see the alert in the application",B-FR16
+FR-16.e,FR-16,"The e-mail goes to the officers of the seafarer's vessels, or to the administrators when there is no such officer",B-FR16
+FR-16.f,FR-16,"Never to managers",B-FR16
+FR-16.g,FR-16,"The e-mail has no document number",B-FR16
+FR-16.h,FR-16,"91 days creates none",B-FR16
+FR-17.a,FR-17,"With three of four required types recorded, exactly the fourth is missing",B-FR17
+FR-17.b,FR-17,"With all four, complete",B-FR17
+FR-18.a,FR-18,"Effective expiry before the start: expires before the start",B-FR18
+FR-18.b,FR-18,"From start to end inclusive: expires during the assignment",B-FR18
+FR-18.c,FR-18,"After the end: covers the assignment",B-FR18
+FR-18.d,FR-18,"No date on a type that expires: expiry not stated",B-FR18
+FR-18.e,FR-18,"No date on a type that does not expire: covers the assignment",B-FR18
+FR-18.f,FR-18,"No document: missing",B-FR18
+FR-19.a,FR-19,"Coverage class, expiry date, review status and verification appear separately",B-FR19;U1
+FR-19.b,FR-19,"Missing, awaiting review, expiring and 'expiry not stated' documents are highlighted",B-FR19;U1
+FR-19.c,FR-19,"A document with only rejected versions appears as missing",B-FR19
+FR-19.d,FR-19,"The advisory text differs for types renewable at sea",B-FR19
+FR-19.e,FR-19,"No 'may not serve' statement",B-FR19;U1
+FR-20.a,FR-20,"Counts equal direct counts in the test database",B-FR20
+FR-20.b,FR-20,"Each filter returns only matching rows",B-FR20
+FR-20.c,FR-20,"The manager gets aggregated data for all vessels",B-FR20
+FR-21.a,FR-21,"PDF and CSV for a vessel and an assignment show coverage class, expiry date, review status and verification separately (200)",B-FR21
+FR-21.b,FR-21,"A vessel outside the scope returns 403 or 404",B-FR21;C6
+FR-22.a,FR-22,"Each listed event type, including login failure, authentication failure and access denied, creates exactly one audit event",B-FR22;C1;C14
+FR-23.a,FR-23,"An administrator views, filters and exports the log (200)",B-FR23
+FR-23.b,FR-23,"Other roles receive 403",B-FR23;C4;C5
+FR-23.c,FR-23,"No route changes or deletes entries",B-FR23
+FR-24.a,FR-24,"With shortened periods, older records and files are deleted",B-FR24
+FR-24.b,FR-24,"Newer ones and files still used by a version are kept",B-FR24
+FR-24.c,FR-24,"Audit records are deleted only by the owner-role job",B-FR24;C14
+FR-24.d,FR-24,"Deletions are logged with identifiers only",B-FR24;C15
+FR-25.a,FR-25,"Each setting, including company time zone and daily-check time, takes effect at its next use",B-FR25;D6
+FR-25.b,FR-25,"Each change is logged",B-FR25
+FR-25.c,FR-25,"Other roles receive 403",B-FR25;C4
+NFR-01.a,NFR-01,"With 500 seafarers, 5,000 versions, 500 assignments; 20 admin requests per view after a warm-up; p95 <= 2 s for dashboard, document list, readiness view",D1
+NFR-01.b,NFR-01,"Hardware and versions recorded",D1
+NFR-02.a,NFR-02,"Month and year ends, 29 February",D8
+NFR-02.b,NFR-02,"Remaining validity equal to a threshold",D8
+NFR-02.c,NFR-02,"Expiry on the check date: expiring soon; expired from the next day",D8;B-FR15
+NFR-02.d,NFR-02,"Expiry on the planned end date: expires during the assignment",D8;B-FR18
+NFR-02.e,NFR-02,"Identical results in server time zones UTC-12, UTC and UTC+14",D8
+NFR-02.f,NFR-02,"23:30 UTC with company time zone UTC+2 counts as the next calendar date",D8
+NFR-03.a,NFR-03,"One run after a three-day gap creates the missed alerts, one per document for the nearest threshold",D7
+NFR-03.b,NFR-03,"A repeated run adds none",D7;B-FR16
+NFR-03.c,NFR-03,"An interrupted run adds none",D7
+NFR-04.a,NFR-04,"Coverage class, expiry status, review status and verification have separate text labels",U1
+NFR-04.b,NFR-04,"Every status has a text as well as a colour",U1
+NFR-04.c,NFR-04,"Statuses stay identifiable in greyscale",U1
+NFR-04.d,NFR-04,"Upload, review and readiness view take at most 3 clicks from the dashboard",U1
+NFR-05.a,NFR-05,"Main pages and FR-09, FR-11, FR-19 scenarios work in latest Chrome, Edge, Firefox at 1280 and 1920 px",U2
+NFR-05.b,NFR-05,"Without errors, horizontal scrolling or overlapping controls",U2
+NFR-06.a,NFR-06,"Router, service and repository layers, with database queries only in repositories",U3
+NFR-06.b,NFR-06,"Migrations build the schema",U3;A3
+NFR-06.c,NFR-06,"All tests pass",A1;A2;A3
+NFR-06.d,NFR-06,"At least 80 % statement coverage of Status engine, Access policy and File validation",A1
+NFR-06.e,NFR-06,"The developer guide works on a clean computer",U3
+NFR-06.f,NFR-06,"The user guide covers all pages",U3
+NFR-07.a,NFR-07,"NFR-01 limit met with 5,000 seafarers and 50,000 versions",D2
+NFR-07.b,NFR-07,"... with only database indexes added",D2;U3
+NFR-07.c,NFR-07,"A changed daily-check time takes effect (+-1 minute)",D6;B-FR25
+SR-01.a,SR-01,"A missing, expired or altered token returns 401 on every protected endpoint",C1
+SR-01.b,SR-01,"... and is logged as an authentication failure",C1
+SR-01.c,SR-01,"The web client never calls Supabase Auth directly",C1
+SR-02.a,SR-02,"An 11-character password is rejected (422) at registration and password change",C2
+SR-02.b,SR-02,"A password from the bundled common list is rejected (422) at registration and password change",C2
+SR-02.c,SR-02,"A 12-character uncommon password is accepted",C2
+SR-02.d,SR-02,"A password known to Pwned Passwords is rejected (422)",C2
+SR-02.e,SR-02,"Only five characters of its SHA-1 hash leave the host",C2
+SR-03.a,SR-03,"Every approved account enrols TOTP at first login",C3
+SR-03.b,SR-03,"Afterwards a password-only token gets 401 or 403 on every protected endpoint",C3;C1
+SR-03.c,SR-03,"A second-factor token gets 200",C3
+SR-04.a,SR-04,"A role sent at registration never changes access",C4;B-FR01
+SR-04.b,SR-04,"A role written to user metadata never changes access",C4
+SR-04.c,SR-04,"A role change by a non-administrator returns 403",C4;B-FR02
+SR-05.a,SR-05,"Every endpoint called with each role; results match the role matrix for 100 % of endpoints",C5
+SR-05.b,SR-05,"Each refusal returns 403 and creates an access denied event",C5
+SR-06.a,SR-06,"Records and files of the other vessel requested by identifier return 403 or 404 with no data",C6
+SR-06.b,SR-06,"... and an access denied event",C6
+SR-06.c,SR-06,"The same token on the Supabase API returns 0 rows",C6
+SR-07.a,SR-07,"Manager responses contain no document numbers",C5
+SR-07.b,SR-07,"Manager file requests return 403",C5
+SR-07.c,SR-07,"Files, medical ones included, reach only officers in scope and administrators",C5;C6
+SR-08.a,SR-08,"Oversized file: 413",C9
+SR-08.b,SR-08,"Disallowed extension or content not matching the extension: 415, whatever the Content-Type header says",C9
+SR-08.c,SR-08,"Valid pdf, jpg, jpeg and png: 201",C9
+SR-08.d,SR-08,"An image is stored re-encoded, without its metadata",C9
+SR-08.e,SR-08,"A PDF file with a script, an embedded file or encryption: 422",C9
+SR-08.f,SR-08,"Each rejection logged",C9
+SR-09.a,SR-09,"The bucket crew-documents is private and no public bucket exists",C10
+SR-09.b,SR-09,"Access without a signed URL fails",C10;C6
+SR-09.c,SR-09,"Signed URLs live at most 300 s and fail afterwards",C10
+SR-09.d,SR-09,"Each issue is logged",C10
+SR-10.a,SR-10,"Connections leaving the host (client, Supabase, SMTP, Pwned Passwords) use TLS 1.2 or later",C11
+SR-10.b,SR-10,"Plain HTTP is refused or redirected",C11
+SR-11.a,SR-11,"An issue date not earlier than the expiry date returns 422, also on direct API calls",C7
+SR-11.b,SR-11,"An invalid date (30 February) returns 422",C7
+SR-11.c,SR-11,"Validity above the type maximum is saved with a warning",C7
+SR-12.a,SR-12,"Every event has time, source address, user, action, affected record and outcome",C14
+SR-12.b,SR-12,"Authentication successes and failures, access denied events and rejected uploads are recorded",C14;C1;C9;C13
+SR-13.a,SR-13,"The application role holds only INSERT and SELECT",C14
+SR-13.b,SR-13,"Its UPDATE, DELETE and TRUNCATE fail with a permission error",C14
+SR-13.c,SR-13,"The owner is a separate role",C14
+SR-14.a,SR-14,"Audit events forwarded to a separate log system (not implemented)",C16
+SR-15.a,SR-15,"Malformed requests and forced errors return generic messages without stack traces, queries, keys or tokens",C12
+SR-15.b,SR-15,"Each error is logged on the server",C12
+SR-16.a,SR-16,"Stored fields match the data model (Chapter 2.7)",C15
+SR-16.b,SR-16,"No text is extracted from files",C15
+SR-16.c,SR-16,"Deletions pass the FR-24 test",B-FR24
+SR-17.a,SR-17,"After 10 failed logins for one account within 15 minutes, further attempts return 429 for 15 minutes",C13
+SR-17.b,SR-17,"After 10 failed logins from one address within 15 minutes, further attempts return 429 for 15 minutes",C13
+SR-17.c,SR-17,"Blocked attempts are logged",C13
+SR-17.d,SR-17,"Uploads are rate-limited (not implemented)",C9
